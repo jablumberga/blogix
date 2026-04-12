@@ -12,7 +12,7 @@ const DR_PROVINCES = [
   { province: "La Vega", municipalities: ["La Vega", "Constanza", "Jarabacoa"] },
   { province: "San Cristóbal", municipalities: ["San Cristóbal", "Bajos de Haina", "Villa Altagracia", "Cambita Garabitos", "San Gregorio de Nigua", "Yaguate"] },
   { province: "Duarte", municipalities: ["San Francisco de Macorís", "Las Guáranas", "Pimentel", "Villa Riva", "Castillo"] },
-  { province: "Puerto Plata", municipalities: ["Puerto Plata", "Sosúa", "Imbert", "Altamira", "Luperón", "Villa Isabela"] },
+  { province: "Puerto Plata", municipalities: ["Puerto Plata", "Soúa", "Imbert", "Altamira", "Luperón", "Villa Isabela"] },
   { province: "San Pedro de Macorís", municipalities: ["San Pedro de Macorís", "Guayacanes", "Quisqueya", "Consuelo", "Ramón Santana"] },
   { province: "La Romana", municipalities: ["La Romana", "Guaymate", "Villa Hermosa"] },
   { province: "La Altagracia", municipalities: ["Higüey", "Punta Cana", "San Rafael del Yuma"] },
@@ -1635,7 +1635,7 @@ function BrokersPage({ t, brokers, setBrokers }) {
   const [form, setForm] = useState({ name: "", contactPerson: "", phone: "", email: "", commissionPct: "", notes: "" });
   const openNew = () => { setForm({ name: "", contactPerson: "", phone: "", email: "", commissionPct: "", notes: "" }); setEditId(null); setShowForm(true); };
   const openEdit = (b) => { setForm({ ...b }); setEditId(b.id); setShowForm(true); };
-  const save = () => { if (!form.name) return; const d = { ...form, commissionPct: Number(form.commissionPct) || 0 }; if (editId) setBrokers(brokers.map(b => b.id === editId ? { ...d, id: editId } : b)); else setBrokers([s...brokers, { ...d, id: nxId(brokers) }]); setShowForm(false); };
+  const save = () => { if (!form.name) return; const d = { ...form, commissionPct: Number(form.commissionPct) || 0 }; if (editId) setBrokers(brokers.map(b => b.id === editId ? { ...d, id: editId } : b)); else setBrokers([...brokers, { ...d, id: nxId(brokers) }]); setShowForm(false); };
 
   return <div>
     <PageHeader title={t.brokers} action={<Btn onClick={openNew}><Plus size={14} /> {t.addBroker}</Btn>} />
