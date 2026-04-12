@@ -1686,8 +1686,8 @@ function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppli
     <Card style={{ marginBottom: 16 }}>
       <h3 style={{ margin: "0 0 10px", fontSize: 14 }}>{t.expenseCategory}</h3>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <button onClick={() => setFilterCat("all")} style={{ padding: "4px 12px", borderRadius: 14, border: `1px solid ${filterCat === "all" ? colors.accent : colors.border}`, background: filterCat === "all" ? colors.accent + "18" : "transparent", color: filterCat === "all" ? colors.accentLight : colors.textMuted, cursor: "pointer", fontSize: 11 }}>{)t.all} ({fmt(total)})</button>
-        {byCategory.map(c => <button key={c.cat} onClick={() => setFilterCat(c.cat)} style={{ padding: "4px 12px", borderRadius: 14, border: `1px solid ${filterCat === c.cat ? colors.accent : colors.border}`, background: filterCat === c.cat ? colors.accent + "18" : "transparent", color: filterCat === c.cat ? colors.accentLight : colors.textMuted, cursor: "pointer", fontSize: 11 }}>{b.label} ({fmt(c.total)})</button>)}
+        <button onClick={() => setFilterCat("all")} style={{ padding: "4px 12px", borderRadius: 14, border: `1px solid ${filterCat === "all" ? colors.accent : colors.border}`, background: filterCat === "all" ? colors.accent + "18" : "transparent", color: filterCat === "all" ? colors.accentLight : colors.textMuted, cursor: "pointer", fontSize: 11 }}>{t.all} ({fmt(total)})</button>
+        {byCategory.map(c => <button key={c.cat} onClick={() => setFilterCat(c.cat)} style={{ padding: "4px 12px", borderRadius: 14, border: `1px solid ${filterCat === c.cat ? colors.accent : colors.border}`, background: filterCat === c.cat ? colors.accent + "18" : "transparent", color: filterCat === c.cat ? colors.accentLight : colors.textMuted, cursor: "pointer", fontSize: 11 }}>{c.label} ({fmt(c.total)})</button>)}
       </div>
     </Card>
 
