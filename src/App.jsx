@@ -654,7 +654,12 @@ export default function App() {
   useEffect(() => {
     loadData().then(({ source, data }) => {
       if (data && Object.keys(data).length > 0) {
-        if (data.clients?.length)     setClients(data.clients);
+        if (data.clients?.length) {
+          // Merge: add any initClients missing from saved data (e.g. Bocel)
+          const savedIds = new Set(data.clients.map(c => c.id));
+          const missing = initClients.filter(c => !savedIds.has(c.id));
+          setClients(missing.length ? [...data.clients, ...missing] : data.clients);
+        }
         if (data.partners?.length)    setPartners(data.partners);
         if (data.trucks?.length)      setTrucks(data.trucks);
         if (data.drivers?.length)     setDrivers(data.drivers);
