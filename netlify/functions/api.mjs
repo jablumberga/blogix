@@ -2,56 +2,65 @@
  * B-Logix – Netlify Function (Back-End)
  * Endpoint: /api/data
  *
- * Stores and retrieves the full app data using Netlify Blobs.
- * No external database required — works on Netlify's free tier.
+ * Stores and retrieves the full app state using Supabase (PostgreSQL).
+ * Uses the Supabase REST API directly — no SDK needed.
  *
- * Methods supported:
+ * Required env vars (set in Netlify → Site config → Environment variables):
+ *   SUPABASE_URL          e.g. https://xxxx.supabase.co
+ *   SUPABASE_SERVICE_KEY  service_role JWT key
+ *
+ * Methods:
  *  GET  /api/data          → Load all app data
  *  POST /api/data          → Save all app data
  *  GET  /api/data/export   → Download data as JSON file
  */
 
-import { getStore } from "@netlify/blobs";
-
-const BLOB_KEY = "blogix-appdata";
-
-// ─── CORS Headers ─────────────────────────────────────────────────────────────
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
-// ─── Default empty data structure ─────────────────────────────────────────────
 const defaultData = {
-  trips: [],
-  drivers: [],
-  trucks: [],
-  clients: [],
-  partners: [],
-  brokers: [],
-  suppliers: [],
-  expenses: [],
-  settlementStatus: {},
-  users: [
-    { id: 1, username: "admin", password: "admin123", role: "admin", name: "Alexander", refId: null }
-  ],
+  trips: [], drivers: [], trucks: [], clients: [], partners: [],
+  brokers: [], suppliers: [], expenses: [], settlementStatus: {},
+  users: [{ id: 1, username: "admin", password: "admin123", role: "admin", name: "Alexander", refId: null }],
 };
 
+function supabaseHeaders(env) {
+  return {
+    "Content-Type": "application/json",
+    "apikey": env.SUPABASE_SERVICE_KEY,
+    "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+  };
+}
+
 export default async (request, context) => {
-  // Handle CORS preflight
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  const store = getStore("blogix");
+  const { SUPABASE_URL, SUPABASE_SERVICE_KEY } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+    return Response.json({ error: "Missing Supabase env vars" }, { status: 500, headers: corsHeaders });
+  }
+
+  const env = { SUPABASE_URL, SUPABASE_SERVICE_KEY };
   const url = new URL(request.url);
   const isExport = url.pathname.endsWith("/export");
+  const tableUrl = `${SUPABASE_URL}/rest/v1/appdata`;
 
-  // ── GET /api/data or GET /api/data/export ─────────────────────────────────
+  // ── GET ──────────────────────────────────────────────────────────────────
   if (request.method === "GET") {
-    let data = await store.get(BLOB_KEY, { type: "json" });
-    if (!data) data = defaultData;
+    const res = await fetch(`${tableUrl}?id=eq.1&select=data`, {
+      headers: supabaseHeaders(env),
+    });
+
+    let data = defaultData;
+    if (res.ok) {
+      const rows = await res.json();
+      if (rows.length > 0) data = rows[0].data;
+    }
 
     if (isExport) {
       return new Response(JSON.stringify(data, null, 2), {
@@ -67,23 +76,31 @@ export default async (request, context) => {
     return Response.json(data, { headers: corsHeaders });
   }
 
-  // ── POST /api/data ─────────────────────────────────────────────────────────
+  // ── POST ─────────────────────────────────────────────────────────────────
   if (request.method === "POST") {
     let body;
-    try {
-      body = await request.json();
-    } catch {
-      return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders });
-    }
+    try { body = await request.json(); }
+    catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
 
-    // Basic validation: must be an object with at least one known key
     const knownKeys = ["trips", "drivers", "trucks", "clients", "expenses"];
-    const hasValidKey = knownKeys.some((k) => k in body);
-    if (!hasValidKey) {
+    if (!knownKeys.some(k => k in body)) {
       return Response.json({ error: "Invalid data structure" }, { status: 400, headers: corsHeaders });
     }
 
-    await store.setJSON(BLOB_KEY, body);
+    const res = await fetch(tableUrl, {
+      method: "POST",
+      headers: {
+        ...supabaseHeaders(env),
+        "Prefer": "resolution=merge-duplicates",
+      },
+      body: JSON.stringify({ id: 1, data: body, updated_at: new Date().toISOString() }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      return Response.json({ error: err }, { status: 500, headers: corsHeaders });
+    }
+
     return Response.json({ ok: true, savedAt: new Date().toISOString() }, { headers: corsHeaders });
   }
 
