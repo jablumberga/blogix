@@ -12,7 +12,7 @@ const DR_PROVINCES = [
   { province: "La Vega", municipalities: ["La Vega", "Constanza", "Jarabacoa"] },
   { province: "San Cristóbal", municipalities: ["San Cristóbal", "Bajos de Haina", "Villa Altagracia", "Cambita Garabitos", "San Gregorio de Nigua", "Yaguate"] },
   { province: "Duarte", municipalities: ["San Francisco de Macorís", "Las Guáranas", "Pimentel", "Villa Riva", "Castillo"] },
-  { province: "Puerto Plata", municipalities: ["Puerto Plata", "Soúa", "Imbert", "Altamira", "Luperón", "Villa Isabela"] },
+  { province: "Puerto Plata", municipalities: ["Puerto Plata", "Sosúa", "Imbert", "Altamira", "Luperón", "Villa Isabela"] },
   { province: "San Pedro de Macorís", municipalities: ["San Pedro de Macorís", "Guayacanes", "Quisqueya", "Consuelo", "Ramón Santana"] },
   { province: "La Romana", municipalities: ["La Romana", "Guaymate", "Villa Hermosa"] },
   { province: "La Altagracia", municipalities: ["Higüey", "Punta Cana", "San Rafael del Yuma"] },
@@ -54,6 +54,7 @@ const t_en = {
   allClear: "All systems normal — no alerts detected",
   agentCat: { duplicate: "Duplicates", revenue: "Missing Rate", invoice: "Invoice Ref", stale: "Stalled Transit", pending_trip: "Pending Trips", docs: "Pending Docs", payroll: "Driver Payroll", broker: "Broker Fee", settlement: "Settlements", cxp: "Accounts Payable", fleet: "Fleet", rates: "Rate Sheet" },
   language: "Language", login: "Login", logout: "Logout", username: "Username", password: "Password",
+  partners: "Partners", addPartner: "Add Partner", editPartner: "Edit Partner", noPartners: "No partners yet.",
   role: "Role", admin: "Admin", partner: "Partner", driverRole: "Driver",
   welcomeBack: "Welcome back", loginTitle: "Sign in to B-Logix", invalidLogin: "Invalid credentials",
   // Trips
@@ -81,7 +82,7 @@ const t_en = {
   addClient: "Add Client", editClient: "Edit Client", companyName: "Company",
   contactPerson: "Contact", email: "Email", phone: "Phone",
   notes: "Notes", noClients: "No clients registered.", clientRates: "Rate Sheet",
-  addRate: "Add Rate", ratePrice: "Rate ($)", noRates: "No rates defined.",
+  addRate: "Add Rate", ratePriceT1: "Rate T1 ($)", ratePriceT2: "Rate T2 ($)", noRates: "No rates defined.",
   clientRules: "Client Rules", paymentTerms: "Payment Terms (days)", paymentTermsDays: "days",
   requiresPOD: "Requires POD", requiresInvoiceRef: "Requires Invoice Ref",
   requiresDocuments: "Requires Documents", cicloSeleccion: "Billing Cycle #",
@@ -89,7 +90,7 @@ const t_en = {
   rateApplied: "Rate auto-applied", podRequired: "POD Required", selectClient: "Select Client",
   importRates: "Import Rates", active: "Active", inactive: "Inactive", statusLabel: "Status",
   // Fleet
-  ownTruck: "Own", partnerTruck: "Partner", truckPlate: "Plate #", truckType: "Type",
+  ownTruck: "Own", partnerTruck: "Partner", truckPlate: "Plate #", truckType: "Type", truckSize: "Size",
   ownerType: "Ownership", partnerName: "Partner Name", commissionPct: "Commission %",
   addTruck: "Add Truck", noTrucks: "No trucks registered.",
   // Drivers
@@ -139,6 +140,7 @@ const t_es = {
   allClear: "Todo en orden — no hay alertas activas",
   agentCat: { duplicate: "Duplicados", revenue: "Sin Tarifa", invoice: "Ref. Factura", stale: "En Tránsito Estancado", pending_trip: "Viajes Pendientes", docs: "Docs Pendientes", payroll: "Nómina Conductor", broker: "Comisión Broker", settlement: "Liquidaciones", cxp: "Cuentas por Pagar", fleet: "Flota", rates: "Tarifario" },
   language: "Idioma", login: "Iniciar Sesión", logout: "Cerrar Sesión", username: "Usuario",
+  partners: "Socios", addPartner: "Agregar Socio", editPartner: "Editar Socio", noPartners: "Sin socios aún.",
   password: "Contraseña", role: "Rol", admin: "Admin", partner: "Socio", driverRole: "Conductor",
   welcomeBack: "Bienvenido", loginTitle: "Inicia sesión en B-Logix", invalidLogin: "Credenciales inválidas",
   newTrip: "Nuevo Viaje", editTrip: "Editar Viaje", origin: "Origen", destination: "Destino",
@@ -171,11 +173,12 @@ const t_es = {
   paymentTermsDays: "días", requiresPOD: "Requiere POD",
   requiresInvoiceRef: "Requiere Ref. Factura", requiresDocuments: "Requiere Documentos",
   cicloSeleccion: "Ciclo de Facturación #", cicloSeleccionShort: "Ciclo #",
+  ratePriceT1: "Tarifa T1 ($)", ratePriceT2: "Tarifa T2 ($)",
   yes: "Sí", no: "No", rules: "Reglas", rates: "Tarifas",
   rateApplied: "Tarifa auto-aplicada", podRequired: "POD Requerido",
   selectClient: "Seleccionar Cliente", importRates: "Importar Tarifas",
   active: "Activo", inactive: "Inactivo", statusLabel: "Estado",
-  ownTruck: "Propio", partnerTruck: "Asociado", truckPlate: "Placa", truckType: "Tipo",
+  ownTruck: "Propio", partnerTruck: "Asociado", truckPlate: "Placa", truckType: "Tipo", truckSize: "Tamaño",
   ownerType: "Propiedad", partnerName: "Nombre Socio", commissionPct: "Comisión %",
   addTruck: "Agregar Camión", noTrucks: "No hay camiones registrados.",
   driverName: "Nombre", license: "Licencia #", assignedTruck: "Camión Asignado",
@@ -227,22 +230,48 @@ const initClients = [
   { id: 1, companyName: "Acme Corp", contactPerson: "Ricardo Torres", phone: "+1 809 555 7890", email: "ricardo@acmecorp.do", notes: "Cliente principal.", status: "active",
     rules: { paymentTerms: 30, requiresPOD: true, requiresInvoiceRef: true, requiresDocuments: true, defaultBrokerId: null },
     rates: [
-      { id: 1, province: "Santiago", municipality: "Santiago de los Caballeros", price: 18000 },
-      { id: 2, province: "La Vega", municipality: "La Vega", price: 12000 },
-      { id: 3, province: "Puerto Plata", municipality: "San Felipe de Puerto Plata", price: 22000 },
-      { id: 4, province: "Duarte", municipality: "San Francisco de Macorís", price: 16000 },
+      { id: 1, province: "Santiago", municipality: "Santiago de los Caballeros", priceT1: 14000, priceT2: 18000 },
+      { id: 2, province: "La Vega", municipality: "La Vega", priceT1: 9000, priceT2: 12000 },
+      { id: 3, province: "Puerto Plata", municipality: "San Felipe de Puerto Plata", priceT1: 17000, priceT2: 22000 },
+      { id: 4, province: "Duarte", municipality: "San Francisco de Macorís", priceT1: 12000, priceT2: 16000 },
     ],
   },
   { id: 2, companyName: "FreshCo", contactPerson: "Ana Villarreal", phone: "+1 809 555 4321", email: "ana@freshco.do", notes: "Solo refrigerado.", status: "active",
     rules: { paymentTerms: 15, requiresPOD: true, requiresInvoiceRef: false, requiresDocuments: true, defaultBrokerId: null },
     rates: [
-      { id: 1, province: "Santo Domingo", municipality: "Santo Domingo Este", price: 8000 },
-      { id: 2, province: "San Cristóbal", municipality: "San Cristóbal", price: 10000 },
+      { id: 1, province: "Santo Domingo", municipality: "Santo Domingo Este", priceT1: 6000, priceT2: 8000 },
+      { id: 2, province: "San Cristóbal", municipality: "San Cristóbal", priceT1: 7500, priceT2: 10000 },
     ],
   },
   { id: 3, companyName: "BuildMax", contactPerson: "Jorge Castillo", phone: "+1 809 555 6543", email: "jorge@buildmax.do", notes: "", status: "active",
     rules: { paymentTerms: 60, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null },
-    rates: [{ id: 1, province: "Azua", municipality: "Azua de Compostela", price: 15000 }],
+    rates: [{ id: 1, province: "Azua", municipality: "Azua de Compostela", priceT1: 11000, priceT2: 15000 }],
+  },
+  { id: 4, companyName: "Bocel", contactPerson: "", phone: "", email: "", notes: "Tarifas Brutas", status: "active",
+    rules: { paymentTerms: 30, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null },
+    rates: [
+      { id: 1,  province: "Santiago",                    municipality: "Santiago de los Caballeros", priceT1: 5500,  priceT2: 9000  },
+      { id: 2,  province: "Espaillat",                   municipality: "Moca",                       priceT1: 6500,  priceT2: 0     },
+      { id: 3,  province: "Santiago",                    municipality: "Villa González",              priceT1: 6500,  priceT2: 0     },
+      { id: 4,  province: "Santiago",                    municipality: "Navarrete",                   priceT1: 7300,  priceT2: 9000  },
+      { id: 5,  province: "Hermanas Mirabal",            municipality: "Salcedo",                     priceT1: 7500,  priceT2: 0     },
+      { id: 6,  province: "La Vega",                     municipality: "La Vega",                     priceT1: 8500,  priceT2: 11000 },
+      { id: 7,  province: "Monseñor Nouel",              municipality: "Bonao",                       priceT1: 9000,  priceT2: 0     },
+      { id: 8,  province: "La Vega",                     municipality: "Jarabacoa",                   priceT1: 9000,  priceT2: 0     },
+      { id: 9,  province: "Sánchez Ramírez",             municipality: "Cotuí",                       priceT1: 9450,  priceT2: 0     },
+      { id: 10, province: "Duarte",                      municipality: "San Francisco de Macorís",    priceT1: 9500,  priceT2: 13000 },
+      { id: 11, province: "María Trinidad Sánchez",      municipality: "Nagua",                       priceT1: 10000, priceT2: 0     },
+      { id: 12, province: "Puerto Plata",                municipality: "Cabarete",                    priceT1: 10360, priceT2: 0     },
+      { id: 13, province: "La Vega",                     municipality: "Constanza",                   priceT1: 12000, priceT2: 0     },
+      { id: 14, province: "Dajabón",                     municipality: "Dajabón",                     priceT1: 13400, priceT2: 20000 },
+      { id: 15, province: "Samaná",                      municipality: "Santa Bárbara de Samaná",     priceT1: 14210, priceT2: 0     },
+      { id: 16, province: "Valverde",                    municipality: "Esperanza",                   priceT1: 0,     priceT2: 10300 },
+      { id: 17, province: "Valverde",                    municipality: "Mao",                         priceT1: 0,     priceT2: 13000 },
+      { id: 18, province: "Santo Domingo / Distrito Nacional", municipality: "Santo Domingo de Guzmán", priceT1: 0,  priceT2: 18000 },
+      { id: 19, province: "San Juan",                    municipality: "San Juan de la Maguana",      priceT1: 0,     priceT2: 35000 },
+      { id: 20, province: "Elías Piña",                  municipality: "Comendador",                  priceT1: 0,     priceT2: 38000 },
+      { id: 21, province: "Independencia",               municipality: "Jimaní",                      priceT1: 0,     priceT2: 40000 },
+    ],
   },
 ];
 
@@ -252,19 +281,19 @@ const initPartners = [
 ];
 
 const initTrucks = [
-  { id: 1, plate: "A123456", type: "Flatbed", owner: "own", partnerId: null },
-  { id: 2, plate: "B789012", type: "Refrigerated", owner: "own", partnerId: null },
-  { id: 3, plate: "C345678", type: "Dry Van", owner: "partner", partnerId: 1 },
-  { id: 4, plate: "D901234", type: "Flatbed", owner: "partner", partnerId: 1 },
-  { id: 5, plate: "E567890", type: "Flatbed", owner: "partner", partnerId: 2 },
+  { id: 1, plate: "A123456", type: "Flatbed", size: "T2", owner: "own", partnerId: null },
+  { id: 2, plate: "B789012", type: "Refrigerated", size: "T1", owner: "own", partnerId: null },
+  { id: 3, plate: "C345678", type: "Dry Van", size: "T1", owner: "partner", partnerId: 1 },
+  { id: 4, plate: "D901234", type: "Flatbed", size: "T2", owner: "partner", partnerId: 1 },
+  { id: 5, plate: "E567890", type: "Flatbed", size: "T2", owner: "partner", partnerId: 2 },
 ];
 
 const initDrivers = [
   { id: 1, name: "Juan Pérez", phone: "+1 809 555 1234", license: "LIC-001", truckId: 1, salaryType: "perTrip", fixedAmount: 0, username: "juan", password: "driver1",
-    rates: [{ id: 1, province: "Santiago", municipality: "Santiago de los Caballeros", price: 3500 }, { id: 2, province: "Puerto Plata", municipality: "San Felipe de Puerto Plata", price: 4500 }] },
+    rates: [{ id: 1, province: "Santiago", municipality: "Santiago de los Caballeros", priceT1: 2500, priceT2: 3500 }, { id: 2, province: "Puerto Plata", municipality: "San Felipe de Puerto Plata", priceT1: 3200, priceT2: 4500 }] },
   { id: 2, name: "Roberto Gómez", phone: "+1 809 555 5678", license: "LIC-002", truckId: 2, salaryType: "fixed", fixedAmount: 25000, username: "roberto", password: "driver2", rates: [] },
   { id: 3, name: "Pedro Ramírez", phone: "+1 809 555 9012", license: "LIC-003", truckId: 3, salaryType: "perTrip", fixedAmount: 0, username: "pedro", password: "driver3",
-    rates: [{ id: 1, province: "Santiago", municipality: "Santiago de los Caballeros", price: 3000 }] },
+    rates: [{ id: 1, province: "Santiago", municipality: "Santiago de los Caballeros", priceT1: 2000, priceT2: 3000 }] },
 ];
 
 const initBrokers = [
@@ -674,6 +703,7 @@ export default function App() {
     { id: "trips", icon: Route, label: t.trips },
     { id: "fleet", icon: Truck, label: t.fleet },
     { id: "drivers", icon: Users, label: t.drivers },
+    { id: "partners", icon: UserCog, label: t.partners },
     { id: "brokers", icon: Briefcase, label: t.brokers },
     { id: "expenses", icon: Receipt, label: t.expenses },
     { id: "suppliers", icon: Store, label: t.suppliers },
@@ -745,6 +775,7 @@ export default function App() {
         {page === "trips" && <TripsPage {...ctx} />}
         {page === "fleet" && <FleetPage {...ctx} />}
         {page === "drivers" && <DriversPage {...ctx} />}
+        {page === "partners" && isAdmin && <PartnersPage {...ctx} />}
         {page === "brokers" && <BrokersPage {...ctx} />}
         {page === "expenses" && <ExpensesPage {...ctx} />}
         {page === "suppliers" && <SuppliersPage {...ctx} />}
@@ -976,7 +1007,12 @@ function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, d
     if (!cl) cl = clients.find(c => c.id === Number(f.clientId));
     if (cl && f.province && f.municipality) {
       const rate = cl.rates.find(r => r.province === f.province && r.municipality === f.municipality);
-      if (rate) { f.revenue = rate.price; setRateMsg(`${t.rateApplied}: ${fmt(rate.price)}`); return; }
+      if (rate) {
+        const tk = trucks.find(t2 => t2.id === Number(f.truckId));
+        const size = tk?.size || "T1";
+        const price = size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
+        f.revenue = price; setRateMsg(`${t.rateApplied} (${size}): ${fmt(price)}`); return;
+      }
     }
     setRateMsg("");
   };
@@ -1018,7 +1054,10 @@ function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, d
   const tripPay = myTrips.reduce((s, tr) => {
     if (driverObj?.salaryType === "perTrip") {
       const rate = (driverObj.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality);
-      return s + (rate ? rate.price : 0);
+      if (!rate) return s;
+      const tk = trucks.find(t2 => t2.id === tr.truckId);
+      const size = tk?.size || "T1";
+      return s + (size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0));
     }
     return s;
   }, 0);
@@ -1124,8 +1163,11 @@ function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, d
             {myTrips.map(tr => {
               const cl = clients.find(c => c.id === tr.clientId);
               const tk = trucks.find(tk2 => tk2.id === tr.truckId);
-              const driverRate = driverObj?.salaryType === "perTrip"
-                ? (driverObj.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality)?.price
+              const driverRateObj = driverObj?.salaryType === "perTrip"
+                ? (driverObj.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality)
+                : null;
+              const driverRate = driverRateObj
+                ? ((tk?.size || "T1") === "T2" ? (driverRateObj.priceT2 ?? driverRateObj.price ?? 0) : (driverRateObj.priceT1 ?? driverRateObj.price ?? 0))
                 : null;
               return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
                 <Td>{tr.date}</Td>
@@ -1186,7 +1228,12 @@ function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expense
     if (!cl) cl = clients.find(c => c.id === Number(f.clientId));
     if (cl && f.province && f.municipality) {
       const rate = cl.rates.find(r => r.province === f.province && r.municipality === f.municipality);
-      if (rate) { f.revenue = rate.price; setRateMsg(`${t.rateApplied}: ${fmt(rate.price)}`); return; }
+      if (rate) {
+        const tk = trucks.find(t2 => t2.id === Number(f.truckId));
+        const size = tk?.size || "T1";
+        const price = size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
+        f.revenue = price; setRateMsg(`${t.rateApplied} (${size}): ${fmt(price)}`); return;
+      }
     }
     setRateMsg("");
   };
@@ -1346,7 +1393,7 @@ function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expense
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 }}>
           <Inp label={t.expenseDate} type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} />
           <Sel label={t.expenseCategory} value={expForm.category} onChange={e => setExpForm({ ...expForm, category: e.target.value })}>
-            {EPVENSE_CATEGORIES.map(c => <option key={c} value={c}>{t[c] || c}</option>)}
+            {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{t[c] || c}</option>)}
           </Sel>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 }}>
@@ -1433,12 +1480,12 @@ function ClientsPage({ t, clients, setClients, brokers }) {
   const [editId, setEditId] = useState(null);
   const [expanded, setExpanded] = useState(null);
   const [form, setForm] = useState({ companyName: "", contactPerson: "", phone: "", email: "", notes: "", status: "active", rules: { paymentTerms: 30, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null }, rates: [] });
-  const [rForm, setRForm] = useState({ province: "", municipality: "", price: "" });
+  const [rForm, setRForm] = useState({ province: "", municipality: "", priceT1: "", priceT2: "" });
 
   const openNew = () => { setForm({ companyName: "", contactPerson: "", phone: "", email: "", notes: "", status: "active", rules: { paymentTerms: 30, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null }, rates: [] }); setEditId(null); setShowForm(true); };
   const openEdit = (c) => { setForm({ ...c }); setEditId(c.id); setShowForm(true); };
   const save = () => { if (!form.companyName) return; if (editId) setClients(clients.map(c => c.id === editId ? { ...form, id: editId } : c)); else setClients([...clients, { ...form, id: nxId(clients) }]); setShowForm(false); };
-  const addRate = () => { if (!rForm.province || !rForm.municipality || !rForm.price) return; setForm({ ...form, rates: [...form.rates, { id: nxId(form.rates), province: rForm.province, municipality: rForm.municipality, price: Number(rForm.price) }] }); setRForm({ province: "", municipality: "", price: "" }); };
+  const addRate = () => { if (!rForm.province || !rForm.municipality || !rForm.priceT1 || !rForm.priceT2) return; setForm({ ...form, rates: [...form.rates, { id: nxId(form.rates), province: rForm.province, municipality: rForm.municipality, priceT1: Number(rForm.priceT1), priceT2: Number(rForm.priceT2) }] }); setRForm({ province: "", municipality: "", priceT1: "", priceT2: "" }); };
 
   return <div>
     <PageHeader title={t.clients} action={<Btn onClick={openNew}><Plus size={14} /> {t.addClient}</Btn>} />
@@ -1474,22 +1521,31 @@ function ClientsPage({ t, clients, setClients, brokers }) {
 
       {/* Rate Sheet */}
       <div style={{ background: colors.inputBg, borderRadius: 8, padding: 12, marginBottom: 12, border: `1px solid ${colors.border}` }}>
-        <h4 style={{ margin: "0 0 10px", fontSize: 13, color: colors.green }}><DollarSign size={14} /> {t.clientRates} — {t.province} / {t.municipality} / {t.ratePrice}</h4>
+        <h4 style={{ margin: "0 0 10px", fontSize: 13, color: colors.green }}><DollarSign size={14} /> {t.clientRates} — {t.province} / {t.municipality} / T1 / T2</h4>
         {form.rates.length > 0 && <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 8 }}>
+          <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+            <td style={{ fontSize: 11, color: colors.textMuted, padding: "2px 0" }}>{t.province}</td>
+            <td style={{ fontSize: 11, color: colors.textMuted }}>{t.municipality}</td>
+            <td style={{ fontSize: 11, color: colors.accent, textAlign: "right" }}>T1</td>
+            <td style={{ fontSize: 11, color: colors.orange, textAlign: "right" }}>T2</td>
+            <td />
+          </tr></thead>
           <tbody>{form.rates.map(r => <tr key={r.id} style={{ borderBottom: `1px solid ${colors.border}22` }}>
             <td style={{ padding: "6px 0", fontSize: 12 }}>{r.province}</td><td style={{ fontSize: 12 }}>{r.municipality}</td>
-            <td style={{ textAlign: "right", fontWeight: 600, color: colors.green, fontSize: 12 }}>{fmt(r.price)}</td>
+            <td style={{ textAlign: "right", fontWeight: 600, color: colors.accent, fontSize: 12 }}>{fmt(r.priceT1 ?? r.price ?? 0)}</td>
+            <td style={{ textAlign: "right", fontWeight: 600, color: colors.orange, fontSize: 12 }}>{fmt(r.priceT2 ?? r.price ?? 0)}</td>
             <td style={{ width: 30, textAlign: "right" }}><button onClick={() => setForm({ ...form, rates: form.rates.filter(x => x.id !== r.id) })} style={{ background: "none", border: "none", color: colors.red, cursor: "pointer" }}><X size={10} /></button></td>
           </tr>)}</tbody>
         </table>}
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <Sel label={t.province} value={rForm.province} onChange={e => { setRForm({ ...rForm, province: e.target.value, municipality: "" }); }} style={{ flex: 1, fontSize: 11 }}>
+          <Sel label={t.province} value={rForm.province} onChange={e => { setRForm({ ...rForm, province: e.target.value, municipality: "" }); }} style={{ flex: 2, fontSize: 11 }}>
             <option value="">--</option>{DR_PROVINCES.map(p => <option key={p.province} value={p.province}>{p.province}</option>)}
           </Sel>
-          <Sel label={t.municipality} value={rForm.municipality} onChange={e => setRForm({ ...rForm, municipality: e.target.value })} style={{ flex: 1, fontSize: 11 }}>
+          <Sel label={t.municipality} value={rForm.municipality} onChange={e => setRForm({ ...rForm, municipality: e.target.value })} style={{ flex: 2, fontSize: 11 }}>
             <option value="">--</option>{(DR_PROVINCES.find(p => p.province === rForm.province)?.municipalities || []).map(m => <option key={m} value={m}>{m}</option>)}
           </Sel>
-          <Inp label={t.ratePrice} type="number" value={rForm.price} onChange={e => setRForm({ ...rForm, price: e.target.value })} style={{ width: 100, fontSize: 11 }} />
+          <Inp label="T1 ($)" type="number" value={rForm.priceT1} onChange={e => setRForm({ ...rForm, priceT1: e.target.value })} style={{ width: 90, fontSize: 11 }} />
+          <Inp label="T2 ($)" type="number" value={rForm.priceT2} onChange={e => setRForm({ ...rForm, priceT2: e.target.value })} style={{ width: 90, fontSize: 11 }} />
           <Btn onClick={addRate} style={{ padding: "7px 10px", fontSize: 11 }}><Plus size={12} /></Btn>
         </div>
       </div>
@@ -1531,17 +1587,18 @@ function ClientsPage({ t, clients, setClients, brokers }) {
 function FleetPage({ t, trucks, setTrucks, partners }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ plate: "", type: "Flatbed", owner: "own", partnerId: "" });
-  const openNew = () => { setForm({ plate: "", type: "Flatbed", owner: "own", partnerId: "" }); setEditId(null); setShowForm(true); };
+  const [form, setForm] = useState({ plate: "", type: "Flatbed", size: "T1", owner: "own", partnerId: "" });
+  const openNew = () => { setForm({ plate: "", type: "Flatbed", size: "T1", owner: "own", partnerId: "" }); setEditId(null); setShowForm(true); };
   const openEdit = (tk) => { setForm({ ...tk, partnerId: tk.partnerId || "" }); setEditId(tk.id); setShowForm(true); };
   const save = () => { if (!form.plate) return; const d = { ...form, partnerId: form.owner === "partner" ? Number(form.partnerId) || null : null }; if (editId) setTrucks(trucks.map(t2 => t2.id === editId ? { ...d, id: editId } : t2)); else setTrucks([...trucks, { ...d, id: nxId(trucks) }]); setShowForm(false); };
 
   return <div>
     <PageHeader title={t.fleet} action={<Btn onClick={openNew}><Plus size={14} /> {t.addTruck}</Btn>} />
     {showForm && <Card style={{ marginBottom: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
         <Inp label={t.truckPlate} value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })} />
         <Sel label={t.truckType} value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option>Flatbed</option><option>Refrigerated</option><option>Dry Van</option><option>Tanker</option><option>Lowboy</option></Sel>
+        <Sel label={t.truckSize} value={form.size || "T1"} onChange={e => setForm({ ...form, size: e.target.value })}><option value="T1">T1 — Pequeño</option><option value="T2">T2 — Grande</option></Sel>
         <Sel label={t.ownerType} value={form.owner} onChange={e => setForm({ ...form, owner: e.target.value })}><option value="own">{t.ownTruck}</option><option value="partner">{t.partnerTruck}</option></Sel>
       </div>
       {form.owner === "partner" && <Sel label={t.partnerName} value={form.partnerId} onChange={e => setForm({ ...form, partnerId: e.target.value })} style={{ marginBottom: 12 }}>
@@ -1551,11 +1608,12 @@ function FleetPage({ t, trucks, setTrucks, partners }) {
     </Card>}
     <Card>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>{t.truckPlate}</Th><Th>{t.truckType}</Th><Th>{t.ownerType}</Th><Th>{t.partnerName}</Th><Th align="right">{t.actions}</Th></tr></thead>
+        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>{t.truckPlate}</Th><Th>{t.truckType}</Th><Th>{t.truckSize}</Th><Th>{t.ownerType}</Th><Th>{t.partnerName}</Th><Th align="right">{t.actions}</Th></tr></thead>
         <tbody>{trucks.map(tk => {
           const pt = partners.find(p => p.id === tk.partnerId);
           return <tr key={tk.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
             <Td bold>{tk.plate}</Td><Td>{tk.type}</Td>
+            <Td><Badge label={tk.size || "T1"} color={(tk.size || "T1") === "T2" ? colors.orange : colors.accent} /></Td>
             <Td><Badge label={tk.owner === "own" ? t.ownTruck : t.partnerTruck} color={tk.owner === "own" ? colors.accent : colors.orange} /></Td>
             <Td>{pt?.name || "—"}</Td>
             <Td align="right">
@@ -1574,12 +1632,12 @@ function DriversPage({ t, drivers, setDrivers, trucks }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, username: "", password: "", rates: [] });
-  const [rForm, setRForm] = useState({ province: "", municipality: "", price: "" });
+  const [rForm, setRForm] = useState({ province: "", municipality: "", priceT1: "", priceT2: "" });
 
   const openNew = () => { setForm({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, username: "", password: "", rates: [] }); setEditId(null); setShowForm(true); };
   const openEdit = (d) => { setForm({ ...d }); setEditId(d.id); setShowForm(true); };
   const save = () => { if (!form.name) return; const d = { ...form, truckId: Number(form.truckId) || null, fixedAmount: Number(form.fixedAmount) || 0 }; if (editId) setDrivers(drivers.map(x => x.id === editId ? { ...d, id: editId } : x)); else setDrivers([...drivers, { ...d, id: nxId(drivers) }]); setShowForm(false); };
-  const addRate = () => { if (!rForm.province || !rForm.municipality || !rForm.price) return; setForm({ ...form, rates: [...(form.rates || []), { id: nxId(form.rates || []), province: rForm.province, municipality: rForm.municipality, price: Number(rForm.price) }] }); setRForm({ province: "", municipality: "", price: "" }); };
+  const addRate = () => { if (!rForm.province || !rForm.municipality || !rForm.priceT1 || !rForm.priceT2) return; setForm({ ...form, rates: [...(form.rates || []), { id: nxId(form.rates || []), province: rForm.province, municipality: rForm.municipality, priceT1: Number(rForm.priceT1), priceT2: Number(rForm.priceT2) }] }); setRForm({ province: "", municipality: "", priceT1: "", priceT2: "" }); };
 
   return <div>
     <PageHeader title={t.drivers} action={<Btn onClick={openNew}><Plus size={14} /> {t.addDriver}</Btn>} />
@@ -1597,13 +1655,17 @@ function DriversPage({ t, drivers, setDrivers, trucks }) {
         <Inp label={t.password} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
       </div>
       {form.salaryType === "perTrip" && <div style={{ background: colors.inputBg, borderRadius: 8, padding: 10, marginBottom: 10, border: `1px solid ${colors.border}` }}>
-        <h4 style={{ margin: "0 0 8px", fontSize: 12, color: colors.green }}>{t.driverRateSheet}</h4>
-        {(form.rates || []).map(r => <div key={r.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 11 }}><span>{r.municipality}, {r.province}</span><span style={{ fontWeight: 600, color: colors.green }}>{fmt(r.price)}</span>
+        <h4 style={{ margin: "0 0 8px", fontSize: 12, color: colors.green }}>{t.driverRateSheet} (T1 / T2)</h4>
+        {(form.rates || []).map(r => <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", fontSize: 11 }}>
+          <span style={{ flex: 1 }}>{r.municipality}, {r.province}</span>
+          <span style={{ fontWeight: 600, color: colors.accent }}>T1: {fmt(r.priceT1 ?? r.price ?? 0)}</span>
+          <span style={{ fontWeight: 600, color: colors.orange }}>T2: {fmt(r.priceT2 ?? r.price ?? 0)}</span>
           <button onClick={() => setForm({ ...form, rates: form.rates.filter(x => x.id !== r.id) })} style={{ background: "none", border: "none", color: colors.red, cursor: "pointer" }}><X size={10} /></button></div>)}
         <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "flex-end" }}>
-          <Sel value={rForm.province} onChange={e => setRForm({ ...rForm, province: e.target.value, municipality: "" })} style={{ flex: 1, fontSize: 10 }}><option value="">Prov.</option>{DR_PROVINCES.map(p => <option key={p.province} value={p.province}>{p.province}</option>)}</Sel>
-          <Sel value={rForm.municipality} onChange={e => setRForm({ ...rForm, municipality: e.target.value })} style={{ flex: 1, fontSize: 10 }}><option value="">Mun.</option>{(DR_PROVINCES.find(p => p.province === rForm.province)?.municipalities || []).map(m => <option key={m} value={m}>{m}</option>)}</Sel>
-          <Inp type="number" placeholder="$" value={rForm.price} onChange={e => setRForm({ ...rForm, price: e.target.value })} style={{ width: 80, fontSize: 10 }} />
+          <Sel value={rForm.province} onChange={e => setRForm({ ...rForm, province: e.target.value, municipality: "" })} style={{ flex: 2, fontSize: 10 }}><option value="">Prov.</option>{DR_PROVINCES.map(p => <option key={p.province} value={p.province}>{p.province}</option>)}</Sel>
+          <Sel value={rForm.municipality} onChange={e => setRForm({ ...rForm, municipality: e.target.value })} style={{ flex: 2, fontSize: 10 }}><option value="">Mun.</option>{(DR_PROVINCES.find(p => p.province === rForm.province)?.municipalities || []).map(m => <option key={m} value={m}>{m}</option>)}</Sel>
+          <Inp type="number" placeholder="T1 $" value={rForm.priceT1} onChange={e => setRForm({ ...rForm, priceT1: e.target.value })} style={{ width: 70, fontSize: 10 }} />
+          <Inp type="number" placeholder="T2 $" value={rForm.priceT2} onChange={e => setRForm({ ...rForm, priceT2: e.target.value })} style={{ width: 70, fontSize: 10 }} />
           <Btn onClick={addRate} style={{ padding: "5px 8px", fontSize: 10 }}><Plus size={10} /></Btn>
         </div>
       </div>}
@@ -1661,6 +1723,69 @@ function BrokersPage({ t, brokers, setBrokers }) {
         </tr>)}</tbody>
       </table>
       {brokers.length === 0 && <div style={{ textAlign: "center", padding: 30, color: colors.textMuted }}>{t.noBrokers}</div>}
+    </Card>
+  </div>;
+}
+
+// ─── PARTNERS PAGE ───────────────────────────────────────────────────────────
+function PartnersPage({ t, partners, setPartners }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [form, setForm] = useState({ name: "", phone: "", email: "", commissionPct: "", negotiationType: "Net Profit %", notes: "", username: "", password: "" });
+
+  const openNew = () => { setForm({ name: "", phone: "", email: "", commissionPct: "", negotiationType: "Net Profit %", notes: "", username: "", password: "" }); setEditId(null); setShowForm(true); };
+  const openEdit = (p) => { setForm({ ...p }); setEditId(p.id); setShowForm(true); };
+  const save = () => {
+    if (!form.name) return;
+    const d = { ...form, commissionPct: Number(form.commissionPct) || 0 };
+    if (editId) setPartners(partners.map(p => p.id === editId ? { ...d, id: editId } : p));
+    else setPartners([...partners, { ...d, id: nxId(partners) }]);
+    setShowForm(false);
+  };
+
+  return <div>
+    <PageHeader title={t.partners} action={<Btn onClick={openNew}><Plus size={14} /> {t.addPartner}</Btn>} />
+    {showForm && <Card style={{ marginBottom: 16 }}>
+      <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>{editId ? t.editPartner : t.addPartner}</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
+        <Inp label={t.driverName.replace("Conductor","Socio").replace("Driver","Partner") || "Nombre"} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Nombre completo" />
+        <Inp label={t.phone} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+        <Inp label={t.email} value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: 12, marginBottom: 10 }}>
+        <Inp label={t.commissionPct || "Comisión %"} type="number" value={form.commissionPct} onChange={e => setForm({ ...form, commissionPct: e.target.value })} />
+        <Sel label={t.negotiationType || "Tipo Negociación"} value={form.negotiationType} onChange={e => setForm({ ...form, negotiationType: e.target.value })}>
+          <option value="Net Profit %">Net Profit %</option>
+          <option value="Revenue %">Revenue %</option>
+          <option value="Fixed">Fijo</option>
+        </Sel>
+        <Inp label={t.notes} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+        <Inp label={t.username} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="Usuario login" />
+        <Inp label={t.password} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Contraseña login" />
+      </div>
+      <div style={{ display: "flex", gap: 8 }}><Btn onClick={save}>{t.save}</Btn><Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn></div>
+    </Card>}
+    <Card>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+          <Th>Nombre</Th><Th>{t.phone}</Th><Th>{t.email}</Th><Th align="center">Comisión</Th><Th align="center">Negociación</Th><Th>{t.username}</Th><Th align="right">{t.actions}</Th>
+        </tr></thead>
+        <tbody>{partners.map(p => <tr key={p.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+          <Td bold><UserCog size={12} color={colors.orange} style={{ marginRight: 4, verticalAlign: "middle" }} />{p.name}</Td>
+          <Td>{p.phone}</Td>
+          <Td>{p.email}</Td>
+          <Td align="center"><Badge label={`${p.commissionPct}%`} color={colors.green} /></Td>
+          <Td align="center"><Badge label={p.negotiationType || "Net Profit %"} color={colors.accent} /></Td>
+          <Td>{p.username}</Td>
+          <Td align="right">
+            <button onClick={() => openEdit(p)} style={{ padding: 4, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
+            <button onClick={() => setPartners(partners.filter(x => x.id !== p.id))} style={{ padding: 4, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
+          </Td>
+        </tr>)}</tbody>
+      </table>
+      {partners.length === 0 && <div style={{ textAlign: "center", padding: 30, color: colors.textMuted }}>{t.noPartners}</div>}
     </Card>
   </div>;
 }
@@ -1751,7 +1876,7 @@ function SuppliersPage({ t, suppliers, setSuppliers }) {
   </div>;
 }
 
-// ─── SETTLEMENTS PAGE ──────────────────────────────────────────────────────────
+// ─── SETTLEMENTS PAGE ────────────────────────────────────────────────────────
 function SettlementsPage({ t, trips, trucks, expenses, partners, settlementStatus, setSettlementStatus }) {
   const [month, setMonth] = useState(monthStr());
   const months = []; for (let i = 0; i < 12; i++) { const d = new Date(); d.setMonth(d.getMonth() - i); months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }
