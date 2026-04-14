@@ -652,6 +652,7 @@ export default function App() {
   const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
   const [syncStatus, setSyncStatus] = useState("idle"); // "idle" | "saving" | "saved" | "offline"
   const saveTimerRef = useRef(null);
+  const dataLoadedRef = useRef(false); // guard: block auto-save until Supabase data is loaded
   const dataLoadedRef = useRef(false);
 
   // ── Load data from API / localStorage on first mount ─────────────────────
@@ -674,12 +675,14 @@ export default function App() {
         if (data.settlementStatus)    setSettlementStatus(data.settlementStatus);
       }
       dataLoadedRef.current = true;
+      dataLoadedRef.current = true; // now it's safe to auto-save
       setSyncStatus(source === "api" ? "saved" : "offline");
     });
   }, []);
 
   // ── Auto-save data whenever anything changes (debounced 1.5 s) ───────────
   useEffect(() => {
+    if (!dataLoadedRef.current) return; // don't save until real data is loaded
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     if (!dataLoadedRef.current) return;
     saveTimerRef.current = setTimeout(async () => {
