@@ -652,6 +652,7 @@ export default function App() {
   const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
   const [syncStatus, setSyncStatus] = useState("idle"); // "idle" | "saving" | "saved" | "offline"
   const saveTimerRef = useRef(null);
+  const dataLoadedRef = useRef(false);
 
   // ── Load data from API / localStorage on first mount ─────────────────────
   useEffect(() => {
@@ -672,6 +673,7 @@ export default function App() {
         if (data.suppliers?.length)   setSuppliers(data.suppliers);
         if (data.settlementStatus)    setSettlementStatus(data.settlementStatus);
       }
+      dataLoadedRef.current = true;
       setSyncStatus(source === "api" ? "saved" : "offline");
     });
   }, []);
@@ -679,6 +681,7 @@ export default function App() {
   // ── Auto-save data whenever anything changes (debounced 1.5 s) ───────────
   useEffect(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (!dataLoadedRef.current) return;
     saveTimerRef.current = setTimeout(async () => {
       setSyncStatus("saving");
       const result = await saveData({ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, settlementStatus });
