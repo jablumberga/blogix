@@ -3,7 +3,7 @@ import * as lucide from "lucide-react";
 import { loadData, saveData } from "./api.js";
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
-const { Truck, Users, Route, DollarSign, BarChart3, Handshake, LayoutDashboard, Globe, Plus, Pencil, Trash2, X, ChevronRight, ChevronDown, Search, TrendingUp, TrendingDown, Package, MapPin, Calendar, Filter, Building2, FileCheck, AlertTriangle, CheckCircle2, ClipboardList, LogIn, Lock, Eye, EyeOff, Bell, FileText, Receipt, CreditCard, UserCheck, Briefcase, ShieldCheck, AlertCircle, Download, Printer, CircleDollarSign, Fuel, Wrench, Landmark, Clock, ArrowUpDown, Building, Store, Banknote, UserCog, Hash } = lucide;
+const { Truck, Users, Route, DollarSign, BarChart3, Handshake, LayoutDashboard, Globe, Plus, Pencil, Trash2, X, ChevronRight, ChevronDown, Search, TrendingUp, TrendingDown, Package, MapPin, Calendar, Filter, Building2, FileCheck, AlertTriangle, CheckCircle2, ClipboardList, LogIn, Lock, Eye, EyeOff, Bell, FileText, Receipt, CreditCard, UserCheck, Briefcase, ShieldCheck, AlertCircle, Download, Printer, CircleDollarSign, Fuel, Wrench, Landmark, Clock, ArrowUpDown, Building, Store, Banknote, UserCog, Hash, Menu } = lucide;
 
 // ─── Dominican Republic Destinations ─────────────────────────────────────────
 const DR_PROVINCES = [
@@ -219,7 +219,7 @@ const translations = { en: t_en, es: t_es };
 // ─── Sample Data ─────────────────────────────────────────────────────────────
 const USERS = [
   { id: 1, username: "admin", password: "admin123", role: "admin", name: "Alexander", refId: null },
-  { id: 2, username: "carlos", password: "partner1", role: "partner", name: "Carlos Méndez", refId: 1 },
+  { id: 2, username: "carlos", password: "partner1", role: "partner", name: "Carlos Mìndez", refId: 1 },
   { id: 3, username: "maria", password: "partner2", role: "partner", name: "María López", refId: 2 },
   { id: 4, username: "juan", password: "driver1", role: "driver", name: "Juan Pérez", refId: 1 },
   { id: 5, username: "roberto", password: "driver2", role: "driver", name: "Roberto Gómez", refId: 2 },
@@ -276,7 +276,7 @@ const initClients = [
 ];
 
 const initPartners = [
-  { id: 1, name: "Carlos Méndez", phone: "+1 809 555 1111", email: "carlos@email.do", commissionPct: 15, negotiationType: "Net Profit %", notes: "Tiene 2 camiones", username: "carlos", password: "partner1" },
+  { id: 1, name: "Carlos Mìndez", phone: "+1 809 555 1111", email: "carlos@email.do", commissionPct: 15, negotiationType: "Net Profit %", notes: "Tiene 2 camiones", username: "carlos", password: "partner1" },
   { id: 2, name: "María López", phone: "+1 809 555 2222", email: "maria@email.do", commissionPct: 12, negotiationType: "Net Profit %", notes: "", username: "maria", password: "partner2" },
 ];
 
@@ -619,9 +619,6 @@ function LoginPage({ t, onLogin, allUsers }) {
           {error && <div style={{ color: colors.red, fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><AlertCircle size={14} /> {error}</div>}
           <Btn onClick={handleLogin} style={{ width: "100%", justifyContent: "center", padding: "10px 0", fontSize: 14, marginTop: 4 }}><LogIn size={16} /> {t.login}</Btn>
         </div>
-        <div style={{ marginTop: 20, padding: 12, background: colors.inputBg, borderRadius: 8, fontSize: 11, color: colors.textMuted }}>
-          <strong>Demo:</strong> admin/admin123 | carlos/partner1 | juan/driver1
-        </div>
       </div>
     </div>
   );
@@ -634,7 +631,13 @@ export default function App() {
   const [lang, setLang] = useState("es");
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("dashboard");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== "undefined" ? window.innerWidth > 768 : true);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
+  useEffect(() => {
+    const handle = () => { const m = window.innerWidth <= 768; setIsMobile(m); if (!m) setSidebarOpen(true); };
+    window.addEventListener("resize", handle);
+    return () => window.removeEventListener("resize", handle);
+  }, []);
   const t = translations[lang];
 
   // Data
@@ -733,8 +736,10 @@ export default function App() {
 
   return (
     <div style={{ display: "flex", height: "100vh", background: colors.bg, color: colors.text, fontFamily: "'Inter',-apple-system,sans-serif", fontSize: 13 }}>
+      {/* Mobile backdrop */}
+      {isMobile && sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 190 }} />}
       {/* Sidebar */}
-      <div style={{ width: sidebarOpen ? 220 : 60, background: colors.sidebar, borderRight: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", transition: "width 0.2s", flexShrink: 0, overflow: "hidden" }}>
+      <div style={{ width: isMobile ? (sidebarOpen ? 220 : 0) : (sidebarOpen ? 220 : 60), ...(isMobile ? { position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 200 } : {}), background: colors.sidebar, borderRight: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", transition: "width 0.2s", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ padding: "16px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${colors.border}`, cursor: "pointer" }} onClick={() => setSidebarOpen(!sidebarOpen)}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg, ${colors.accent}, ${colors.green})`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Truck size={16} color="white" /></div>
           {sidebarOpen && <span style={{ fontWeight: 700, fontSize: 16 }}>B-Logix</span>}
@@ -743,7 +748,7 @@ export default function App() {
         <nav style={{ flex: 1, padding: "10px 6px", display: "flex", flexDirection: "column", gap: 1 }}>
           {navItems.map(item => {
             const act = page === item.id; const Icon = item.icon;
-            return <button key={item.id} onClick={() => setPage(item.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 7, border: "none", background: act ? colors.accent : "transparent", color: act ? "white" : colors.text, cursor: "pointer", fontSize: 13, textAlign: "left", width: "100%", transition: "background 0.15s", position: "relative" }}>
+            return <button key={item.id} onClick={() => { setPage(item.id); if (isMobile) setSidebarOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 7, border: "none", background: act ? colors.accent : "transparent", color: act ? "white" : colors.text, cursor: "pointer", fontSize: 13, textAlign: "left", width: "100%", transition: "background 0.15s", position: "relative" }}>
               <div style={{ position: "relative", flexShrink: 0 }}>
                 <Icon size={16} />
                 {item.badge > 0 && <span style={{ position: "absolute", top: -5, right: -6, background: colors.red, color: "white", borderRadius: 10, fontSize: 9, fontWeight: 700, minWidth: 14, height: 14, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{item.badge > 99 ? "99+" : item.badge}</span>}
@@ -772,7 +777,9 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
+      <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "56px 14px 14px" : 20, position: "relative" }}>
+        {/* Mobile hamburger */}
+        {isMobile && <button onClick={() => setSidebarOpen(true)} style={{ position: "fixed", top: 10, left: 10, zIndex: 150, background: colors.accent, border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", color: "white", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}><Menu size={18} /></button>}
         {page === "dashboard" && isAdmin && <AdminDashboard {...ctx} setPage={setPage} />}
         {page === "partnerDash" && isPartner && <PartnerDashboard {...ctx} />}
         {page === "driverDash" && isDriver && <DriverDashboard {...ctx} />}
@@ -949,7 +956,7 @@ function PartnerDashboard({ t, trips, trucks, expenses, partner, partnerTruckIds
     <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
       <DateFilter t={t} onFilter={(f, to) => { setDateFrom(f); setDateTo(to); }} />
       <Sel value={truckFilter} onChange={e => setTruckFilter(e.target.value)} style={{ fontSize: 11 }}>
-        <option value="all">{t.all}</option>
+        <option value="all">Todos Mis Camiones</option>
         {myTrucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}
       </Sel>
     </div>
@@ -1112,40 +1119,25 @@ function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, d
           </Sel>
         </div>
         <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 10 }}>
+        <div style={{ marginTop: 10 }}>
           <Sel label={t.truck} value={form.truckId} onChange={e => setForm({ ...form, truckId: e.target.value })}>
             {trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}
           </Sel>
-          <Inp label={t.cargo} value={form.cargo} onChange={e => setForm({ ...form, cargo: e.target.value })} />
-          <Inp label={t.weight} type="number" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 10 }}>
           <Sel label={t.status} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
             <option value="pending">{t.pending}</option>
             <option value="in_transit">{t.inTransit}</option>
             <option value="delivered">{t.delivered}</option>
-            <option value="cancelled">{t.cancelled}</option>
           </Sel>
           {selectedClient?.rules.requiresInvoiceRef && <Inp label={t.invoiceRef + " *"} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: !form.invoiceRef ? colors.red : colors.border }} />}
         </div>
 
-        {/* Client Rules Banner */}
-        {selectedClient && <div style={{ margin: "10px 0", padding: 10, background: colors.purple + "08", borderRadius: 8, border: `1px solid ${colors.purple}30`, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: 11 }}>
-          <Badge label={`${selectedClient.rules.paymentTerms}d`} color={colors.accent} icon={Calendar} />
-          {selectedClient.rules.requiresPOD && <Badge label="POD" color={colors.orange} icon={FileCheck} />}
-          {selectedClient.rules.requiresInvoiceRef && <Badge label={t.invoiceRef} color={colors.red} icon={Hash} />}
-          {selectedClient.rules.requiresDocuments && <Badge label={t.document} color={colors.purple} icon={FileText} />}
-          {selectedClient.rules.defaultBrokerId && (() => { const b = brokers.find(x => x.id === selectedClient.rules.defaultBrokerId); return b ? <Badge label={`${t.broker}: ${b.name} ${b.commissionPct}%`} color={colors.yellow} icon={Handshake} /> : null; })()}
-        </div>}
-
-        {/* Helpers */}
+        {/* Helpers — quantity only */}
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22` }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Sel label={t.numHelpers} value={form.numHelpers ?? 0} onChange={e => setForm({ ...form, numHelpers: Number(e.target.value) })}>
-              {[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n === 0 ? "0 — " + t.none : `${n} ayudante${n > 1 ? "s" : ""}`}</option>)}
-            </Sel>
-            {Number(form.numHelpers) > 0 && <Inp label={t.helperPayEach} type="number" placeholder="RD$" value={form.helperPayEach} onChange={e => setForm({ ...form, helperPayEach: e.target.value })} />}
-          </div>
+          <Sel label={t.numHelpers} value={form.numHelpers ?? 0} onChange={e => setForm({ ...form, numHelpers: Number(e.target.value) })}>
+            {[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n === 0 ? "0 — " + t.none : `${n} ayudante${n > 1 ? "s" : ""}`}</option>)}
+          </Sel>
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${colors.border}33` }}>
@@ -1174,6 +1166,8 @@ function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, d
               const driverRate = driverRateObj
                 ? ((tk?.size || "T1") === "T2" ? (driverRateObj.priceT2 ?? driverRateObj.price ?? 0) : (driverRateObj.priceT1 ?? driverRateObj.price ?? 0))
                 : null;
+              const nextStatus = { pending: "in_transit", in_transit: "delivered", delivered: "pending" };
+              const stColor = tr.status === "delivered" ? colors.green : tr.status === "in_transit" ? colors.yellow : colors.accent;
               return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
                 <Td>{tr.date}</Td>
                 <Td>{tr.municipality}, {tr.province}</Td>
@@ -1184,13 +1178,13 @@ function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, d
                     ? <span style={{ fontSize: 11, color: colors.textMuted }}>{t.fixedSalary}</span>
                     : driverRate != null ? fmt(driverRate) : <span style={{ fontSize: 11, color: colors.orange }}>—</span>}
                 </Td>
-                <Td align="center"><StatusBadge status={tr.status} t={t} /></Td>
                 <Td align="center">
-                  <button onClick={() => setTrips(trips.map(x => x.id === tr.id ? { ...x, docStatus: x.docStatus === "delivered" ? "pending" : "delivered" } : x))}
-                    style={{ padding: "3px 8px", borderRadius: 10, border: "none", fontSize: 10, fontWeight: 600, cursor: "pointer", background: tr.docStatus === "delivered" ? colors.green + "18" : colors.orange + "18", color: tr.docStatus === "delivered" ? colors.green : colors.orange }}>
-                    {tr.docStatus === "delivered" ? t.deliveredDocs : t.pendingDocs}
+                  <button onClick={() => setTrips(trips.map(x => x.id === tr.id ? { ...x, status: nextStatus[x.status] || "pending" } : x))}
+                    style={{ padding: "3px 8px", borderRadius: 10, border: "none", fontSize: 10, fontWeight: 600, cursor: "pointer", background: stColor + "18", color: stColor }}>
+                    {tr.status === "delivered" ? t.delivered : tr.status === "in_transit" ? t.inTransit : t.pending}
                   </button>
                 </Td>
+                <Td align="center"><Badge label={tr.docStatus === "delivered" ? t.deliveredDocs : t.pendingDocs} color={tr.docStatus === "delivered" ? colors.green : colors.orange} /></Td>
               </tr>;
             })}
           </tbody>
@@ -1882,10 +1876,57 @@ function SuppliersPage({ t, suppliers, setSuppliers }) {
 }
 
 // ─── SETTLEMENTS PAGE ────────────────────────────────────────────────────────
-function SettlementsPage({ t, trips, trucks, expenses, partners, settlementStatus, setSettlementStatus }) {
+function SettlementsPage({ t, trips, trucks, expenses, clients, partners, settlementStatus, setSettlementStatus, user, partner, partnerTruckIds }) {
+  const isPartnerView = user?.role === "partner";
   const [month, setMonth] = useState(monthStr());
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const months = []; for (let i = 0; i < 12; i++) { const d = new Date(); d.setMonth(d.getMonth() - i); months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }
 
+  if (isPartnerView) {
+    let myTrips = trips.filter(tr => (partnerTruckIds || []).includes(tr.truckId));
+    if (dateFrom) myTrips = myTrips.filter(tr => tr.date >= dateFrom);
+    if (dateTo) myTrips = myTrips.filter(tr => tr.date <= dateTo);
+    const rev = myTrips.reduce((s, tr) => s + tr.revenue, 0);
+    const exp = expenses.filter(e => myTrips.some(tr => tr.id === e.tripId)).reduce((s, e) => s + e.amount, 0);
+    const net = rev - exp;
+    const comm = net * ((partner?.commissionPct || 0) / 100);
+    const key = `${partner?.id}-${monthStr()}`;
+    const status = settlementStatus[key] || "unpaid";
+    return <div>
+      <PageHeader title={t.settlements} />
+      <div style={{ marginBottom: 16 }}><DateFilter t={t} onFilter={(f, to) => { setDateFrom(f); setDateTo(to); }} /></div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
+        <StatCard icon={Route} label={t.totalTrips} value={myTrips.length} color={colors.cyan} />
+        <StatCard icon={TrendingUp} label={t.grossRevenue} value={fmt(rev)} color={colors.green} />
+        <StatCard icon={TrendingDown} label={t.totalExpenses} value={fmt(exp)} color={colors.orange} />
+        <StatCard icon={DollarSign} label={t.netProfit} value={fmt(net)} color={net >= 0 ? colors.green : colors.red} />
+        <StatCard icon={Handshake} label={`${t.commission} (${partner?.commissionPct}%)`} value={fmt(comm)} color={colors.purple} />
+        <StatCard icon={CircleDollarSign} label={t.partnerEarnings} value={fmt(net - comm)} color={colors.accent} />
+      </div>
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 15 }}>{t.statusLabel}: <Badge label={status === "paid" ? t.paid : t.unpaid} color={status === "paid" ? colors.green : colors.red} /></h3>
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+            <Th>{t.date}</Th><Th>{t.destination}</Th><Th>{t.client}</Th><Th align="right">{t.revenue}</Th><Th align="center">{t.status}</Th>
+          </tr></thead>
+          <tbody>{myTrips.map(tr => {
+            const cl = (clients || []).find(c => c.id === tr.clientId);
+            return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+              <Td>{tr.date}</Td><Td>{tr.municipality}</Td><Td>{cl?.companyName || "—"}</Td>
+              <Td align="right" bold color={colors.green}>{fmt(tr.revenue)}</Td>
+              <Td align="center"><StatusBadge status={tr.status} t={t} /></Td>
+            </tr>;
+          })}</tbody>
+        </table>
+        {myTrips.length === 0 && <div style={{ textAlign: "center", padding: 30, color: colors.textMuted }}>{t.noSettlements}</div>}
+      </Card>
+    </div>;
+  }
+
+  // Admin view
   const mt = trips.filter(tr => tr.date.startsWith(month));
   const data = partners.map(p => {
     const pTrucks = trucks.filter(tk => tk.partnerId === p.id).map(tk => tk.id);
