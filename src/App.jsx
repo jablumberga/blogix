@@ -96,8 +96,8 @@ const t_en = {
   // Drivers
   driverName: "Name", license: "License #", assignedTruck: "Assigned Truck",
   addDriver: "Add Driver", noDrivers: "No drivers registered.",
-  salaryType: "Salary Type", fixedSalary: "Fixed", perTrip: "Per Trip",
-  fixedAmount: "Fixed Amount", driverRateSheet: "Driver Rate Sheet",
+  salaryType: "Salary Type", fixedSalary: "Fixed", perTrip: "Per Trip", porcentaje: "Percentage",
+  fixedAmount: "Fixed Amount", percentageAmount: "Percentage %", driverRateSheet: "Driver Rate Sheet",
   // Brokers
   addBroker: "Add Broker", editBroker: "Edit Broker", brokerName: "Broker Name",
   brokerCommission: "Commission %", noBrokers: "No brokers registered.",
@@ -183,8 +183,8 @@ const t_es = {
   addTruck: "Agregar Camión", noTrucks: "No hay camiones registrados.",
   driverName: "Nombre", license: "Licencia #", assignedTruck: "Camión Asignado",
   addDriver: "Agregar Conductor", noDrivers: "No hay conductores registrados.",
-  salaryType: "Tipo Salario", fixedSalary: "Fijo", perTrip: "Por Viaje",
-  fixedAmount: "Monto Fijo", driverRateSheet: "Tarifario Conductor",
+  salaryType: "Tipo Salario", fixedSalary: "Fijo", perTrip: "Por Viaje", porcentaje: "Porcentaje",
+  fixedAmount: "Monto Fijo", percentageAmount: "Porcentaje %", driverRateSheet: "Tarifario Conductor",
   addBroker: "Agregar Broker", editBroker: "Editar Broker", brokerName: "Nombre Broker",
   brokerCommission: "Comisión %", noBrokers: "No hay brokers registrados.",
   broker: "Broker", brokerFee: "Comisión Broker", defaultBroker: "Broker por Defecto", noBroker: "Sin Broker",
@@ -396,7 +396,7 @@ function computeAlerts({ trips, expenses, clients, drivers, trucks, partners, br
   });
 
   // ── AGENT 7: Conductor por-viaje sin pago en viaje entregado ───────────────
-  drivers.filter(d => d.salaryType === "perTrip").forEach(driver => {
+  drivers.filter(d => d.salaryType === "perTrip" || d.salaryType === "porcentaje").forEach(driver => {
     trips.filter(tr => tr.driverId === driver.id && tr.status === "delivered").forEach(tr => {
       const hasPay = expenses.some(e => e.tripId === tr.id && e.category === "driverPay");
       if (!hasPay) {
@@ -1071,6 +1071,10 @@ function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, d
       const size = tk?.size || "T1";
       return s + (size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0));
     }
+    if (driverObj?.salaryType === "porcentaje") {
+      const pct = (driverObj.percentageAmount || 0) / 100;
+      return s + (tr.revenue || 0) * pct;
+    }
     return s;
   }, 0);
   const helperPay = myTrips.reduce((s, tr) => s + (tr.helpers || []).reduce((h, x) => h + x.pay, 0), 0);
@@ -1096,7 +1100,7 @@ function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, d
     <Card style={{ marginBottom: 16 }}>
       <h3 style={{ margin: "0 0 12px", fontSize: 15, display: "flex", alignItems: "center", gap: 6 }}><Banknote size={16} color={colors.green} /> {t.payrollSummary}</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
-        <div><div style={{ fontSize: 11, color: colors.textMuted }}>{driverObj?.salaryType === "fixed" ? t.fixedSalary : t.tripPay}</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.green }}>{fmt(totalEarnings)}</div></div>
+        <div><div style={{ fontSize: 11, color: colors.textMuted }}>{driverObj?.salaryType === "fixed" ? t.fixedSalary : driverObj?.salaryType === "porcentaje" ? `${t.porcentaje} (${driverObj.percentageAmount || 0}%)` : t.tripPay}</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.green }}>{fmt(totalEarnings)}</div></div>
         <div><div style={{ fontSize: 11, color: colors.textMuted }}>{t.helperPay}</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.orange }}>{fmt(helperPay)}</div></div>
         <div><div style={{ fontSize: 11, color: colors.textMuted }}>{t.totalDiscounts}</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.red }}>{fmt(discountsTotal)}</div></div>
         <div><div style={{ fontSize: 11, color: colors.textMuted }}>{t.netPay}</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.cyan }}>{fmt(totalEarnings + helperPay - discountsTotal)}</div></div>
@@ -1165,7 +1169,9 @@ function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, d
                 : null;
               const driverRate = driverRateObj
                 ? ((tk?.size || "T1") === "T2" ? (driverRateObj.priceT2 ?? driverRateObj.price ?? 0) : (driverRateObj.priceT1 ?? driverRateObj.price ?? 0))
-                : null;
+                : driverObj?.salaryType === "porcentaje"
+                  ? (tr.revenue || 0) * ((driverObj.percentageAmount || 0) / 100)
+                  : null;
               const nextStatus = { pending: "in_transit", in_transit: "delivered", delivered: "pending" };
               const stColor = tr.status === "delivered" ? colors.green : tr.status === "in_transit" ? colors.yellow : colors.accent;
               return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
@@ -1176,7 +1182,9 @@ function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, d
                 <Td align="right" bold color={colors.green}>
                   {driverObj?.salaryType === "fixed"
                     ? <span style={{ fontSize: 11, color: colors.textMuted }}>{t.fixedSalary}</span>
-                    : driverRate != null ? fmt(driverRate) : <span style={{ fontSize: 11, color: colors.orange }}>—</span>}
+                    : driverObj?.salaryType === "porcentaje"
+                      ? <span>{fmt(driverRate)} <span style={{ fontSize: 10, color: colors.textMuted }}>({driverObj.percentageAmount || 0}%)</span></span>
+                      : driverRate != null ? fmt(driverRate) : <span style={{ fontSize: 11, color: colors.orange }}>—</span>}
                 </Td>
                 <Td align="center">
                   <button onClick={() => setTrips(trips.map(x => x.id === tr.id ? { ...x, status: nextStatus[x.status] || "pending" } : x))}
@@ -1630,12 +1638,12 @@ function FleetPage({ t, trucks, setTrucks, partners }) {
 function DriversPage({ t, drivers, setDrivers, trucks }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, username: "", password: "", rates: [] });
+  const [form, setForm] = useState({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, percentageAmount: 0, username: "", password: "", rates: [] });
   const [rForm, setRForm] = useState({ province: "", municipality: "", priceT1: "", priceT2: "" });
 
-  const openNew = () => { setForm({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, username: "", password: "", rates: [] }); setEditId(null); setShowForm(true); };
+  const openNew = () => { setForm({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, percentageAmount: 0, username: "", password: "", rates: [] }); setEditId(null); setShowForm(true); };
   const openEdit = (d) => { setForm({ ...d }); setEditId(d.id); setShowForm(true); };
-  const save = () => { if (!form.name) return; const d = { ...form, truckId: Number(form.truckId) || null, fixedAmount: Number(form.fixedAmount) || 0 }; if (editId) setDrivers(drivers.map(x => x.id === editId ? { ...d, id: editId } : x)); else setDrivers([...drivers, { ...d, id: nxId(drivers) }]); setShowForm(false); };
+  const save = () => { if (!form.name) return; const d = { ...form, truckId: Number(form.truckId) || null, fixedAmount: Number(form.fixedAmount) || 0, percentageAmount: Number(form.percentageAmount) || 0 }; if (editId) setDrivers(drivers.map(x => x.id === editId ? { ...d, id: editId } : x)); else setDrivers([...drivers, { ...d, id: nxId(drivers) }]); setShowForm(false); };
   const addRate = () => { if (!rForm.province || !rForm.municipality || !rForm.priceT1 || !rForm.priceT2) return; setForm({ ...form, rates: [...(form.rates || []), { id: nxId(form.rates || []), province: rForm.province, municipality: rForm.municipality, priceT1: Number(rForm.priceT1), priceT2: Number(rForm.priceT2) }] }); setRForm({ province: "", municipality: "", priceT1: "", priceT2: "" }); };
 
   return <div>
@@ -1648,8 +1656,9 @@ function DriversPage({ t, drivers, setDrivers, trucks }) {
         <Sel label={t.assignedTruck} value={form.truckId} onChange={e => setForm({ ...form, truckId: e.target.value })}><option value="">{t.none}</option>{trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}</Sel>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
-        <Sel label={t.salaryType} value={form.salaryType} onChange={e => setForm({ ...form, salaryType: e.target.value })}><option value="fixed">{t.fixedSalary}</option><option value="perTrip">{t.perTrip}</option></Sel>
+        <Sel label={t.salaryType} value={form.salaryType} onChange={e => setForm({ ...form, salaryType: e.target.value })}><option value="fixed">{t.fixedSalary}</option><option value="perTrip">{t.perTrip}</option><option value="porcentaje">{t.porcentaje}</option></Sel>
         {form.salaryType === "fixed" && <Inp label={t.fixedAmount} type="number" value={form.fixedAmount} onChange={e => setForm({ ...form, fixedAmount: e.target.value })} />}
+        {form.salaryType === "porcentaje" && <Inp label={t.percentageAmount} type="number" min="0" max="100" value={form.percentageAmount} onChange={e => setForm({ ...form, percentageAmount: e.target.value })} />}
         <Inp label={t.username} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} />
         <Inp label={t.password} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
       </div>
@@ -1677,7 +1686,7 @@ function DriversPage({ t, drivers, setDrivers, trucks }) {
           const tk = trucks.find(t2 => t2.id === d.truckId);
           return <tr key={d.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
             <Td bold>{d.name}</Td><Td>{d.phone}</Td><Td>{d.license}</Td><Td>{tk?.plate || "—"}</Td>
-            <Td><Badge label={d.salaryType === "fixed" ? `${t.fixedSalary}: ${fmt(d.fixedAmount)}` : t.perTrip} color={d.salaryType === "fixed" ? colors.accent : colors.green} /></Td>
+            <Td><Badge label={d.salaryType === "fixed" ? `${t.fixedSalary}: ${fmt(d.fixedAmount)}` : d.salaryType === "porcentaje" ? `${t.porcentaje}: ${d.percentageAmount || 0}%` : t.perTrip} color={d.salaryType === "fixed" ? colors.accent : d.salaryType === "porcentaje" ? colors.cyan : colors.green} /></Td>
             <Td align="right">
               <button onClick={() => openEdit(d)} style={{ padding: 4, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
               <button onClick={() => setDrivers(drivers.filter(x => x.id !== d.id))} style={{ padding: 4, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
