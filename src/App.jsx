@@ -641,14 +641,14 @@ export default function App() {
   const t = translations[lang];
 
   // Data
-  const [clients, setClients] = useState(initClients);
-  const [partners, setPartners] = useState(initPartners);
-  const [trucks, setTrucks] = useState(initTrucks);
-  const [drivers, setDrivers] = useState(initDrivers);
-  const [trips, setTrips] = useState(initTrips);
-  const [expenses, setExpenses] = useState(initExpenses);
-  const [brokers, setBrokers] = useState(initBrokers);
-  const [suppliers, setSuppliers] = useState(initSuppliers);
+  const [clients, setClients] = useState([]);
+  const [partners, setPartners] = useState([]);
+  const [trucks, setTrucks] = useState([]);
+  const [drivers, setDrivers] = useState([]);
+  const [trips, setTrips] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [brokers, setBrokers] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
   const [syncStatus, setSyncStatus] = useState("idle"); // "idle" | "saving" | "saved" | "offline"
   const saveTimerRef = useRef(null);
