@@ -1883,14 +1883,42 @@ function PartnersPage({ t, partners, setPartners }) {
 // ─── EXPENSES PAGE ───────────────────────────────────────────────────────────
 function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers }) {
   const [filterCat, setFilterCat] = useState("all");
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "" });
+
   const byCategory = EXPENSE_CATEGORIES.map(c => ({ cat: c, label: t[c] || c, total: expenses.filter(e => e.category === c).reduce((s, e) => s + e.amount, 0) })).filter(c => c.total > 0).sort((a, b) => b.total - a.total);
   const total = expenses.reduce((s, e) => s + e.amount, 0);
   const cxpTotal = expenses.filter(e => e.paymentMethod === "credit").reduce((s, e) => s + e.amount, 0);
 
   const filtered = filterCat === "all" ? expenses : expenses.filter(e => e.category === filterCat);
 
+  const openNew = () => { setForm({ date: new Date().toISOString().slice(0,10), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "" }); setShowForm(true); };
+  const save = () => {
+    if (!form.amount || !form.date) return;
+    setExpenses(prev => [...prev, { id: nxId(prev), ...form, amount: Number(form.amount), tripId: form.tripId ? Number(form.tripId) : null }]);
+    setShowForm(false);
+  };
+
   return <div>
-    <PageHeader title={t.expenses} />
+    <PageHeader title={t.expenses} action={<Btn onClick={openNew}><Plus size={14} /> {t.addExpense}</Btn>} />
+    {showForm && <Card style={{ marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 10 }}>
+        <Inp label={t.expenseDate} type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+        <Sel label={t.expenseCategory} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+          {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{t[c] || c}</option>)}
+        </Sel>
+        <Inp label={t.expenseAmount} type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+        <Sel label={t.paymentMethod} value={form.paymentMethod} onChange={e => setForm({ ...form, paymentMethod: e.target.value })}>
+          {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t[m] || m}</option>)}
+        </Sel>
+        <Sel label="Viaje (opcional)" value={form.tripId} onChange={e => setForm({ ...form, tripId: e.target.value })}>
+          <option value="">— Sin viaje —</option>
+          {trips.map(tr => <option key={tr.id} value={tr.id}>#{tr.id} {tr.origin} → {tr.destination}</option>)}
+        </Sel>
+        <Inp label={t.expenseDesc} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+      </div>
+      <div style={{ display: "flex", gap: 8 }}><Btn onClick={save}>{t.save}</Btn><Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn></div>
+    </Card>}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
       <StatCard icon={Receipt} label={t.totalExpenses} value={fmt(total)} color={colors.red} />
       <StatCard icon={CreditCard} label={t.cxp} value={fmt(cxpTotal)} color={colors.orange} />
