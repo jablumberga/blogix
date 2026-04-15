@@ -653,8 +653,7 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("idle"); // "idle" | "saving" | "saved" | "offline"
   const saveTimerRef = useRef(null);
   const dataLoadedRef = useRef(false); // guard: block auto-save until Supabase data is loaded
-  const dataLoadedRef = useRef(false);
-
+  
   // ── Load data from API / localStorage on first mount ─────────────────────
   useEffect(() => {
     loadData().then(({ source, data }) => {
