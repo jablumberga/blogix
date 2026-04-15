@@ -659,19 +659,14 @@ export default function App() {
   useEffect(() => {
     loadData().then(({ source, data }) => {
       if (data && Object.keys(data).length > 0) {
-        if (data.clients?.length) {
-          // Merge: add any initClients missing from saved data (e.g. Bocel)
-          const savedIds = new Set(data.clients.map(c => c.id));
-          const missing = initClients.filter(c => !savedIds.has(c.id));
-          setClients(missing.length ? [...data.clients, ...missing] : data.clients);
-        }
-        if (data.partners?.length)    setPartners(data.partners);
-        if (data.trucks?.length)      setTrucks(data.trucks);
-        if (data.drivers?.length)     setDrivers(data.drivers);
-        if (data.trips?.length)       setTrips(data.trips);
-        if (data.expenses?.length)    setExpenses(data.expenses);
-        if (data.brokers?.length)     setBrokers(data.brokers);
-        if (data.suppliers?.length)   setSuppliers(data.suppliers);
+        if (Array.isArray(data.clients)) setClients(data.clients);
+        if (Array.isArray(data.partners))   setPartners(data.partners);
+        if (Array.isArray(data.trucks))     setTrucks(data.trucks);
+        if (Array.isArray(data.drivers))    setDrivers(data.drivers);
+        if (Array.isArray(data.trips))      setTrips(data.trips);
+        if (Array.isArray(data.expenses))   setExpenses(data.expenses);
+        if (Array.isArray(data.brokers))    setBrokers(data.brokers);
+        if (Array.isArray(data.suppliers))  setSuppliers(data.suppliers);
         if (data.settlementStatus)    setSettlementStatus(data.settlementStatus);
       }
       dataLoadedRef.current = true;
