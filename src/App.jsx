@@ -1346,11 +1346,27 @@ function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expense
     } else {
       const newId = nxId(trips);
       setTrips([...trips, { ...data, id: newId }]);
-      // Auto-deduct broker commission on new trips if broker assigned
+      // Auto-generate expenses for new trips
+      const newExpenses = [];
+      // 1. Broker commission
       const broker = data.brokerId ? brokers.find(b => b.id === data.brokerId) : null;
       if (broker && data.revenue > 0) {
         const fee = Math.round(data.revenue * broker.commissionPct / 100);
-        setExpenses(prev => [...prev, { id: nxId(prev), tripId: newId, date: data.date, category: "broker_commission", amount: fee, paymentMethod: "transfer", description: `${t.brokerAutoDeducted}: ${broker.name} (${broker.commissionPct}%)`, supplierId: null }]);
+        newExpenses.push({ category: "broker_commission", amount: fee, description: `${t.brokerAutoDeducted}: ${broker.name} (${broker.commissionPct}%)`, paymentMethod: "transfer" });
+      }
+      // 2. Driver payroll: 20% of trip revenue
+      if (data.revenue > 0 && data.driverId) {
+        const driver = drivers.find(d => d.id === data.driverId);
+        const driverName = driver ? driver.name : `Conductor #${data.driverId}`;
+        const driverPay = Math.round(data.revenue * 0.20);
+        newExpenses.push({ category: "driverPay", amount: driverPay, description: `Nómina 20%: ${driverName}`, paymentMethod: "transfer" });
+      }
+      if (newExpenses.length > 0) {
+        setExpenses(prev => {
+          let next = [...prev];
+          newExpenses.forEach(exp => { next = [...next, { id: nxId(next), tripId: newId, date: data.date, supplierId: null, ...exp }]; });
+          return next;
+        });
       }
     }
     setShowForm(false);
