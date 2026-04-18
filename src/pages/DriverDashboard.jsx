@@ -53,10 +53,37 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
     const data = { ...form, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr };
     const newId = nxId(trips);
     setTrips([...trips, { ...data, id: newId }]);
+    const newExpenses = [];
     const broker = data.brokerId ? brokers.find(b => b.id === data.brokerId) : null;
     if (broker && data.revenue > 0) {
       const fee = Math.round(data.revenue * broker.commissionPct / 100);
-      setExpenses(prev => [...prev, { id: nxId(prev), tripId: newId, date: data.date, category: "broker_commission", amount: fee, paymentMethod: "transfer", description: `${t.brokerAutoDeducted}: ${broker.name} (${broker.commissionPct}%)`, supplierId: null }]);
+      newExpenses.push({ category: "broker_commission", amount: fee, description: `${t.brokerAutoDeducted}: ${broker.name} (${broker.commissionPct}%)`, paymentMethod: "transfer", brokerId: data.brokerId, status: "paid" });
+    }
+    if (driverObj && driverObj.salaryType !== "fixed") {
+      let driverPay = 0;
+      if (driverObj.salaryType === "porcentaje") {
+        driverPay = Math.round((data.revenue || 0) * (driverObj.percentageAmount || 20) / 100);
+      } else if (driverObj.salaryType === "perTrip") {
+        const rate = (driverObj.rates || []).find(r => r.province === data.province && r.municipality === data.municipality);
+        if (rate) {
+          const tk = trucks.find(t2 => t2.id === Number(data.truckId));
+          const size = tk?.size || "T1";
+          driverPay = size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
+        }
+      } else {
+        driverPay = Math.round((data.revenue || 0) * 0.20);
+      }
+      if (driverPay > 0) {
+        const pct = driverObj.salaryType === "porcentaje" ? (driverObj.percentageAmount || 20) : 20;
+        newExpenses.push({ category: "driverPay", amount: driverPay, description: `Nómina ${pct}%: ${driverObj.name}`, paymentMethod: "transfer", driverId: driverObj.id, status: "pending" });
+      }
+    }
+    if (newExpenses.length > 0) {
+      setExpenses(prev => {
+        let next = [...prev];
+        newExpenses.forEach(exp => { next = [...next, { id: nxId(next), tripId: newId, date: data.date, supplierId: null, ...exp }]; });
+        return next;
+      });
     }
     setShowForm(false);
   };
@@ -326,4 +353,4 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
       )}
     </Card>
   );
-}
+                                                                                                                                           }
