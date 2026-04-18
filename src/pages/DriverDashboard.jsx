@@ -308,6 +308,14 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                         <Td align="right" style={{ fontSize: 11, color: colors.red }}>− {fmt(d.amount)}</Td><Td></Td>
                       </tr>
                     ))}
+                    {(() => {
+                      const linkedAdel = adelantoExps.find(e => e.tripId === tr.id);
+                      if (!linkedAdel) return null;
+                      return <tr key={`adv-${tr.id}`} style={{ background: colors.orange + "08" }}>
+                        <Td></Td><Td colSpan={4} style={{ fontSize: 11, color: colors.orange, paddingLeft: 20 }}>↳ Adelanto vinculado</Td>
+                        <Td align="right" style={{ fontSize: 11, color: colors.orange }}>− {fmt(linkedAdel.amount)}</Td><Td></Td>
+                      </tr>;
+                    })()}
                   </Fragment>;
                 })}
               </tbody>
@@ -325,12 +333,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                       <Td>{e.date}</Td>
                       <Td>
                         <span>{e.description || "Adelanto"}</span>
-                        {linkedTrip && <>
-                          <br /><span style={{ fontSize: 10, color: colors.textMuted }}>↳ Viaje {linkedTrip.date}: {linkedTrip.municipality}, {linkedTrip.province}</span>
-                          {(linkedTrip.discounts || []).filter(d => d.amount > 0).map((d, i) => (
-                            <span key={i} style={{ display: "block", fontSize: 10, color: colors.red, paddingLeft: 10 }}>↳ Desc: {d.desc || "—"} − {fmt(d.amount)}</span>
-                          ))}
-                        </>}
+                        {linkedTrip && <><br /><span style={{ fontSize: 10, color: colors.textMuted }}>↳ Viaje {linkedTrip.date}: {linkedTrip.municipality}, {linkedTrip.province}</span></>}
                       </Td>
                       <Td align="right" bold color={colors.red}>− {fmt(e.amount)}</Td>
                     </tr>
@@ -353,4 +356,4 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
       )}
     </Card>
   );
-                                                                                                                                           }
+}
