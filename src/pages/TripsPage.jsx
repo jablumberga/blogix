@@ -15,9 +15,11 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterClient, setFilterClient] = useState("all");
+  const [filterDriver, setFilterDriver] = useState("all");
+  const [filterTruck, setFilterTruck] = useState("all");
   const [rateMsg, setRateMsg] = useState("");
 
-  const emptyForm = { date: today(), province: "", municipality: "", truckId: trucks[0]?.id || "", driverId: drivers[0]?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [], tarifaOverride: null };
+  const emptyForm = { date: today(), province: "", municipality: "", truckId: "", driverId: "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [], tarifaOverride: null };
 
   const openNew = () => { setForm({ ...emptyForm, createdBy: user.name }); setEditId(null); setShowForm(true); setRateMsg(""); };
   const openEdit = (tr) => { setForm({ ...tr }); setEditId(tr.id); setShowForm(true); setRateMsg(""); };
@@ -61,6 +63,12 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         f.revenue = price; setRateMsg(`${t.rateApplied} (⚡ ${size}): ${fmt(price)}`);
       }
     }
+    setForm(f);
+  };
+
+  const handleTruckChange = (tid) => {
+    const f = { ...form, truckId: tid };
+    tryApplyRate(f, null);
     setForm(f);
   };
 
@@ -128,6 +136,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   let filtered = trips;
   if (filterStatus !== "all") filtered = filtered.filter(tr => tr.status === filterStatus);
   if (filterClient !== "all") filtered = filtered.filter(tr => tr.clientId === Number(filterClient));
+  if (filterDriver !== "all") filtered = filtered.filter(tr => tr.driverId === Number(filterDriver));
+  if (filterTruck !== "all") filtered = filtered.filter(tr => tr.truckId === Number(filterTruck));
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter(tr => {
@@ -157,8 +167,17 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         <option value="all">{t.all} {t.clients}</option>
         {clients.map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
       </Sel>
+      <Sel value={filterDriver} onChange={e => setFilterDriver(e.target.value)} style={{ fontSize: 11 }}>
+        <option value="all">{t.all} {t.drivers || "Choferes"}</option>
+        {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+      </Sel>
+      <Sel value={filterTruck} onChange={e => setFilterTruck(e.target.value)} style={{ fontSize: 11 }}>
+        <option value="all">{t.all} {t.fleet || "Camiones"}</option>
+        {trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}
+      </Sel>
     </div>
 
+    {/* Trip Modal */}
     {showForm && <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowForm(false)}>
       <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 14, padding: 24, width: 620, maxHeight: "90vh", overflowY: "auto", border: `1px solid ${colors.border}`, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
@@ -177,8 +196,14 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         </div>
         <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginTop: 10 }}>
-          <Sel label={t.truck} value={form.truckId} onChange={e => setForm({ ...form, truckId: e.target.value })}>{trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate} ({tk.size || "T1"})</option>)}</Sel>
-          <Sel label={t.driver} value={form.driverId} onChange={e => setForm({ ...form, driverId: e.target.value })}>{drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Sel>
+          <Sel label={t.truck} value={form.truckId} onChange={e => handleTruckChange(e.target.value)}>
+            <option value="">— {t.selectTruck || "Seleccionar camión"} —</option>
+            {trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate} ({tk.size || "T1"})</option>)}
+          </Sel>
+          <Sel label={t.driver} value={form.driverId} onChange={e => setForm({ ...form, driverId: e.target.value })}>
+            <option value="">— {t.selectDriver || "Seleccionar chofer"} —</option>
+            {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </Sel>
           <Sel label={t.broker + " (opt.)"} value={form.brokerId || ""} onChange={e => setForm({ ...form, brokerId: e.target.value })}><option value="">{t.none}</option>{brokers.map(b => <option key={b.id} value={b.id}>{b.name} ({b.commissionPct}%)</option>)}</Sel>
           <div>
             <Inp label={t.rate} type="number" value={form.revenue} onChange={e => setForm({ ...form, revenue: e.target.value })} />
@@ -237,6 +262,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       </div>
     </div>}
 
+    {/* Expense Modal */}
     {expModal && <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setExpModal(null)}>
       <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 12, padding: 24, width: 460, border: `1px solid ${colors.border}` }}>
         <h3 style={{ margin: "0 0 14px", fontSize: 16, display: "flex", alignItems: "center", gap: 6 }}><Receipt size={18} color={colors.orange} /> {t.addExpense} — #{expModal}</h3>
@@ -321,4 +347,4 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       {filtered.length === 0 && <div style={{ textAlign: "center", padding: 30, color: colors.textMuted }}>{t.noTrips}</div>}
     </Card>
   </div>;
-}
+          }
