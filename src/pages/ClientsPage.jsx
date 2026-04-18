@@ -8,10 +8,11 @@ import { Card, PageHeader, Inp, Sel, Btn, Badge, Chk, Th, Td } from "../componen
 export default function ClientsPage({ t, clients, setClients, brokers }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ companyName: "", contactPerson: "", phone: "", email: "", notes: "", status: "active", rules: { paymentTerms: 30, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null }, rates: [] });
+  const emptyRules = { paymentTerms: 30, billingCycle: "net", period1PayDay: 30, period2PayDay: 15, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null };
+  const [form, setForm] = useState({ companyName: "", contactPerson: "", phone: "", email: "", notes: "", status: "active", rules: emptyRules, rates: [] });
   const [rForm, setRForm] = useState({ province: "", municipality: "", priceT1: "", priceT2: "" });
 
-  const openNew = () => { setForm({ companyName: "", contactPerson: "", phone: "", email: "", notes: "", status: "active", rules: { paymentTerms: 30, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null }, rates: [] }); setEditId(null); setShowForm(true); };
+  const openNew = () => { setForm({ companyName: "", contactPerson: "", phone: "", email: "", notes: "", status: "active", rules: emptyRules, rates: [] }); setEditId(null); setShowForm(true); };
   const openEdit = (c) => { setForm({ ...c }); setEditId(c.id); setShowForm(true); };
   const save = () => { if (!form.companyName) return; if (editId) setClients(clients.map(c => c.id === editId ? { ...form, id: editId } : c)); else setClients([...clients, { ...form, id: nxId(clients) }]); setShowForm(false); };
   const addRate = () => { if (!rForm.province || !rForm.municipality || !rForm.priceT1 || !rForm.priceT2) return; setForm({ ...form, rates: [...form.rates, { id: nxId(form.rates), province: rForm.province, municipality: rForm.municipality, priceT1: Number(rForm.priceT1), priceT2: Number(rForm.priceT2) }] }); setRForm({ province: "", municipality: "", priceT1: "", priceT2: "" }); };
@@ -34,12 +35,24 @@ export default function ClientsPage({ t, clients, setClients, brokers }) {
       <div style={{ background: colors.inputBg, borderRadius: 8, padding: 12, marginBottom: 12, border: `1px solid ${colors.border}` }}>
         <h4 style={{ margin: "0 0 10px", fontSize: 13, color: colors.accentLight }}><ClipboardList size={14} /> {t.clientRules}</h4>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 8 }}>
-          <Inp label={t.paymentTerms} type="number" value={form.rules.paymentTerms} onChange={e => setForm({ ...form, rules: { ...form.rules, paymentTerms: Number(e.target.value) } })} />
+          <Sel label="Ciclo de cobro" value={form.rules.billingCycle || "net"} onChange={e => setForm({ ...form, rules: { ...form.rules, billingCycle: e.target.value } })}>
+            <option value="net">Días netos desde el viaje</option>
+            <option value="bimonthly_delayed">Quincenal con fondo (1–15 / 16–31)</option>
+          </Sel>
           <Sel label={t.defaultBroker} value={form.rules.defaultBrokerId || ""} onChange={e => setForm({ ...form, rules: { ...form.rules, defaultBrokerId: e.target.value ? Number(e.target.value) : null } })}>
             <option value="">{t.noBroker}</option>
             {brokers.map(b => <option key={b.id} value={b.id}>{b.name} ({b.commissionPct}%)</option>)}
           </Sel>
         </div>
+        {(form.rules.billingCycle || "net") === "net"
+          ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 8 }}>
+              <Inp label="Días de crédito" type="number" value={form.rules.paymentTerms} onChange={e => setForm({ ...form, rules: { ...form.rules, paymentTerms: Number(e.target.value) } })} />
+            </div>
+          : <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 8 }}>
+              <Inp label="Cobro período 1–15 (día del mes)" type="number" value={form.rules.period1PayDay || 30} onChange={e => setForm({ ...form, rules: { ...form.rules, period1PayDay: Number(e.target.value) } })} />
+              <Inp label="Cobro período 16–31 (día mes siguiente)" type="number" value={form.rules.period2PayDay || 15} onChange={e => setForm({ ...form, rules: { ...form.rules, period2PayDay: Number(e.target.value) } })} />
+            </div>
+        }
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <Chk label={t.requiresPOD} checked={form.rules.requiresPOD} onChange={() => setForm({ ...form, rules: { ...form.rules, requiresPOD: !form.rules.requiresPOD } })} />
           <Chk label={t.requiresInvoiceRef} checked={form.rules.requiresInvoiceRef} onChange={() => setForm({ ...form, rules: { ...form.rules, requiresInvoiceRef: !form.rules.requiresInvoiceRef } })} />
@@ -90,11 +103,13 @@ export default function ClientsPage({ t, clients, setClients, brokers }) {
           <Td>{c.contactPerson}</Td><Td>{c.phone}</Td>
           <Td align="center">
             <div style={{ display: "flex", gap: 3, justifyContent: "center", flexWrap: "wrap" }}>
-              <Badge label={`${c.rules.paymentTerms}d`} color={colors.accent} />
-              {c.rules.requiresPOD && <Badge label="POD" color={colors.orange} />}
-              {c.rules.requiresInvoiceRef && <Badge label="Ref" color={colors.red} />}
-              {c.rules.requiresDocuments && <Badge label="Doc" color={colors.purple} />}
-              {c.rules.defaultBrokerId && <Badge label={`B ${brokers.find(b => b.id === c.rules.defaultBrokerId)?.commissionPct || ""}%`} color={colors.yellow} />}
+              {c.rules?.billingCycle === "bimonthly_delayed"
+                ? <Badge label={`Qnal: ${c.rules.period1PayDay||30}/${c.rules.period2PayDay||15}`} color={colors.cyan} />
+                : <Badge label={`${c.rules?.paymentTerms||30}d`} color={colors.accent} />}
+              {c.rules?.requiresPOD && <Badge label="POD" color={colors.orange} />}
+              {c.rules?.requiresInvoiceRef && <Badge label="Ref" color={colors.red} />}
+              {c.rules?.requiresDocuments && <Badge label="Doc" color={colors.purple} />}
+              {c.rules?.defaultBrokerId && <Badge label={`B ${brokers.find(b => b.id === c.rules.defaultBrokerId)?.commissionPct || ""}%`} color={colors.yellow} />}
             </div>
           </Td>
           <Td align="center"><Badge label={`${c.rates.length}`} color={colors.green} /></Td>
