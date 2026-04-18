@@ -61,6 +61,7 @@ export default function App() {
   const [suppliers, setSuppliers] = useState([]);
   const [fixedTemplates, setFixedTemplates] = useState([]);
   const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
+  const [syncStatus, setSyncStatus] = useState("idle");
   const [cobros, setCobros] = useState([]);
   const saveTimerRef = useRef(null);
   const dataLoadedRef = useRef(false);
