@@ -12,7 +12,6 @@ function genPeriods(expenses) {
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
   const now = new Date(); const day = now.getDate();
   let y = now.getFullYear(), m = now.getMonth() + 1, h;
-  // Cortes: A = día 30 mes anterior → día 14  |  B = día 15 → día 29
   if (day >= 30) { if (m === 12) { y++; m = 1; } else { m++; } h = 1; }
   else { h = day >= 15 ? 2 : 1; }
   const allDates = expenses.filter(e => e.category === "driverPay").map(e => e.date).sort();
@@ -41,7 +40,6 @@ function genPeriods(expenses) {
 
 function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal, trips, allExpenses, periodDateFrom, periodDateTo, periodLabel, onMarkPaid }) {
   const [showDetail, setShowDetail] = useState(false);
-  // Adelantos: expenses with category "adelanto_conductor" for this driver in this period
   const adelantoExps = (allExpenses||[]).filter(e =>
     e.category === "adelanto_conductor" &&
     (e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name))) &&
@@ -199,19 +197,34 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
     {showDetail && <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${colors.border}` }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-          <Th>Fecha</Th><Th>Viaje #</Th><Th>Ruta</Th><Th align="right">Ingreso</Th><Th align="right">Pago Conductor</Th><Th align="right">Estado</Th>
+          <Th>Fecha</Th><Th>Viaje #</Th><Th>Ruta</Th><Th align="right">Tu Pago</Th><Th align="right">Estado</Th>
         </tr></thead>
         <tbody>{exps.map(exp => {
           const trip = trips.find(tr => tr.id === exp.tripId);
           const isPaid = exp.status === "paid";
-          return <tr key={exp.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
-            <Td>{exp.date}</Td>
-            <Td>{exp.tripId ? `#${exp.tripId}` : "—"}</Td>
-            <Td>{trip ? `${trip.municipality || trip.destination || "—"}, ${trip.province || ""}` : exp.description}</Td>
-            <Td align="right">{trip ? fmt(trip.revenue) : "—"}</Td>
-            <Td align="right" bold color={isPaid ? colors.green : colors.orange}>{fmt(exp.amount)}</Td>
-            <Td align="right"><Badge label={isPaid ? "✓ Pagado" : "Pendiente"} color={isPaid ? colors.green : colors.orange} /></Td>
-          </tr>;
+          const linkedAdel = adelantoExps.find(a => a.tripId === exp.tripId);
+          const tripDiscounts = trip ? (trip.discounts || []).filter(d => d.amount > 0) : [];
+          return <>
+            <tr key={exp.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+              <Td>{exp.date}</Td>
+              <Td>{exp.tripId ? `#${exp.tripId}` : "—"}</Td>
+              <Td>{trip ? `${trip.municipality || trip.destination || "—"}, ${trip.province || ""}` : exp.description}</Td>
+              <Td align="right" bold color={isPaid ? colors.green : colors.orange}>{fmt(exp.amount)}</Td>
+              <Td align="right"><Badge label={isPaid ? "✓ Pagado" : "Pendiente"} color={isPaid ? colors.green : colors.orange} /></Td>
+            </tr>
+            {tripDiscounts.map((d, i) => (
+              <tr key={`d-${exp.id}-${i}`} style={{ background: "#c0392b08" }}>
+                <Td></Td><Td colSpan={2} style={{ fontSize: 11, color: "#c0392b", paddingLeft: 20 }}>↳ Desc: {d.desc || "—"}</Td>
+                <Td align="right" style={{ fontSize: 11, color: "#c0392b" }}>− {fmt(d.amount)}</Td><Td></Td>
+              </tr>
+            ))}
+            {linkedAdel && (
+              <tr key={`a-${exp.id}`} style={{ background: "#e67e2208" }}>
+                <Td></Td><Td colSpan={2} style={{ fontSize: 11, color: "#e67e22", paddingLeft: 20 }}>↳ Adelanto vinculado</Td>
+                <Td align="right" style={{ fontSize: 11, color: "#e67e22" }}>− {fmt(linkedAdel.amount)}</Td><Td></Td>
+              </tr>
+            )}
+          </>;
         })}</tbody>
       </table>
     </div>}
@@ -271,7 +284,6 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
       } else {
         driverPay = Math.round((tr.revenue || 0) * 0.20);
       }
-      // Deduct trip discounts from driver pay
       const tripDiscounts = (tr.discounts || []).reduce((s, d) => s + (d.amount || 0), 0);
       driverPay = Math.max(0, driverPay - tripDiscounts);
       if (driverPay > 0) {
@@ -350,4 +362,4 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
         allExpenses={expenses} markPaid={markPaid} defaultOpen={idx === 0} />
     ))}
   </div>;
-      }
+                                }
