@@ -298,7 +298,12 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                       <Td>{e.date}</Td>
                       <Td>
                         <span>{e.description || "Adelanto"}</span>
-                        {linkedTrip && <><br /><span style={{ fontSize: 10, color: colors.textMuted }}>↳ Viaje {linkedTrip.date}: {linkedTrip.municipality}, {linkedTrip.province}</span></>}
+                        {linkedTrip && <>
+                          <br /><span style={{ fontSize: 10, color: colors.textMuted }}>↳ Viaje {linkedTrip.date}: {linkedTrip.municipality}, {linkedTrip.province}</span>
+                          {(linkedTrip.discounts || []).filter(d => d.amount > 0).map((d, i) => (
+                            <span key={i} style={{ display: "block", fontSize: 10, color: colors.red, paddingLeft: 10 }}>↳ Desc: {d.desc || "—"} − {fmt(d.amount)}</span>
+                          ))}
+                        </>}
                       </Td>
                       <Td align="right" bold color={colors.red}>− {fmt(e.amount)}</Td>
                     </tr>
@@ -321,4 +326,4 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
       )}
     </Card>
   );
-                                                                                                                                                                                                                                                                                                                   }
+}
