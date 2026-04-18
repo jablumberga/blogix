@@ -1,0 +1,36 @@
+export const DR_PROVINCES = [
+  { province: "Santo Domingo / Distrito Nacional", municipalities: ["Santo Domingo de Guzmán", "Santo Domingo Este", "Santo Domingo Norte", "Santo Domingo Oeste", "Boca Chica", "Los Alcarrizos", "San Antonio de Guerra"] },
+  { province: "Santiago", municipalities: ["Santiago de los Caballeros", "Tamboril", "Villa González", "Licey al Medio", "San José de las Matas", "Bisonó"] },
+  { province: "La Vega", municipalities: ["La Vega", "Constanza", "Jarabacoa"] },
+  { province: "San Cristóbal", municipalities: ["San Cristóbal", "Bajos de Haina", "Villa Altagracia", "Cambita Garabitos", "San Gregorio de Nigua", "Yaguate"] },
+  { province: "Duarte", municipalities: ["San Francisco de Macorís", "Las Guáranas", "Pimentel", "Villa Riva", "Castillo"] },
+  { province: "Puerto Plata", municipalities: ["Puerto Plata", "Sosúa", "Imbert", "Altamira", "Luperón", "Villa Isabela"] },
+  { province: "San Pedro de Macorís", municipalities: ["San Pedro de Macorís", "Guayacanes", "Quisqueya", "Consuelo", "Ramón Santana"] },
+  { province: "La Romana", municipalities: ["La Romana", "Guaymate", "Villa Hermosa"] },
+  { province: "La Altagracia", municipalities: ["Higüey", "Punta Cana", "San Rafael del Yuma"] },
+  { province: "Espaillat", municipalities: ["Moca", "Gaspar Hernández", "Cayetano Germosén"] },
+  { province: "Peravia", municipalities: ["Baní", "Nizao"] },
+  { province: "Azua", municipalities: ["Azua de Compostela", "Las Charcas", "Padre Las Casas", "Estebanía", "Sabana Yegua"] },
+  { province: "Monseñor Nouel", municipalities: ["Bonao", "Maimón", "Piedra Blanca"] },
+  { province: "Monte Plata", municipalities: ["Monte Plata", "Yamasá", "Bayaguana", "Sabana Grande de Boyá"] },
+  { province: "Sánchez Ramírez", municipalities: ["Cotuí", "Fantino", "Cevicos"] },
+  { province: "Valverde", municipalities: ["Mao", "Esperanza", "Laguna Salada"] },
+  { province: "María Trinidad Sánchez", municipalities: ["Nagua", "Río San Juan", "Cabrera"] },
+  { province: "Hermanas Mirabal", municipalities: ["Salcedo", "Tenares", "Villa Tapia"] },
+  { province: "Samaná", municipalities: ["Santa Bárbara de Samaná", "Las Terrenas", "Sánchez"] },
+  { province: "Barahona", municipalities: ["Barahona", "Vicente Noble", "Enriquillo", "Paraíso", "Cabral"] },
+  { province: "San Juan", municipalities: ["San Juan de la Maguana", "Las Matas de Farfán", "Bohechío", "El Cercado"] },
+  { province: "Hato Mayor", municipalities: ["Hato Mayor del Rey", "Sabana de la Mar", "El Valle"] },
+  { province: "El Seibo", municipalities: ["El Seibo", "Miches"] },
+  { province: "Monte Cristi", municipalities: ["Monte Cristi", "Guayubín", "Villa Vásquez", "Pepillo Salcedo"] },
+  { province: "Dajabón", municipalities: ["Dajabón", "Loma de Cabrera", "Restauración"] },
+  { province: "Santiago Rodríguez", municipalities: ["San Ignacio de Sabaneta", "Monción", "Villa Los Almácigos"] },
+  { province: "Bahoruco", municipalities: ["Neiba", "Tamayo", "Galván"] },
+  { province: "Independencia", municipalities: ["Jimaní", "Duvergé", "La Descubierta"] },
+  { province: "Pedernales", municipalities: ["Pedernales", "Oviedo"] },
+  { province: "Elías Piña", municipalities: ["Comendador", "El Llano", "Bánica"] },
+];
+
+export const ALL_DESTINATIONS = DR_PROVINCES.flatMap(p =>
+  p.municipalities.map(m => ({ province: p.province, municipality: m, label: `${m}, ${p.province}` }))
+);
