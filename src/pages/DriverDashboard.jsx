@@ -291,13 +291,19 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
             <div style={{ fontSize: 11, fontWeight: 600, color: colors.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Adelantos Recibidos</div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 14 }}>
               <tbody>
-                {adelantoExps.map(e => (
-                  <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
-                    <Td>{e.date}</Td>
-                    <Td>{e.description || "Adelanto"}</Td>
-                    <Td align="right" bold color={colors.red}>− {fmt(e.amount)}</Td>
-                  </tr>
-                ))}
+                {adelantoExps.map(e => {
+                  const linkedTrip = e.tripId ? myTrips.find(tr => tr.id === e.tripId) : null;
+                  return (
+                    <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+                      <Td>{e.date}</Td>
+                      <Td>
+                        <span>{e.description || "Adelanto"}</span>
+                        {linkedTrip && <><br /><span style={{ fontSize: 10, color: colors.textMuted }}>↳ Viaje {linkedTrip.date}: {linkedTrip.municipality}, {linkedTrip.province}</span></>}
+                      </Td>
+                      <Td align="right" bold color={colors.red}>− {fmt(e.amount)}</Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </>}
@@ -315,4 +321,4 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
       )}
     </Card>
   );
-}
+                                                                                                                                                                                                                                                                                                                   }
