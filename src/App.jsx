@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp } from "lucide-react";
 import { loadData, saveData } from "./api.js";
 import { translations } from "./constants/translations.js";
 import { USERS, initSettlementStatus } from "./constants/users.js";
@@ -23,6 +23,7 @@ import CxPPage from "./pages/CxPPage.jsx";
 import NominaPage from "./pages/NominaPage.jsx";
 import SuppliersPage from "./pages/SuppliersPage.jsx";
 import SettlementsPage from "./pages/SettlementsPage.jsx";
+import CxCPage from "./pages/CxCPage.jsx";
 
 export default function App() {
   const [lang, setLang] = useState("es");
@@ -60,7 +61,7 @@ export default function App() {
   const [suppliers, setSuppliers] = useState([]);
   const [fixedTemplates, setFixedTemplates] = useState([]);
   const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
-  const [syncStatus, setSyncStatus] = useState("idle");
+  const [cobros, setCobros] = useState([]);
   const saveTimerRef = useRef(null);
   const dataLoadedRef = useRef(false);
 
@@ -78,6 +79,7 @@ export default function App() {
         if (Array.isArray(data.suppliers))       setSuppliers(data.suppliers);
         if (Array.isArray(data.fixedTemplates))  setFixedTemplates(data.fixedTemplates);
         if (data.settlementStatus)               setSettlementStatus(data.settlementStatus);
+        if (Array.isArray(data.cobros))          setCobros(data.cobros);
       }
       dataLoadedRef.current = true;
       setSyncStatus(source === "api" ? "saved" : "offline");
@@ -90,11 +92,11 @@ export default function App() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSyncStatus("saving");
-      const result = await saveData({ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus });
+      const result = await saveData({ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros });
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros]);
 
   // ── Dynamic user list (admins + partners + drivers) ─────────────────────────
   const allUsers = [
@@ -118,6 +120,7 @@ export default function App() {
   const adminNav = [
     { id: "dashboard",   icon: LayoutDashboard, label: t.dashboard },
     { id: "clients",     icon: Building2,        label: t.clients },
+    { id: "cxc",         icon: TrendingUp,       label: "Cuentas x Cobrar" },
     { id: "trips",       icon: Route,            label: t.trips },
     { id: "fleet",       icon: Truck,            label: t.fleet },
     { id: "drivers",     icon: Users,            label: t.drivers },
@@ -145,14 +148,12 @@ export default function App() {
   const driverObj       = isDriver ? drivers.find(d => d.name === user.name) : null;
 
   // ── Shared prop bag ──────────────────────────────────────────────────────────
-  const ctx = { t, user, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, partner, partnerTruckIds, driverObj, alerts };
+  const ctx = { t, user, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, partner, partnerTruckIds, driverObj, alerts };
 
   return (
     <div style={{ display: "flex", height: "100vh", background: colors.bg, color: colors.text, fontFamily: "'Inter',-apple-system,sans-serif", fontSize: 13 }}>
-      {/* Mobile backdrop */}
       {isMobile && sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 190 }} />}
 
-      {/* Sidebar */}
       <div style={{ width: isMobile ? (sidebarOpen ? 220 : 0) : (sidebarOpen ? 220 : 60), ...(isMobile ? { position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 200 } : {}), background: colors.sidebar, borderRight: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", transition: "width 0.2s", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ padding: "16px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${colors.border}`, cursor: "pointer" }} onClick={() => setSidebarOpen(!sidebarOpen)}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg, ${colors.accent}, ${colors.green})`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Truck size={16} color="white" /></div>
@@ -190,7 +191,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main content */}
       <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "56px 14px 14px" : 20, position: "relative" }}>
         {isMobile && <button onClick={() => setSidebarOpen(true)} style={{ position: "fixed", top: 10, left: 10, zIndex: 150, background: colors.accent, border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", color: "white", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}><Menu size={18} /></button>}
 
@@ -198,6 +198,7 @@ export default function App() {
         {page === "partnerDash" && isPartner  && <PartnerDashboard {...ctx} />}
         {page === "driverDash"  && isDriver   && <DriverDashboard  {...ctx} />}
         {page === "clients"                   && <ClientsPage      {...ctx} />}
+        {page === "cxc"                       && <CxCPage          {...ctx} />}
         {page === "trips"                     && <TripsPage         {...ctx} />}
         {page === "fleet"                     && <FleetPage         {...ctx} />}
         {page === "drivers"                   && <DriversPage       {...ctx} />}
@@ -214,4 +215,4 @@ export default function App() {
       {isAdmin && <CfoChat data={{ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, settlementStatus }} t={t} />}
     </div>
   );
-}
+     }
