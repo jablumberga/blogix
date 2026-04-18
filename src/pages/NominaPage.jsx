@@ -54,29 +54,21 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
     const tripRowsHTML = exps.map(exp => {
       const trip = trips.find(tr => tr.id === exp.tripId);
       const route = trip ? `${trip.municipality || trip.destination || "—"}, ${trip.province || ""}` : "—";
-      const revenue = trip ? fmt(trip.revenue) : "—";
       const tripDiscounts = trip ? (trip.discounts || []).filter(d => d.amount > 0) : [];
-      const discsHTML = tripDiscounts.length > 0
-        ? tripDiscounts.map(d => `<div style="font-size:11px;color:#c0392b;padding-left:8px">↳ Desc: ${d.desc || "—"} − ${fmt(d.amount)}</div>`).join("")
-        : "";
+      const linkedAdel = adelantoExps.find(a => a.tripId === exp.tripId);
+      const deductionsHTML = [
+        ...tripDiscounts.map(d => `<div style="font-size:11px;color:#c0392b;padding-left:8px">↳ Desc: ${d.desc || "—"} − ${fmt(d.amount)}</div>`),
+        ...(linkedAdel ? [`<div style="font-size:11px;color:#e67e22;padding-left:8px">↳ Adelanto: − ${fmt(linkedAdel.amount)}</div>`] : [])
+      ].join("");
       const isPaid = exp.status === "paid";
       return `<tr>
         <td>${exp.date}</td>
         <td style="color:#666">${exp.tripId ? `#${exp.tripId}` : "—"}</td>
         <td>${route}</td>
-        <td style="text-align:right">${revenue}</td>
         <td style="text-align:right;font-weight:600;color:${isPaid ? "#27ae60" : "#e67e22"}">${fmt(exp.amount)}</td>
-        <td style="font-size:12px">${discsHTML || "—"}</td>
+        <td style="font-size:12px">${deductionsHTML || "—"}</td>
       </tr>`;
     }).join("");
-    const adelantoRowsHTML = adelantoExps.map(a => `<tr style="color:#c0392b">
-      <td>${a.date}</td>
-      <td colspan="3" style="font-style:italic">Adelanto recibido</td>
-      <td style="text-align:right;font-weight:700">− ${fmt(a.amount)}</td>
-      <td></td>
-    </tr>`).join("");
-    const safeName = driver.name.replace(/\s+/g, "-").toLowerCase();
-    const safeLabel = (periodLabel || "").replace(/[^a-zA-Z0-9]/g, "-");
     const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -85,8 +77,11 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
 <title>Reporte Nómina — ${driver.name}</title>
 <style>
   body{font-family:Arial,sans-serif;max-width:720px;margin:0 auto;padding:24px;color:#1a1a2e;background:#fff}
-  h1{font-size:24px;margin:0 0 4px;color:#1a1a2e}
-  .sub{color:#888;font-size:13px;margin-bottom:24px}
+  .header{display:flex;justify-content:space-between;border-bottom:3px solid #1a3d7c;padding-bottom:15px;margin-bottom:20px}
+  .logo{font-size:24px;font-weight:bold;color:#1a3d7c}
+  .subtitle{color:#888;font-size:12px}
+  h2{font-size:16px;margin:0 0 4px;color:#1a3d7c}
+  .sub{color:#888;font-size:13px;margin-bottom:20px}
   table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px}
   th{background:#f0f4ff;padding:9px 10px;text-align:left;font-size:12px;border-bottom:2px solid #c8d6f8;color:#555}
   td{padding:8px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top}
@@ -103,34 +98,42 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
 </style>
 </head>
 <body>
-<h1>📋 Reporte de Nómina</h1>
-<div class="sub"><strong>${driver.name}</strong> &nbsp;·&nbsp; Corte: ${periodLabel || ""}</div>
+<div class="header">
+  <div>
+    <div class="logo">B-Logix</div>
+    <div class="subtitle">Logística y Distribución</div>
+  </div>
+  <div style="text-align:right">
+    <h2>Reporte de Nómina</h2>
+    <div class="subtitle"><strong>${driver.name}</strong></div>
+    <div class="subtitle">Corte: ${periodLabel || ""}</div>
+  </div>
+</div>
 <table>
   <thead>
     <tr>
-      <th>Fecha</th><th>Viaje</th><th>Ruta</th><th class="right">Ingreso</th><th class="right">Pago conductor</th><th>Descuentos</th>
+      <th>Fecha</th><th>Viaje</th><th>Ruta</th><th class="right">Tu Pago</th><th>Descuentos / Adelantos</th>
     </tr>
   </thead>
   <tbody>
     ${tripRowsHTML}
-    ${adelantoExps.length > 0 ? `<tr><td colspan="6" style="padding:4px 10px;font-size:11px;color:#999;font-style:italic">— Adelantos —</td></tr>${adelantoRowsHTML}` : ""}
     <tr class="sep">
-      <td colspan="4" class="total-lbl">Bruto a pagar:</td>
+      <td colspan="3" class="total-lbl">Bruto a pagar:</td>
       <td class="total-val" style="color:#e67e22">${fmt(pendingTotal)}</td>
       <td></td>
     </tr>
     ${adelantos > 0 ? `<tr>
-      <td colspan="4" class="total-lbl red">Adelantos a descontar:</td>
+      <td colspan="3" class="total-lbl red">Adelantos a descontar:</td>
       <td class="total-val red">− ${fmt(adelantos)}</td>
       <td></td>
     </tr>` : ""}
     <tr>
-      <td colspan="4" class="neto-lbl">💰 NETO A TRANSFERIR:</td>
+      <td colspan="3" class="neto-lbl">💰 NETO A TRANSFERIR:</td>
       <td class="neto-val">${fmt(netoAPagar)}</td>
       <td></td>
     </tr>
     ${paidTotal > 0 ? `<tr>
-      <td colspan="4" class="total-lbl green">Ya pagado este corte:</td>
+      <td colspan="3" class="total-lbl green">Ya pagado este corte:</td>
       <td class="total-val green">${fmt(paidTotal)}</td>
       <td></td>
     </tr>` : ""}
@@ -138,13 +141,11 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
 </table>
 <div class="footer">Generado por B-Logix &nbsp;·&nbsp; ${new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })}</div>
 </body></html>`;
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `nomina-${safeName}-${safeLabel}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const w = window.open("", "_blank", "width=820,height=700");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
   };
 
   return <Card style={{ marginBottom: 10 }}>
@@ -349,4 +350,4 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
         allExpenses={expenses} markPaid={markPaid} defaultOpen={idx === 0} />
     ))}
   </div>;
-                     }
+      }
