@@ -294,7 +294,15 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                         {driverObj?.salaryType === "fixed" ? <span style={{ fontSize: 10, color: colors.textMuted }}>Fijo</span> : pay > 0 ? fmt(pay) : <span style={{ fontSize: 10, color: colors.orange }}>—</span>}
                       </Td>
                       <Td align="right" color={tripHelpers > 0 ? colors.orange : colors.textMuted}>{tripHelpers > 0 ? `− ${fmt(tripHelpers)}` : "—"}</Td>
-                      <Td align="right" color={tripDiscounts > 0 ? colors.red : colors.textMuted}>{tripDiscounts > 0 ? `− ${fmt(tripDiscounts)}` : "—"}</Td>
+                      {(() => {
+                        const linkedAdel = adelantoExps.find(e => e.tripId === tr.id);
+                        const adelAmt = linkedAdel ? linkedAdel.amount : 0;
+                        if (tripDiscounts === 0 && adelAmt === 0) return <Td align="right" color={colors.textMuted}>—</Td>;
+                        return <Td align="right" style={{ lineHeight: 1.4, verticalAlign: "top" }}>
+                          {tripDiscounts > 0 && <div style={{ color: colors.red, fontWeight: 600 }}>− {fmt(tripDiscounts)}</div>}
+                          {adelAmt > 0 && <div style={{ fontSize: 10, color: colors.orange }}>↳ Adel − {fmt(adelAmt)}</div>}
+                        </Td>;
+                      })()}
                       <Td align="center">
                         <button onClick={() => setTrips(allTrips.map(x => x.id === tr.id ? { ...x, status: nextStatus[x.status] || "pending" } : x))}
                           style={{ padding: "3px 8px", borderRadius: 10, border: "none", fontSize: 10, fontWeight: 600, cursor: "pointer", background: stColor + "18", color: stColor }}>
@@ -356,4 +364,4 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
       )}
     </Card>
   );
-}
+          }
