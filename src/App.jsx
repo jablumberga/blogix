@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { colors } from "./constants/theme.js";
 import { Badge } from "./components/ui/index.jsx";
@@ -95,8 +95,12 @@ export default function App() {
 
       <div style={{ width: isMobile ? (sidebarOpen ? 220 : 0) : (sidebarOpen ? 220 : 60), ...(isMobile ? { position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 200 } : {}), background: colors.sidebar, borderRight: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", transition: "width 0.2s", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ padding: "14px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${colors.border}`, cursor: "pointer" }} onClick={() => setSidebarOpen(!sidebarOpen)}>
-          <img src="/logo.png" alt="B-Logix" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
-          {sidebarOpen && <span style={{ fontWeight: 700, fontSize: 16 }}>B-Logix</span>}
+          <div style={{ width: 34, height: 34, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "white", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <img src="/logo.png" alt="B-Logix" style={{ width: "160%", height: "160%", objectFit: "contain", margin: "-30% -30% -30% -28%" }} />
+          </div>
+          {sidebarOpen && (
+            <img src="/logo-full.png" alt="Blogix" style={{ height: 22, objectFit: "contain", filter: "brightness(0) invert(1)" }} />
+          )}
         </div>
 
         <nav style={{ flex: 1, padding: "10px 6px", display: "flex", flexDirection: "column", gap: 1 }}>
