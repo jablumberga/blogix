@@ -20,12 +20,10 @@ export default function LoginPage({ t, onLogin, allUsers }) {
     <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${colors.bg} 0%, #0a1628 50%, #0f1d35 100%)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', sans-serif" }}>
       <div style={{ width: 400, background: colors.card, borderRadius: 16, border: `1px solid ${colors.border}`, padding: 40, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ width: 72, height: 72, borderRadius: 14, overflow: "hidden", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "white", marginBottom: 16 }}>
-            <img src="/logo.png" alt="B-Logix" style={{ width: "155%", height: "155%", objectFit: "contain", margin: "-27% -27% -27% -25%" }} />
+          <div style={{ width: 72, height: 72, borderRadius: 16, background: "white", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 14, boxShadow: "0 4px 20px rgba(239,68,68,0.3)" }}>
+            <img src="/logo.png" alt="B-Logix" style={{ width: "62%", height: "62%", objectFit: "contain" }} />
           </div>
-          <div style={{ marginBottom: 6 }}>
-            <img src="/logo-full.png" alt="Blogix" style={{ height: 36, objectFit: "contain" }} />
-          </div>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: colors.text, margin: "0 0 4px", letterSpacing: -0.5 }}>B-Logix</h1>
           <p style={{ color: colors.textMuted, fontSize: 13, margin: 0 }}>{t.loginTitle}</p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
