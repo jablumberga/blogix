@@ -66,7 +66,7 @@ export function Inp({ label, ...p }) {
           border: `1px solid ${colors.border}`,
           background: colors.inputBg,
           color: colors.text,
-          fontSize: font.base,
+          fontSize: 16, // ≥16px prevents iOS Safari viewport zoom on focus
           outline: "none",
           transition: "border-color 0.15s, box-shadow 0.15s",
           width: "100%",
@@ -101,7 +101,7 @@ export function Sel({ label, children, ...p }) {
           border: `1px solid ${colors.border}`,
           background: colors.inputBg,
           color: colors.text,
-          fontSize: font.base,
+          fontSize: 16, // ≥16px prevents iOS Safari viewport zoom on focus
           outline: "none",
           transition: "border-color 0.15s, box-shadow 0.15s",
           ...(p.style || {}),

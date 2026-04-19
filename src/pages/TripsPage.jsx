@@ -161,7 +161,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
       <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
         <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: colors.textMuted }} />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.searchPlaceholder} style={{ width: "100%", padding: "7px 10px 7px 30px", borderRadius: 7, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 12, outline: "none" }} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.searchPlaceholder} style={{ width: "100%", padding: "7px 10px 7px 30px", borderRadius: 7, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 16, outline: "none" }} />
       </div>
       {["all", "pending", "in_transit", "delivered", "cancelled"].map(s => (
         <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: "5px 12px", borderRadius: 16, border: `1px solid ${filterStatus === s ? colors.accent : colors.border}`, background: filterStatus === s ? colors.accent + "18" : "transparent", color: filterStatus === s ? colors.accentLight : colors.textMuted, cursor: "pointer", fontSize: 11 }}>
@@ -217,7 +217,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         </div>
         <div style={{ marginTop: 10, padding: "10px 14px", background: form.tarifaOverride ? colors.orange + "10" : "transparent", borderRadius: 8, border: `1px dashed ${form.tarifaOverride ? colors.orange + "80" : colors.border}`, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: form.tarifaOverride ? colors.orange : colors.textMuted }}>⚡ Tarifa Override</span>
-          <select value={form.tarifaOverride || "auto"} onChange={e => handleTarifaOverride(e.target.value)} style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${form.tarifaOverride ? colors.orange : colors.border}`, background: colors.inputBg, color: form.tarifaOverride ? colors.orange : colors.text, fontSize: 12, cursor: "pointer", fontWeight: form.tarifaOverride ? 700 : 400 }}>
+          <select value={form.tarifaOverride || "auto"} onChange={e => handleTarifaOverride(e.target.value)} style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${form.tarifaOverride ? colors.orange : colors.border}`, background: colors.inputBg, color: form.tarifaOverride ? colors.orange : colors.text, fontSize: 16, cursor: "pointer", fontWeight: form.tarifaOverride ? 700 : 400 }}>
             <option value="auto">Auto — usar tamaño del camión</option>
             <option value="T1">T1 — tarifa estándar</option>
             <option value="T2">T2 — tarifa premium ↑</option>

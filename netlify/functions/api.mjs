@@ -33,8 +33,11 @@ async function hmacSign(secret, data) {
 }
 
 function b64url(obj) {
-  return btoa(JSON.stringify(obj))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+  // Use TextEncoder so Unicode chars (accents, etc.) are handled correctly
+  const bytes = enc.encode(JSON.stringify(obj));
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
 export async function signToken(payload, secret) {
@@ -62,41 +65,46 @@ function applyRLS(data, user) {
   if (user.role === "admin") return data; // admin sees everything
 
   if (user.role === "partner") {
-    const partner   = (data.partners || []).find(p => p.id === user.refId);
+    const partner    = (data.partners || []).find(p => p.id === user.refId);
     if (!partner) return { error: "Partner not found" };
-    const myTrucks  = (data.trucks   || []).filter(tk => tk.partnerId === partner.id);
+    const myTrucks   = (data.trucks   || []).filter(tk => tk.partnerId === partner.id);
     const myTruckIds = new Set(myTrucks.map(tk => tk.id));
-    const myTrips   = (data.trips    || []).filter(tr => myTruckIds.has(tr.truckId));
-    const myTripIds = new Set(myTrips.map(tr => tr.id));
-    const myExp     = (data.expenses || []).filter(e  => myTripIds.has(e.tripId));
+    const myTrips    = (data.trips    || []).filter(tr => myTruckIds.has(tr.truckId));
+    const myTripIds  = new Set(myTrips.map(tr => tr.id));
+    const myExp      = (data.expenses || []).filter(e  => myTripIds.has(e.tripId));
+    // Only expose clients/drivers actually referenced in partner's trips
+    const myClientIds = new Set(myTrips.map(tr => tr.clientId).filter(Boolean));
+    const myDriverIds = new Set(myTrips.map(tr => tr.driverId).filter(Boolean));
     return {
-      partners:        [partner],
-      trucks:          myTrucks,
-      trips:           myTrips,
-      expenses:        myExp,
-      clients:         data.clients        || [],
-      drivers:         data.drivers        || [],
+      partners:         [partner],
+      trucks:           myTrucks,
+      trips:            myTrips,
+      expenses:         myExp,
+      clients:          (data.clients || []).filter(c => myClientIds.has(c.id)),
+      drivers:          (data.drivers || []).filter(d => myDriverIds.has(d.id)),
       settlementStatus: data.settlementStatus || {},
-      brokers:         [],
-      suppliers:       [],
-      fixedTemplates:  [],
-      cobros:          [],
+      brokers:          [],
+      suppliers:        [],
+      fixedTemplates:   [],
+      cobros:           [],
     };
   }
 
   if (user.role === "driver") {
-    const driver  = (data.drivers || []).find(d => d.id === user.refId);
+    const driver    = (data.drivers || []).find(d => d.id === user.refId);
     if (!driver) return { error: "Driver not found" };
-    const myTrips = (data.trips   || []).filter(tr => tr.driverId === driver.id);
+    const myTrips   = (data.trips   || []).filter(tr => tr.driverId === driver.id);
     const myTripIds = new Set(myTrips.map(tr => tr.id));
-    const myExp   = (data.expenses|| []).filter(e  => myTripIds.has(e.tripId));
+    const myExp     = (data.expenses|| []).filter(e  => myTripIds.has(e.tripId));
+    // Only expose the truck(s) assigned to this driver
+    const myTruck   = driver.truckId ? (data.trucks || []).filter(tk => tk.id === driver.truckId) : [];
     return {
-      drivers:  [driver],
-      trips:    myTrips,
-      expenses: myExp,
-      trucks:   data.trucks  || [],
-      clients:  data.clients || [],
-      partners: [], brokers: [], suppliers: [],
+      drivers:          [driver],
+      trips:            myTrips,
+      expenses:         myExp,
+      trucks:           myTruck,
+      clients:          [],
+      partners:         [], brokers: [], suppliers: [],
       settlementStatus: {}, fixedTemplates: [], cobros: [],
     };
   }

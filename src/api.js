@@ -10,7 +10,9 @@ const TK_KEY  = "blogix_token";
 
 let _apiAvailable = null;
 
-function getToken() {
+export function resetApiCache() { _apiAvailable = null; }
+
+export function getToken() {
   try { return localStorage.getItem(TK_KEY); } catch { return null; }
 }
 

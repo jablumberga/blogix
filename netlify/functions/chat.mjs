@@ -4,25 +4,37 @@
  * Receives: { message, history, data }
  * Returns:  { reply }
  */
+import { verifyToken } from "./api.mjs";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
 export default async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return Response.json({ error: "Method not allowed" }, { status: 405 });
+    return Response.json({ error: "Method not allowed" }, { status: 405, headers: corsHeaders });
   }
 
-  const CLAUDE_KEY = process.env.CLAUDE_API_KEY;
+  // Require valid session token — only admins have the CFO chat
+  const { CLAUDE_API_KEY: CLAUDE_KEY, BLOGIX_SECRET } = process.env;
+  if (!BLOGIX_SECRET) {
+    return Response.json({ error: "Missing env vars" }, { status: 500, headers: corsHeaders });
+  }
+  const authHeader = req.headers.get("Authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const sessionUser = token ? await verifyToken(token, BLOGIX_SECRET) : null;
+  if (!sessionUser || sessionUser.role !== "admin") {
+    return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+  }
+
   if (!CLAUDE_KEY) {
-    return Response.json({ error: "CLAUDE_API_KEY no configurado en Netlify env vars" }, { status: 500 });
+    return Response.json({ error: "CLAUDE_API_KEY no configurado en Netlify env vars" }, { status: 500, headers: corsHeaders });
   }
 
   const { message, history = [], data = {} } = await req.json();
@@ -108,7 +120,7 @@ ${JSON.stringify({ trips, expenses, drivers, clients, partners, trucks, brokers 
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-6",
+        model: "claude-sonnet-4-6",
         max_tokens: 1500,
         system: systemPrompt,
         messages: claudeMessages,
@@ -117,14 +129,14 @@ ${JSON.stringify({ trips, expenses, drivers, clients, partners, trucks, brokers 
 
     if (!res.ok) {
       const err = await res.text();
-      return Response.json({ error: `Claude API error: ${err}` }, { status: 500 });
+      return Response.json({ error: `Claude API error: ${err}` }, { status: 500, headers: corsHeaders });
     }
 
     const result = await res.json();
     const reply = result.content?.[0]?.text || "Sin respuesta.";
-    return Response.json({ reply });
+    return Response.json({ reply }, { headers: corsHeaders });
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return Response.json({ error: err.message }, { status: 500, headers: corsHeaders });
   }
 };
 

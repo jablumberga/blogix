@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { MessageSquare, X, Send } from "lucide-react";
 import { colors } from "../constants/theme.js";
+import { getToken } from "../api.js";
 
 export default function CfoChat({ data, t, sidebarOpen, isMobile }) {
   const [open, setOpen] = useState(false);
@@ -19,9 +20,13 @@ export default function CfoChat({ data, t, sidebarOpen, isMobile }) {
     const next = [...msgs, userMsg];
     setMsgs(next); setInput(""); setBusy(true);
     try {
+      const token = getToken();
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ message: userMsg.content, history: msgs, data }),
       });
       const json = await res.json();
@@ -121,7 +126,7 @@ export default function CfoChat({ data, t, sidebarOpen, isMobile }) {
                 flex: 1, padding: "8px 11px", borderRadius: 8,
                 border: `1px solid ${colors.border}`,
                 background: colors.bg, color: colors.text,
-                fontSize: 12.5, outline: "none",
+                fontSize: 16, outline: "none",
               }}
             />
             <button onClick={send} disabled={busy || !input.trim()} aria-label="Enviar mensaje"

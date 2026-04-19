@@ -24,6 +24,13 @@ export default function LoginPage({ t, onLogin, allUsers }) {
       if (res.ok) {
         const { user, token } = await res.json();
         onLogin(user, keepSignedIn, token);
+        setLoading(false);
+        return;
+      }
+      // Server reachable but rejected — don't bypass to offline auth
+      if (res.status === 401 || res.status === 400) {
+        setError(t.invalidLogin);
+        setLoading(false);
         return;
       }
     } catch {
@@ -37,10 +44,10 @@ export default function LoginPage({ t, onLogin, allUsers }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${colors.bg} 0%, #0a1628 50%, #0f1d35 100%)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ width: 400, background: colors.card, borderRadius: 16, border: `1px solid ${colors.border}`, padding: 40, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
+    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${colors.bg} 0%, #0a1628 50%, #0f1d35 100%)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', sans-serif", padding: "20px 16px", boxSizing: "border-box" }}>
+      <div style={{ width: "100%", maxWidth: 400, background: colors.card, borderRadius: 16, border: `1px solid ${colors.border}`, padding: "40px 32px", boxShadow: "0 20px 60px rgba(0,0,0,0.5)", boxSizing: "border-box" }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ width: 72, height: 72, borderRadius: 16, background: "white", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 14, boxShadow: "0 4px 20px rgba(239,68,68,0.3)" }}>
+          <div style={{ width: 80, height: 80, borderRadius: "22%", background: "white", overflow: "hidden", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 14, boxShadow: "0 4px 20px rgba(239,68,68,0.3)" }}>
             <img src="/logo.png" alt="B-Logix" style={{ width: "95%", height: "95%", objectFit: "contain" }} />
           </div>
           <h1 style={{ fontSize: 26, fontWeight: 800, color: colors.text, margin: "0 0 4px", letterSpacing: -0.5 }}>B-Logix</h1>
