@@ -310,21 +310,32 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
             ? <div style={{ fontSize: 12, color: colors.textMuted, padding: "10px 0" }}>Sin viajes en el periodo</div>
             : truckStats.map(ts => {
                 const maxRev = truckStats[0]?.revenue || 1;
+                const isPartner = !!ts.partner;
+                const dispNet    = isPartner ? ts.adminNet    : ts.net;
+                const dispMargin = isPartner ? ts.adminMargin : ts.margin;
                 return (
                   <div key={ts.truck.id} style={{ padding: "7px 0", borderBottom: `1px solid ${colors.border}11` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
                       <span style={{ fontSize: 12, fontWeight: 600 }}>
                         {ts.truck.plate}
                         <span style={{ fontSize: 10, color: colors.textMuted, marginLeft: 5 }}>{ts.truck.size || "T1"} · {ts.trips} v.</span>
+                        {isPartner && <span style={{ fontSize: 9, background: colors.purple+"22", color: colors.purple, borderRadius: 4, padding: "1px 5px", marginLeft: 5 }}>{ts.partner.name.split(" ")[0]} {ts.partner.commissionPct}%</span>}
                       </span>
                       <div style={{ textAlign: "right" }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: ts.net >= 0 ? colors.green : colors.red }}>{fmt(ts.net)}</span>
-                        <span style={{ fontSize: 10, color: colors.textMuted, marginLeft: 6 }}>{ts.margin.toFixed(0)}%</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: dispNet >= 0 ? colors.green : colors.red }}>{fmt(dispNet)}</span>
+                        <span style={{ fontSize: 10, color: colors.textMuted, marginLeft: 6 }}>{dispMargin.toFixed(0)}%</span>
                       </div>
                     </div>
+                    {isPartner && (
+                      <div style={{ fontSize: 10, color: colors.textMuted, marginBottom: 3 }}>
+                        Bruto: <span style={{ color: colors.accent }}>{fmt(ts.net)}</span>
+                        {" · "}Socio: <span style={{ color: colors.purple }}>−{fmt(ts.partnerComm)}</span>
+                        {" · "}Tu parte: <span style={{ color: colors.green, fontWeight: 600 }}>{fmt(ts.adminNet)}</span>
+                      </div>
+                    )}
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <div style={{ flex: 1, height: 4, background: colors.border, borderRadius: 2 }}>
-                        <div style={{ width: `${ts.revenue / maxRev * 100}%`, height: "100%", background: ts.net >= 0 ? colors.green : colors.red, borderRadius: 2 }} />
+                        <div style={{ width: `${ts.revenue / maxRev * 100}%`, height: "100%", background: dispNet >= 0 ? colors.green : colors.red, borderRadius: 2 }} />
                       </div>
                       <span style={{ fontSize: 10, color: colors.textMuted, width: 70, textAlign: "right" }}>Rev: {fmt(ts.revenue)}</span>
                     </div>
