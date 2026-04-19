@@ -1,10 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp } from "lucide-react";
-import { loadData, saveData } from "./api.js";
-import { translations } from "./constants/translations.js";
-import { USERS, initSettlementStatus } from "./constants/users.js";
+import { useApp } from "./context/AppContext.jsx";
 import { colors } from "./constants/theme.js";
-import { computeAlerts } from "./utils/helpers.js";
 import { Badge } from "./components/ui/index.jsx";
 import LoginPage from "./components/LoginPage.jsx";
 import CfoChat from "./components/CfoChat.jsx";
@@ -26,10 +23,17 @@ import SettlementsPage from "./pages/SettlementsPage.jsx";
 import CxCPage from "./pages/CxCPage.jsx";
 
 export default function App() {
-  const [lang, setLang] = useState("es");
-  const [user, setUser] = useState(() => {
-    try { const s = localStorage.getItem("blogix_session"); return s ? JSON.parse(s) : null; } catch { return null; }
-  });
+  const {
+    lang, setLang, t, user, login, logout,
+    isAdmin, isPartner, isDriver, allUsers,
+    clients, setClients, partners, setPartners, trucks, setTrucks,
+    drivers, setDrivers, trips, setTrips, expenses, setExpenses,
+    brokers, setBrokers, suppliers, setSuppliers,
+    fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus,
+    cobros, setCobros, syncStatus,
+    partner, partnerTruckIds, driverObj, alerts,
+  } = useApp();
+
   const [page, setPage] = useState(() => {
     try {
       const s = localStorage.getItem("blogix_session");
@@ -48,74 +52,11 @@ export default function App() {
     return () => window.removeEventListener("resize", handle);
   }, []);
 
-  const t = translations[lang];
-
-  // ── Data State ───────────────────────────────────────────────────────────────
-  const [clients, setClients] = useState([]);
-  const [partners, setPartners] = useState([]);
-  const [trucks, setTrucks] = useState([]);
-  const [drivers, setDrivers] = useState([]);
-  const [trips, setTrips] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [brokers, setBrokers] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
-  const [fixedTemplates, setFixedTemplates] = useState([]);
-  const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
-  const [syncStatus, setSyncStatus] = useState("idle");
-  const [cobros, setCobros] = useState([]);
-  const saveTimerRef = useRef(null);
-  const dataLoadedRef = useRef(false);
-
-  // ── Load data on mount ───────────────────────────────────────────────────────
-  useEffect(() => {
-    loadData().then(({ source, data }) => {
-      if (data && Object.keys(data).length > 0) {
-        if (Array.isArray(data.clients))         setClients(data.clients);
-        if (Array.isArray(data.partners))        setPartners(data.partners);
-        if (Array.isArray(data.trucks))          setTrucks(data.trucks);
-        if (Array.isArray(data.drivers))         setDrivers(data.drivers);
-        if (Array.isArray(data.trips))           setTrips(data.trips);
-        if (Array.isArray(data.expenses))        setExpenses(data.expenses);
-        if (Array.isArray(data.brokers))         setBrokers(data.brokers);
-        if (Array.isArray(data.suppliers))       setSuppliers(data.suppliers);
-        if (Array.isArray(data.fixedTemplates))  setFixedTemplates(data.fixedTemplates);
-        if (data.settlementStatus)               setSettlementStatus(data.settlementStatus);
-        if (Array.isArray(data.cobros))          setCobros(data.cobros);
-      }
-      dataLoadedRef.current = true;
-      setSyncStatus(source === "api" ? "saved" : "offline");
-    });
-  }, []);
-
-  // ── Auto-save (debounced 1.5s) ───────────────────────────────────────────────
-  useEffect(() => {
-    if (!dataLoadedRef.current) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      setSyncStatus("saving");
-      const result = await saveData({ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros });
-      setSyncStatus(result.saved === "api" ? "saved" : "offline");
-    }, 1500);
-    return () => clearTimeout(saveTimerRef.current);
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros]);
-
-  // ── Dynamic user list (admins + partners + drivers) ─────────────────────────
-  const allUsers = [
-    ...USERS.filter(u => u.role === "admin"),
-    ...partners.map(p => ({ id: `p-${p.id}`, username: p.username, password: p.password, role: "partner", name: p.name, refId: p.id })),
-    ...drivers.map(d => ({ id: `d-${d.id}`, username: d.username, password: d.password, role: "driver", name: d.name, refId: d.id })),
-  ];
-
   if (!user) return <LoginPage t={t} allUsers={allUsers} onLogin={(u, remember) => {
-    if (remember) { try { const { password: _pw, ...safe } = u; localStorage.setItem("blogix_session", JSON.stringify(safe)); } catch {} }
-    setUser(u); setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : "dashboard");
+    login(u, remember);
+    setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : "dashboard");
   }} />;
 
-  const isAdmin  = user.role === "admin";
-  const isPartner = user.role === "partner";
-  const isDriver  = user.role === "driver";
-
-  const alerts     = isAdmin ? computeAlerts({ trips, expenses, clients, drivers, trucks, partners, brokers, settlementStatus }) : [];
   const alertCount = alerts.filter(a => a.severity === "error" || a.severity === "warning").length;
 
   const adminNav = [
@@ -146,12 +87,6 @@ export default function App() {
   ];
   const navItems = isAdmin ? adminNav : isPartner ? partnerNav : driverNav;
 
-  // ── Role-filtered derived data ───────────────────────────────────────────────
-  const partner         = isPartner ? partners.find(p => p.name === user.name) : null;
-  const partnerTruckIds = partner ? trucks.filter(tk => tk.partnerId === partner.id).map(tk => tk.id) : [];
-  const driverObj       = isDriver ? drivers.find(d => d.name === user.name) : null;
-
-  // ── Shared prop bag ──────────────────────────────────────────────────────────
   const ctx = { t, user, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, partner, partnerTruckIds, driverObj, alerts };
 
   return (
@@ -185,7 +120,7 @@ export default function App() {
           <button onClick={() => setLang(lang === "en" ? "es" : "en")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
             <Globe size={14} />{sidebarOpen && <span>{lang === "en" ? "Español" : "English"}</span>}
           </button>
-          <button onClick={() => { try { localStorage.removeItem("blogix_session"); } catch {} setUser(null); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
+          <button onClick={logout} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
             <LogIn size={14} />{sidebarOpen && <span>{t.logout}</span>}
           </button>
           {sidebarOpen && <div style={{ padding: "6px 10px", fontSize: 11, color: colors.textMuted, display: "flex", alignItems: "center", gap: 6 }}><UserCheck size={12} /> {user.name} <Badge label={user.role} color={user.role === "admin" ? colors.green : user.role === "partner" ? colors.orange : colors.accent} /></div>}
@@ -222,4 +157,4 @@ export default function App() {
       {isAdmin && <CfoChat data={{ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, settlementStatus }} t={t} />}
     </div>
   );
-     }
+}

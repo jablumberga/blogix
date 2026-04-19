@@ -1,7 +1,7 @@
 import { useState, Fragment } from "react";
 import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, nxId, today } from "../utils/helpers.js";
+import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Inp, Sel, Btn, Th, Td, DestinationSelect } from "../components/ui/index.jsx";
 
 export default function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, driverObj, setTrips, setExpenses, brokers }) {
@@ -90,35 +90,7 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
 
   const allMyTrips = trips.filter(tr => tr.driverId === driverObj?.id);
 
-  const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-  const genPeriods = () => {
-    const pad = n => String(n).padStart(2, "0");
-    const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
-    const now = new Date(); const day = now.getDate();
-    let y = now.getFullYear(), m = now.getMonth() + 1, h;
-    if (day >= 30) { if (m === 12) { y++; m = 1; } else { m++; } h = 1; }
-    else { h = day >= 15 ? 2 : 1; }
-    const allDates = allMyTrips.map(tr => tr.date).sort();
-    const earliest = allDates[0] || `${y}-${pad(m)}-01`;
-    const buildPd = (py, pm, ph) => {
-      const mStr = `${py}-${pad(pm)}`;
-      if (ph === 1) {
-        const prevM = pm === 1 ? 12 : pm - 1, prevY = pm === 1 ? py - 1 : py;
-        const startDay = Math.min(30, lastDayOf(prevY, prevM));
-        return { year: py, month: pm, half: ph, mStr, dateFrom: `${prevY}-${pad(prevM)}-${pad(startDay)}`, dateTo: `${mStr}-14`, label: `${MONTHS_ES[prevM-1]} ${startDay} – ${MONTHS_ES[pm-1]} 14, ${py}` };
-      }
-      return { year: py, month: pm, half: ph, mStr, dateFrom: `${mStr}-15`, dateTo: `${mStr}-29`, label: `${MONTHS_ES[pm-1]} 15–29, ${py}` };
-    };
-    const periods = [];
-    for (let i = 0; i < 60; i++) {
-      const pd = buildPd(y, m, h); periods.push(pd);
-      if (pd.dateTo < earliest) break;
-      if (h === 2) { h = 1; } else { h = 2; if (m === 1) { m = 12; y--; } else { m--; } }
-    }
-    return periods;
-  };
-
-  const allPeriods = genPeriods();
+  const allPeriods = genPeriods(allMyTrips.map(tr => tr.date));
   const activePeriods = allPeriods.filter(pd => allMyTrips.some(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo));
 
   const pendingDocs = allMyTrips.filter(tr => tr.docStatus === "pending").length;

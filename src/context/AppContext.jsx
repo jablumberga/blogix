@@ -41,6 +41,7 @@ export function AppProvider({ children }) {
   const [suppliers, setSuppliers] = useState([]);
   const [fixedTemplates, setFixedTemplates] = useState([]);
   const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
+  const [cobros, setCobros] = useState([]);
   const [syncStatus, setSyncStatus] = useState("idle");
 
   const saveTimerRef = useRef(null);
@@ -60,6 +61,7 @@ export function AppProvider({ children }) {
         if (Array.isArray(data.suppliers))      setSuppliers(data.suppliers);
         if (Array.isArray(data.fixedTemplates)) setFixedTemplates(data.fixedTemplates);
         if (data.settlementStatus)              setSettlementStatus(data.settlementStatus);
+        if (Array.isArray(data.cobros))         setCobros(data.cobros);
       }
       dataLoadedRef.current = true;
       setSyncStatus(source === "api" ? "saved" : "offline");
@@ -74,12 +76,12 @@ export function AppProvider({ children }) {
       setSyncStatus("saving");
       const result = await saveData({
         clients, partners, trucks, drivers, trips, expenses,
-        brokers, suppliers, fixedTemplates, settlementStatus,
+        brokers, suppliers, fixedTemplates, settlementStatus, cobros,
       });
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros]);
 
   // ── Dynamic user list ─────────────────────────────────────────────────────
   const allUsers = [
@@ -134,6 +136,7 @@ export function AppProvider({ children }) {
     suppliers, setSuppliers,
     fixedTemplates, setFixedTemplates,
     settlementStatus, setSettlementStatus,
+    cobros, setCobros,
     // Computed
     partner, partnerTruckIds, driverObj, alerts,
   };

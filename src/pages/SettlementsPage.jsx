@@ -1,42 +1,10 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt } from "../utils/helpers.js";
+import { fmt, pad, MONTHS_ES, genPeriods } from "../utils/helpers.js";
 import { EXPENSE_CATEGORIES } from "../constants/categories.js";
 import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
 
-const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-
-function genPeriods(trips) {
-  const pad = n => String(n).padStart(2, "0");
-  const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
-  const now = new Date(); const day = now.getDate();
-  let y = now.getFullYear(), m = now.getMonth() + 1, h;
-  if (day >= 30) { if (m === 12) { y++; m = 1; } else { m++; } h = 1; }
-  else { h = day >= 15 ? 2 : 1; }
-  const allTripDates = trips.map(tr => tr.date).sort();
-  const earliest = allTripDates[0] || `${y}-${pad(m)}-01`;
-  const buildPd = (py, pm, ph) => {
-    const mStr = `${py}-${pad(pm)}`;
-    if (ph === 1) {
-      const prevM = pm === 1 ? 12 : pm - 1, prevY = pm === 1 ? py - 1 : py;
-      const startDay = Math.min(30, lastDayOf(prevY, prevM));
-      return { year: py, month: pm, half: ph, mStr,
-        dateFrom: `${prevY}-${pad(prevM)}-${startDay}`, dateTo: `${mStr}-14`,
-        label: `${MONTHS_ES[prevM-1]} ${startDay} – ${MONTHS_ES[pm-1]} 14, ${py}` };
-    }
-    return { year: py, month: pm, half: ph, mStr,
-      dateFrom: `${mStr}-15`, dateTo: `${mStr}-29`,
-      label: `${MONTHS_ES[pm-1]} 15–29, ${py}` };
-  };
-  const periods = [];
-  for (let i = 0; i < 60; i++) {
-    const pd = buildPd(y, m, h); periods.push(pd);
-    if (pd.dateTo < earliest) break;
-    if (h === 2) { h = 1; } else { h = 2; if (m === 1) { m = 12; y--; } else { m--; } }
-  }
-  return periods;
-}
 
 function SettlementCard({ card, partner, periodLabel, clients, trucks, t, isPartnerView, onToggle }) {
   const { pTrips, pExpenses, retenciones, otrosGastos, rev, net, adminComm, toTransfer, status } = card;
@@ -145,7 +113,7 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
     return { pTrips, pExpenses, retenciones, otrosGastos, rev, net, adminComm, toTransfer, status, key };
   };
 
-  const periods = genPeriods(trips);
+  const periods = genPeriods(trips.map(tr => tr.date));
 
   if (isPartnerView) {
     const periodCards = periods.map(pd => {

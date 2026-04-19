@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Truck, Route, TrendingUp, TrendingDown, CircleDollarSign } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt } from "../utils/helpers.js";
+import { fmt, pad, MONTHS_ES } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Sel, Badge, Th, Td, StatusBadge } from "../components/ui/index.jsx";
 
 export default function PartnerDashboard({ t, trips, trucks, expenses, partner, partnerTruckIds, clients, settlementStatus, setSettlementStatus }) {
   const [truckFilter, setTruckFilter] = useState("all");
   const now = new Date();
-  const pad = n => String(n).padStart(2,"0");
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
 
   const _initCorte = () => {
@@ -20,7 +19,6 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, partner, 
   const [month, setMonth] = useState(_init.month);
   const [half, setHalf]   = useState(_init.half);
 
-  const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   const mStr = `${year}-${pad(month)}`;
   const prevM = month === 1 ? 12 : month - 1, prevY = month === 1 ? year - 1 : year;
   const dateFrom = half === 1 ? `${prevY}-${pad(prevM)}-${pad(Math.min(30, lastDayOf(prevY, prevM)))}` : `${mStr}-15`;

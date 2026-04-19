@@ -33,6 +33,12 @@ function MiniRow({ label, value, color, pct, bar }) {
     </div>
   );
 }
+function SectionTitle({ label, color }) {
+  return (
+    <div style={{ fontSize: 11, fontWeight: 700, color: color || colors.textMuted, letterSpacing: "0.06em", marginBottom: 10, textTransform: "uppercase" }}>{label}</div>
+  );
+}
+
 export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, alerts, setPage }) {
   const cm = monthStr();
   const today = new Date().toISOString().slice(0, 10);
@@ -156,10 +162,6 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   const errCount  = alerts.filter(a => a.severity === "error").length;
   const warnCount = alerts.filter(a => a.severity === "warning").length;
   const infoCount = alerts.filter(a => a.severity === "info").length;
-
-  const SectionTitle = ({ label, color }) => (
-    <div style={{ fontSize: 11, fontWeight: 700, color: color || colors.textMuted, letterSpacing: "0.06em", marginBottom: 10, textTransform: "uppercase" }}>{label}</div>
-  );
 
   return (
     <div>
