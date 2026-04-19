@@ -1,35 +1,8 @@
 import { useState } from "react";
 import { TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt } from "../utils/helpers.js";
+import { fmt, getPeriodInfo } from "../utils/helpers.js";
 import { Card, PageHeader } from "../components/ui/index.jsx";
-
-const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-const pad = n => String(n).padStart(2, "0");
-
-function getPeriodInfo(date, client) {
-  const [y, m, d] = date.split("-").map(Number);
-  const billing = client?.rules?.billingCycle;
-
-  if (billing === "bimonthly_delayed") {
-    const half = d <= 15 ? 1 : 2;
-    const key = `${y}-${pad(m)}-h${half}`;
-    if (half === 1) {
-      const payDay = client.rules.period1PayDay || 30;
-      return { key, label: `${MONTHS_ES[m-1]} 1–15, ${y}`, expectedDate: `${y}-${pad(m)}-${pad(payDay)}` };
-    } else {
-      const payDay = client.rules.period2PayDay || 15;
-      const nm = m === 12 ? 1 : m + 1, ny = m === 12 ? y + 1 : y;
-      return { key, label: `${MONTHS_ES[m-1]} 16–31, ${y}`, expectedDate: `${ny}-${pad(nm)}-${pad(payDay)}` };
-    }
-  } else {
-    const key = `${y}-${pad(m)}`;
-    const terms = client?.rules?.paymentTerms || 30;
-    const dt = new Date(y, m - 1, d);
-    dt.setDate(dt.getDate() + terms);
-    return { key, label: `${MONTHS_ES[m-1]} ${y}`, expectedDate: dt.toISOString().slice(0, 10) };
-  }
-}
 
 export default function CxCPage({ clients, trips, cobros, setCobros, trucks }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -54,7 +27,8 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks }) {
 
   const allPeriods = Object.values(grouped).sort((a, b) => a.expectedDate.localeCompare(b.expectedDate));
 
-  const getCobro    = (cid, pk) => cobros.find(c => c.clientId === cid && c.periodKey === pk);
+  const cobroMap    = new Map(cobros.map(c => [`${c.clientId}::${c.periodKey}`, c]));
+  const getCobro    = (cid, pk) => cobroMap.get(`${cid}::${pk}`);
   const isCollected = p => getCobro(p.clientId, p.periodKey)?.status === "collected";
   const isOverdue   = p => !isCollected(p) && p.expectedDate < today;
   const daysUntil   = p => Math.ceil((new Date(p.expectedDate) - new Date(today)) / 86400000);

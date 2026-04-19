@@ -138,12 +138,17 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   if (filterClient !== "all") filtered = filtered.filter(tr => tr.clientId === Number(filterClient));
   if (filterDriver !== "all") filtered = filtered.filter(tr => tr.driverId === Number(filterDriver));
   if (filterTruck !== "all") filtered = filtered.filter(tr => tr.truckId === Number(filterTruck));
+  const clientMap = new Map(clients.map(c => [c.id, c]));
+  const driverMap = new Map(drivers.map(d => [d.id, d]));
+  const truckMap  = new Map(trucks.map(tk => [tk.id, tk]));
+  const tripExpMap = expenses.reduce((m, e) => { if (e.tripId) m.set(e.tripId, (m.get(e.tripId) || 0) + e.amount); return m; }, new Map());
+
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter(tr => {
-      const cl = clients.find(c => c.id === tr.clientId);
-      const dk = drivers.find(d => d.id === tr.driverId);
-      const tk = trucks.find(t => t.id === tr.truckId);
+      const cl = clientMap.get(tr.clientId);
+      const dk = driverMap.get(tr.driverId);
+      const tk = truckMap.get(tr.truckId);
       return [tr.date, tr.municipality, tr.province, cl?.companyName, dk?.name, tk?.plate, tr.invoiceRef, tr.createdBy, tr.cargo].some(x => x && x.toLowerCase().includes(s));
     });
   }
@@ -302,10 +307,10 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         </tr></thead>
         <tbody>
           {filtered.map(tr => {
-            const cl = clients.find(c => c.id === tr.clientId);
-            const dk = drivers.find(d => d.id === tr.driverId);
-            const tk = trucks.find(t2 => t2.id === tr.truckId);
-            const tripExp = expenses.filter(e => e.tripId === tr.id).reduce((s, e) => s + e.amount, 0);
+            const cl = clientMap.get(tr.clientId);
+            const dk = driverMap.get(tr.driverId);
+            const tk = truckMap.get(tr.truckId);
+            const tripExp = tripExpMap.get(tr.id) || 0;
             return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
               <Td>{tr.date}</Td>
               <Td><span style={{ fontSize: 12 }}>{tr.municipality}</span><br /><span style={{ fontSize: 10, color: colors.textMuted }}>{tr.province}</span></Td>

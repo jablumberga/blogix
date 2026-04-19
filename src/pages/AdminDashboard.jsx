@@ -1,39 +1,8 @@
 import { useState } from "react";
-import {
-  Truck, Route, TrendingUp, TrendingDown, DollarSign, Building2,
-  ShieldCheck, AlertCircle, AlertTriangle, Bell, CheckCircle2,
-  Calendar, CreditCard, Banknote, Handshake, ArrowUpRight, ArrowDownRight
-} from "lucide-react";
+import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, monthStr } from "../utils/helpers.js";
+import { fmt, monthStr, getPeriodInfo } from "../utils/helpers.js";
 import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
-
-// ── Period helpers (mirrors CxCPage logic) ──────────────────────────────────
-const pad = n => String(n).padStart(2, "0");
-const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-
-function getPeriodInfo(date, client) {
-  const [y, m, d] = date.split("-").map(Number);
-  const billing = client?.rules?.billingCycle;
-  if (billing === "bimonthly_delayed") {
-    const half = d <= 15 ? 1 : 2;
-    const key = `${y}-${pad(m)}-h${half}`;
-    if (half === 1) {
-      const payDay = client.rules.period1PayDay || 30;
-      return { key, expectedDate: `${y}-${pad(m)}-${pad(payDay)}` };
-    } else {
-      const payDay = client.rules.period2PayDay || 15;
-      const nm = m === 12 ? 1 : m + 1, ny = m === 12 ? y + 1 : y;
-      return { key, expectedDate: `${ny}-${pad(nm)}-${pad(payDay)}` };
-    }
-  } else {
-    const key = `${y}-${pad(m)}`;
-    const terms = client?.rules?.paymentTerms || 30;
-    const dt = new Date(y, m - 1, d);
-    dt.setDate(dt.getDate() + terms);
-    return { key, expectedDate: dt.toISOString().slice(0, 10) };
-  }
-}
 
 // ── Mini stat block ─────────────────────────────────────────────────────────
 function Stat({ label, value, color, sub, onClick }) {
@@ -68,22 +37,25 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   const cm = monthStr();
   const today = new Date().toISOString().slice(0, 10);
   const [dateFrom, setDateFrom] = useState(`${cm}-01`);
-  const [dateTo,   setDateTo]   = useState(`${cm}-31`);
+  const [dateTo,   setDateTo]   = useState(() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(new Date(n.getFullYear(),n.getMonth()+1,0).getDate()).padStart(2,"0")}`; });
+
+  const lastDay = (year, month) => String(new Date(year, month, 0).getDate()).padStart(2, "0");
 
   const setPreset = (preset) => {
     const now = new Date();
-    const y = now.getFullYear(), mo = String(now.getMonth()+1).padStart(2,"0"), d = String(now.getDate()).padStart(2,"0");
-    if (preset === "thisMonth")  { setDateFrom(`${y}-${mo}-01`); setDateTo(`${y}-${mo}-31`); }
+    const y = now.getFullYear(), mn = now.getMonth() + 1;
+    const mo = String(mn).padStart(2, "0"), d = String(now.getDate()).padStart(2, "0");
+    if (preset === "thisMonth")  { setDateFrom(`${y}-${mo}-01`); setDateTo(`${y}-${mo}-${lastDay(y, mn)}`); }
     else if (preset === "lastMonth") {
-      const lm = new Date(y, now.getMonth()-1, 1);
-      const ly = lm.getFullYear(), lmo = String(lm.getMonth()+1).padStart(2,"0");
-      setDateFrom(`${ly}-${lmo}-01`); setDateTo(`${ly}-${lmo}-31`);
+      const lm = new Date(y, mn - 2, 1);
+      const ly = lm.getFullYear(), lmn = lm.getMonth() + 1, lmo = String(lmn).padStart(2, "0");
+      setDateFrom(`${ly}-${lmo}-01`); setDateTo(`${ly}-${lmo}-${lastDay(ly, lmn)}`);
     } else if (preset === "quincena") {
       if (now.getDate() <= 15) { setDateFrom(`${y}-${mo}-01`); setDateTo(`${y}-${mo}-15`); }
-      else { setDateFrom(`${y}-${mo}-16`); setDateTo(`${y}-${mo}-31`); }
+      else { setDateFrom(`${y}-${mo}-16`); setDateTo(`${y}-${mo}-${lastDay(y, mn)}`); }
     } else if (preset === "last30") {
-      const from = new Date(now); from.setDate(from.getDate()-30);
-      setDateFrom(from.toISOString().slice(0,10)); setDateTo(`${y}-${mo}-${d}`);
+      const from = new Date(now); from.setDate(from.getDate() - 30);
+      setDateFrom(from.toISOString().slice(0, 10)); setDateTo(`${y}-${mo}-${d}`);
     } else if (preset === "year") { setDateFrom(`${y}-01-01`); setDateTo(`${y}-12-31`); }
   };
 
@@ -116,7 +88,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
     if (!cxcGrouped[gKey]) cxcGrouped[gKey] = { clientId: tr.clientId, periodKey: key, expectedDate, revenue: 0 };
     cxcGrouped[gKey].revenue += tr.revenue || 0;
   });
-  const getCobro     = (cid, pk) => cobros.find(c => c.clientId === cid && c.periodKey === pk);
+  const cobroMap     = new Map(cobros.map(c => [`${c.clientId}::${c.periodKey}`, c]));
+  const getCobro     = (cid, pk) => cobroMap.get(`${cid}::${pk}`);
   const cxcPeriods   = Object.values(cxcGrouped);
   const cxcCollected = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status === "collected");
   const cxcPending   = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status !== "collected");
@@ -163,6 +136,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   const totalPartnerComm = truckStats.reduce((s, ts) => s + ts.partnerComm, 0);
   const realProfit  = grossProfit - totalPartnerComm;
   const realMargin  = revenue > 0 ? realProfit / revenue * 100 : 0;
+  const maxTruckRev = truckStats[0]?.revenue || 1;
 
   // ── Top clientes (period) ───────────────────────────────────────────────
   const clientStats = clients.map(cl => {
@@ -183,7 +157,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   const warnCount = alerts.filter(a => a.severity === "warning").length;
   const infoCount = alerts.filter(a => a.severity === "info").length;
 
-  const sectionTitle = (label, color) => (
+  const SectionTitle = ({ label, color }) => (
     <div style={{ fontSize: 11, fontWeight: 700, color: color || colors.textMuted, letterSpacing: "0.06em", marginBottom: 10, textTransform: "uppercase" }}>{label}</div>
   );
 
@@ -224,7 +198,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         <Stat label="BENEFICIO REAL" value={fmt(realProfit)} color={realProfit >= 0 ? colors.green : colors.red}
           sub={`${realMargin.toFixed(1)}% · tras socios`} />
         <Stat label="CxC POR COBRAR" value={fmt(totalCxC)} color={colors.orange}
-          sub={`${cxcPending.length} periodo${cxcPending.length !== 1 ? "s" : ""} pendiente${cxcPending.length !== 1 ? "s" : ""}`}
+          sub={`${cxcPending.length} periodo${cxcPending.length !== 1 ? "s" : ""} pendiente${cxcPending.length !== 1 ? "s" : ""} (historico)`}
           onClick={() => setPage("cxc")} />
         <Stat label="CxP PENDIENTE" value={fmt(totalCxP)} color={colors.red}
           sub={`Nomina + suplidores + fijos`}
@@ -238,7 +212,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
         {/* CxC */}
         <Card style={{ cursor: "pointer" }} onClick={() => setPage("cxc")}>
-          {sectionTitle("Cuentas por Cobrar", colors.orange)}
+          <SectionTitle label="Cuentas por Cobrar" color={colors.orange} />
           <MiniRow label="Vencido" value={fmt(totalOverdue)} color={totalOverdue > 0 ? colors.red : colors.textMuted} />
           <MiniRow label="Pendiente total" value={fmt(totalCxC)} color={colors.orange} />
           {nextDue && (
@@ -252,7 +226,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
         {/* CxP */}
         <Card style={{ cursor: "pointer" }} onClick={() => setPage("cxp")}>
-          {sectionTitle("Cuentas por Pagar", colors.red)}
+          <SectionTitle label="Cuentas por Pagar" color={colors.red} />
           <MiniRow label="Nomina conductores" value={fmt(cxpNomina)} color={colors.accent} />
           <MiniRow label="Suplidores / Oper." value={fmt(cxpSupplier)} color={colors.orange} />
           <MiniRow label="Fijos (prestamos+seg.)" value={fmt(cxpFijos)} color={colors.red} />
@@ -265,7 +239,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
         {/* Brokers */}
         <Card>
-          {sectionTitle("Comisiones Brokers", colors.yellow)}
+          <SectionTitle label="Comisiones Brokers" color={colors.yellow} />
           {brokerBreakdown.length === 0
             ? <div style={{ fontSize: 12, color: colors.textMuted, padding: "10px 0" }}>Sin viajes con broker en el periodo</div>
             : brokerBreakdown.map(b => (
@@ -288,7 +262,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
         {/* P&L desglose */}
         <Card>
-          {sectionTitle("Desglose de Gastos del Periodo", colors.red)}
+          <SectionTitle label="Desglose de Gastos del Periodo" color={colors.red} />
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
               { label: "Ingresos brutos", value: revenue, color: colors.green, icon: "up" },
@@ -314,11 +288,10 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
         {/* Rentabilidad por camion */}
         <Card>
-          {sectionTitle("Rentabilidad por Camion", colors.accent)}
+          <SectionTitle label="Rentabilidad por Camion" color={colors.accent} />
           {truckStats.length === 0
             ? <div style={{ fontSize: 12, color: colors.textMuted, padding: "10px 0" }}>Sin viajes en el periodo</div>
             : truckStats.map(ts => {
-                const maxRev = truckStats[0]?.revenue || 1;
                 const isPartner = !!ts.partner;
                 const dispNet    = isPartner ? ts.adminNet    : ts.net;
                 const dispMargin = isPartner ? ts.adminMargin : ts.margin;
@@ -344,7 +317,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
                     )}
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <div style={{ flex: 1, height: 4, background: colors.border, borderRadius: 2 }}>
-                        <div style={{ width: `${ts.revenue / maxRev * 100}%`, height: "100%", background: dispNet >= 0 ? colors.green : colors.red, borderRadius: 2 }} />
+                        <div style={{ width: `${ts.revenue / maxTruckRev * 100}%`, height: "100%", background: dispNet >= 0 ? colors.green : colors.red, borderRadius: 2 }} />
                       </div>
                       <span style={{ fontSize: 10, color: colors.textMuted, width: 70, textAlign: "right" }}>Rev: {fmt(ts.revenue)}</span>
                     </div>
@@ -360,7 +333,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
         {/* Top clientes */}
         <Card>
-          {sectionTitle("Top Clientes (Periodo)", colors.purple)}
+          <SectionTitle label="Top Clientes (Periodo)" color={colors.purple} />
           {clientStats.length === 0
             ? <div style={{ fontSize: 12, color: colors.textMuted, padding: "10px 0" }}>Sin datos en el periodo</div>
             : clientStats.slice(0, 8).map(cs => (
@@ -376,7 +349,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
         {/* Pipeline de viajes */}
         <Card>
-          {sectionTitle("Pipeline de Viajes", colors.cyan)}
+          <SectionTitle label="Pipeline de Viajes" color={colors.cyan} />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
             {[
               { label: "Pendientes", count: pending_trips, color: colors.textMuted },
@@ -390,8 +363,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
               </div>
             ))}
           </div>
-          {sectionTitle("Ultimos viajes", colors.textMuted)}
-          {trips.slice(-4).reverse().map(tr => {
+          <SectionTitle label="Ultimos viajes" color={colors.textMuted} />
+          {[...trips].sort((a,b) => b.date.localeCompare(a.date)).slice(0,4).map(tr => {
             const cl = clients.find(c => c.id === tr.clientId);
             return (
               <div key={tr.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid ${colors.border}11`, fontSize: 11 }}>
@@ -406,7 +379,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
         {/* Alertas */}
         <Card style={{ cursor: "pointer" }} onClick={() => setPage("agents")}>
-          {sectionTitle("Alertas del Sistema", colors.red)}
+          <SectionTitle label="Alertas del Sistema" color={colors.red} />
           {alerts.length === 0
             ? <div style={{ display: "flex", alignItems: "center", gap: 8, color: colors.green, fontSize: 13, padding: "10px 0" }}>
                 <CheckCircle2 size={16} /> Todo en orden

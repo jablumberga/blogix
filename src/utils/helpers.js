@@ -75,20 +75,25 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
     }
   });
 
+  // Pre-built lookups for Agents 7, 8, 9
+  const paidTripIds      = new Set(expenses.filter(e => e.category === "driverPay").map(e => e.tripId));
+  const brokerFeeTripIds = new Set(expenses.filter(e => e.category === "broker_commission").map(e => e.tripId));
+  const brokerMap        = new Map(brokers.map(b => [b.id, b]));
+  const trucksByPartner  = trucks.reduce((m, tk) => { if (tk.partnerId) { const a = m.get(tk.partnerId) || []; a.push(tk.id); m.set(tk.partnerId, a); } return m; }, new Map());
+  const tripsByDriver    = trips.reduce((m, tr) => { if (tr.driverId) { const a = m.get(tr.driverId) || []; a.push(tr); m.set(tr.driverId, a); } return m; }, new Map());
+
   // AGENT 7: Conductor por-viaje sin pago
   drivers.filter(d => d.salaryType === "perTrip" || d.salaryType === "porcentaje").forEach(driver => {
-    trips.filter(tr => tr.driverId === driver.id && tr.status === "delivered").forEach(tr => {
-      const hasPay = expenses.some(e => e.tripId === tr.id && e.category === "driverPay");
-      if (!hasPay) alerts.push({ id: `pay-${tr.id}`, severity: "warning", category: "payroll", tripId: tr.id,
+    (tripsByDriver.get(driver.id) || []).filter(tr => tr.status === "delivered").forEach(tr => {
+      if (!paidTripIds.has(tr.id)) alerts.push({ id: `pay-${tr.id}`, severity: "warning", category: "payroll", tripId: tr.id,
         msg: `Conductor ${driver.name}: viaje #${tr.id} entregado sin pago de conductor registrado (${tr.date})` });
     });
   });
 
   // AGENT 8: Broker sin comisión
   trips.filter(tr => tr.brokerId && tr.status !== "cancelled" && tr.revenue > 0).forEach(tr => {
-    const hasFee = expenses.some(e => e.tripId === tr.id && e.category === "broker_commission");
-    if (!hasFee) {
-      const br = brokers.find(b => b.id === tr.brokerId);
+    if (!brokerFeeTripIds.has(tr.id)) {
+      const br = brokerMap.get(tr.brokerId);
       alerts.push({ id: `brk-${tr.id}`, severity: "warning", category: "broker", tripId: tr.id,
         msg: `Viaje #${tr.id} tiene broker "${br?.name || "—"}" pero sin comisión deducida (${tr.date})` });
     }
@@ -96,8 +101,9 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
 
   // AGENT 9: Liquidaciones pendientes
   partners.forEach(p => {
-    const pTruckIds = trucks.filter(tk => tk.partnerId === p.id).map(tk => tk.id);
-    const unpaidTrips = trips.filter(tr => pTruckIds.includes(tr.truckId) && tr.status === "delivered");
+    const pTruckIds  = trucksByPartner.get(p.id) || [];
+    const pTruckSet  = new Set(pTruckIds);
+    const unpaidTrips = trips.filter(tr => pTruckSet.has(tr.truckId) && tr.status === "delivered");
     if (unpaidTrips.length > 0) {
       const key = `${p.id}-${monthStr()}`;
       if (!settlementStatus[key] || settlementStatus[key] === "unpaid") {
@@ -129,4 +135,32 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
   });
 
   return alerts;
+}
+
+// ─── Billing / Period Helpers ─────────────────────────────────────────────────
+export const pad = n => String(n).padStart(2, "0");
+
+const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+export function getPeriodInfo(date, client) {
+  const [y, m, d] = date.split("-").map(Number);
+  const billing = client?.rules?.billingCycle;
+  if (billing === "bimonthly_delayed") {
+    const half = d <= 15 ? 1 : 2;
+    const key = `${y}-${pad(m)}-h${half}`;
+    if (half === 1) {
+      const payDay = client.rules.period1PayDay || 30;
+      return { key, label: `${MONTHS_ES[m-1]} 1–15, ${y}`, expectedDate: `${y}-${pad(m)}-${pad(payDay)}` };
+    } else {
+      const payDay = client.rules.period2PayDay || 15;
+      const nm = m === 12 ? 1 : m + 1, ny = m === 12 ? y + 1 : y;
+      return { key, label: `${MONTHS_ES[m-1]} 16–31, ${y}`, expectedDate: `${ny}-${pad(nm)}-${pad(payDay)}` };
+    }
+  } else {
+    const key = `${y}-${pad(m)}`;
+    const terms = client?.rules?.paymentTerms || 30;
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + terms);
+    return { key, label: `${MONTHS_ES[m-1]} ${y}`, expectedDate: dt.toISOString().slice(0, 10) };
+  }
 }

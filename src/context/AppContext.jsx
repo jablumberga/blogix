@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef } from "react";
+import { createContext, useContext, useState, useEffect, useRef, useMemo } from "react";
 import { loadData, saveData } from "../api.js";
 import { translations } from "../constants/translations.js";
 import { USERS, initSettlementStatus } from "../constants/users.js";
@@ -94,12 +94,16 @@ export function AppProvider({ children }) {
   const isDriver = user?.role === "driver";
 
   const partner = isPartner ? partners.find(p => p.name === user?.name) : null;
-  const partnerTruckIds = partner ? trucks.filter(tk => tk.partnerId === partner.id).map(tk => tk.id) : [];
+  const partnerTruckIds = useMemo(
+    () => partner ? trucks.filter(tk => tk.partnerId === partner.id).map(tk => tk.id) : [],
+    [partner, trucks]
+  );
   const driverObj = isDriver ? drivers.find(d => d.name === user?.name) : null;
 
-  const alerts = isAdmin
-    ? computeAlerts({ trips, expenses, clients, drivers, trucks, partners, brokers, settlementStatus })
-    : [];
+  const alerts = useMemo(
+    () => isAdmin ? computeAlerts({ trips, expenses, clients, drivers, trucks, partners, brokers, settlementStatus }) : [],
+    [isAdmin, trips, expenses, clients, drivers, trucks, partners, brokers, settlementStatus]
+  );
 
   const login = (u, remember) => {
     if (remember) {

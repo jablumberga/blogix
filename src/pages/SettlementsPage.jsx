@@ -133,7 +133,8 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
   const toggleStatus = (key) => setSettlementStatus(prev => ({ ...prev, [key]: prev[key] === "paid" ? "unpaid" : "paid" }));
 
   const buildCard = (p, pTrips, key) => {
-    const pExpenses  = expenses.filter(e => pTrips.some(tr => tr.id === e.tripId));
+    const tripIdSet  = new Set(pTrips.map(tr => tr.id));
+    const pExpenses  = expenses.filter(e => tripIdSet.has(e.tripId));
     const retenciones = pExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s+e.amount, 0);
     const otrosGastos = pExpenses.filter(e => e.category !== "broker_commission").reduce((s,e) => s+e.amount, 0);
     const rev        = pTrips.reduce((s,tr) => s+tr.revenue, 0);
@@ -165,8 +166,8 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
 
   const periodGroups = periods.map(pd => {
     const partnerCards = partners.map(p => {
-      const pTrucks = trucks.filter(tk => tk.partnerId === p.id).map(tk => tk.id);
-      const pTrips  = trips.filter(tr => pTrucks.includes(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo);
+      const pTruckSet = new Set(trucks.filter(tk => tk.partnerId === p.id).map(tk => tk.id));
+      const pTrips  = trips.filter(tr => pTruckSet.has(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo);
       if (pTrips.length === 0) return null;
       const key = `${p.id}-${pd.mStr}-${pd.half}`;
       return { p, card: buildCard(p, pTrips, key) };
