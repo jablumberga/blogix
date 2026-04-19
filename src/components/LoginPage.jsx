@@ -21,7 +21,7 @@ export default function LoginPage({ t, onLogin, allUsers }) {
       <div style={{ width: 400, background: colors.card, borderRadius: 16, border: `1px solid ${colors.border}`, padding: 40, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{ width: 72, height: 72, borderRadius: 16, background: "white", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 14, boxShadow: "0 4px 20px rgba(239,68,68,0.3)" }}>
-            <img src="/logo.png" alt="B-Logix" style={{ width: "62%", height: "62%", objectFit: "contain" }} />
+            <img src="/logo.png" alt="B-Logix" style={{ width: "95%", height: "95%", objectFit: "contain" }} />
           </div>
           <h1 style={{ fontSize: 26, fontWeight: 800, color: colors.text, margin: "0 0 4px", letterSpacing: -0.5 }}>B-Logix</h1>
           <p style={{ color: colors.textMuted, fontSize: 13, margin: 0 }}>{t.loginTitle}</p>
