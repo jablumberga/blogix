@@ -52,8 +52,8 @@ export default function App() {
     return () => window.removeEventListener("resize", handle);
   }, []);
 
-  if (!user) return <LoginPage t={t} allUsers={allUsers} onLogin={(u, remember) => {
-    login(u, remember);
+  if (!user) return <LoginPage t={t} allUsers={allUsers} onLogin={(u, remember, token) => {
+    login(u, remember, token);
     setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : "dashboard");
   }} />;
 

@@ -1,22 +1,39 @@
 /**
- * B-Logix - API Client (Front-End)
- *
- * Handles communication between the React front-end and
- * the Netlify Functions back-end.
- *
- * Falls back to localStorage if the API is unavailable.
+ * B-Logix - API Client
+ * Sends session token with every request for server-side RLS enforcement.
+ * Falls back to localStorage when API is unavailable.
  */
 
 const API_URL = "/api/data";
-const LS_KEY = "blogix_data";
+const LS_KEY  = "blogix_data";
+const TK_KEY  = "blogix_token";
 
 let _apiAvailable = null;
+
+function getToken() {
+  try { return localStorage.getItem(TK_KEY); } catch { return null; }
+}
+
+export function saveToken(token) {
+  try { localStorage.setItem(TK_KEY, token); } catch {}
+}
+
+export function clearToken() {
+  try { localStorage.removeItem(TK_KEY); } catch {}
+}
+
+function authHeaders() {
+  const token = getToken();
+  return token
+    ? { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
+    : { "Content-Type": "application/json" };
+}
 
 async function checkApiAvailable() {
   if (_apiAvailable !== null) return _apiAvailable;
   try {
-    const res = await fetch(API_URL, { method: "GET" });
-    _apiAvailable = res.ok;
+    const res = await fetch(API_URL, { method: "GET", headers: authHeaders() });
+    _apiAvailable = res.ok || res.status === 401; // reachable even if auth fails
   } catch {
     _apiAvailable = false;
   }
@@ -28,7 +45,7 @@ export async function loadData() {
 
   if (online) {
     try {
-      const res = await fetch(API_URL);
+      const res = await fetch(API_URL, { headers: authHeaders() });
       if (res.ok) {
         const apiData = await res.json();
         if (apiData && Object.keys(apiData).length > 0) {
@@ -44,15 +61,7 @@ export async function loadData() {
   const raw = localStorage.getItem(LS_KEY);
   if (raw) {
     try {
-      const lsData = JSON.parse(raw);
-      if (online && lsData && Object.keys(lsData).length > 0) {
-        fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(lsData),
-        }).catch(() => {});
-      }
-      return { source: "localStorage", data: lsData };
+      return { source: "localStorage", data: JSON.parse(raw) };
     } catch {
       localStorage.removeItem(LS_KEY);
     }
@@ -70,7 +79,7 @@ export async function saveData(data) {
   try {
     const res = await fetch(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify(data),
     });
     if (res.ok) return { saved: "api" };

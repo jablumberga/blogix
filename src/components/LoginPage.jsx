@@ -9,11 +9,31 @@ export default function LoginPage({ t, onLogin, allUsers }) {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [keepSignedIn, setKeepSignedIn] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      // Try server auth first (gets signed JWT for RLS)
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (res.ok) {
+        const { user, token } = await res.json();
+        onLogin(user, keepSignedIn, token);
+        return;
+      }
+    } catch {
+      // Server unavailable — fall back to local user list
+    }
+    // Offline fallback: validate against allUsers
     const user = allUsers.find(u => u.username === username && u.password === password);
-    if (user) { onLogin(user, keepSignedIn); setError(""); }
+    if (user) { onLogin(user, keepSignedIn, null); setError(""); }
     else setError(t.invalidLogin);
+    setLoading(false);
   };
 
   return (
@@ -67,9 +87,10 @@ export default function LoginPage({ t, onLogin, allUsers }) {
           </label>
           <Btn
             onClick={handleLogin}
+            disabled={loading}
             style={{ width: "100%", justifyContent: "center", padding: "10px 0", fontSize: 14, marginTop: 4 }}
           >
-            <LogIn size={16} /> {t.login}
+            <LogIn size={16} /> {loading ? "Entrando..." : t.login}
           </Btn>
         </div>
       </div>

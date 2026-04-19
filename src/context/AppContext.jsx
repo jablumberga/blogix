@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useMemo } from "react";
-import { loadData, saveData } from "../api.js";
+import { loadData, saveData, saveToken, clearToken } from "../api.js";
 import { translations } from "../constants/translations.js";
 import { USERS, initSettlementStatus } from "../constants/users.js";
 import { computeAlerts } from "../utils/helpers.js";
@@ -107,15 +107,17 @@ export function AppProvider({ children }) {
     [isAdmin, trips, expenses, clients, drivers, trucks, partners, brokers, settlementStatus]
   );
 
-  const login = (u, remember) => {
+  const login = (u, remember, token) => {
     if (remember) {
       try { const { password: _pw, ...safe } = u; localStorage.setItem("blogix_session", JSON.stringify(safe)); } catch {}
     }
+    if (token) saveToken(token);
     setUser(u);
   };
 
   const logout = () => {
     try { localStorage.removeItem("blogix_session"); } catch {}
+    clearToken();
     setUser(null);
   };
 
