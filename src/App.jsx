@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp } from "lucide-react";
+import { Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { colors } from "./constants/theme.js";
 import { Badge } from "./components/ui/index.jsx";
@@ -94,8 +94,8 @@ export default function App() {
       {isMobile && sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 190 }} />}
 
       <div style={{ width: isMobile ? (sidebarOpen ? 220 : 0) : (sidebarOpen ? 220 : 60), ...(isMobile ? { position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 200 } : {}), background: colors.sidebar, borderRight: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", transition: "width 0.2s", flexShrink: 0, overflow: "hidden" }}>
-        <div style={{ padding: "16px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${colors.border}`, cursor: "pointer" }} onClick={() => setSidebarOpen(!sidebarOpen)}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg, ${colors.accent}, ${colors.green})`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Truck size={16} color="white" /></div>
+        <div style={{ padding: "14px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${colors.border}`, cursor: "pointer" }} onClick={() => setSidebarOpen(!sidebarOpen)}>
+          <img src="/logo.png" alt="B-Logix" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
           {sidebarOpen && <span style={{ fontWeight: 700, fontSize: 16 }}>B-Logix</span>}
         </div>
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Truck, LogIn, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { LogIn, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { Inp, Btn } from "./ui/index.jsx";
 
@@ -20,10 +20,8 @@ export default function LoginPage({ t, onLogin, allUsers }) {
     <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${colors.bg} 0%, #0a1628 50%, #0f1d35 100%)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', sans-serif" }}>
       <div style={{ width: 400, background: colors.card, borderRadius: 16, border: `1px solid ${colors.border}`, padding: 40, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 14, background: `linear-gradient(135deg, ${colors.accent}, ${colors.green})`, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
-            <Truck size={28} color="white" />
-          </div>
-          <h1 style={{ fontSize: 26, fontWeight: 800, color: colors.text, margin: "8px 0 4px", letterSpacing: -0.5 }}>B-Logix</h1>
+          <img src="/logo.png" alt="B-Logix" style={{ width: 72, height: 72, objectFit: "contain", marginBottom: 12 }} />
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: colors.text, margin: "0 0 4px", letterSpacing: -0.5 }}>B-Logix</h1>
           <p style={{ color: colors.textMuted, fontSize: 13, margin: 0 }}>{t.loginTitle}</p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
