@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2, Calendar, FileCheck, FileText, Handshake, Hash } from "lucide-react";
+import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2, Calendar, FileCheck, FileText, Handshake, Hash, Zap } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today } from "../utils/helpers.js";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
@@ -184,7 +184,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
 
     {/* Trip Modal */}
     {showForm && <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowForm(false)}>
-      <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 14, padding: 24, width: 620, maxHeight: "90vh", overflowY: "auto", border: `1px solid ${colors.border}`, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 14, padding: 24, width: "min(620px, calc(100vw - 32px))", maxHeight: "90vh", overflowY: "auto", overflowX: "hidden", border: `1px solid ${colors.border}`, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}><Route size={18} color={colors.accent} /> {editId ? t.editTrip : t.newTrip}</h3>
           <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", color: colors.textMuted, cursor: "pointer", padding: 4 }}><X size={18} /></button>
@@ -311,7 +311,9 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
             const dk = driverMap.get(tr.driverId);
             const tk = truckMap.get(tr.truckId);
             const tripExp = tripExpMap.get(tr.id) || 0;
-            return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+            return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}
+              onMouseEnter={e => e.currentTarget.style.background = colors.cardHover}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
               <Td>{tr.date}</Td>
               <Td><span style={{ fontSize: 12 }}>{tr.municipality}</span><br /><span style={{ fontSize: 10, color: colors.textMuted }}>{tr.province}</span></Td>
               <Td><StatusBadge status={tr.status} t={t} /></Td>
@@ -337,12 +339,12 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
               </Td>
               <Td align="right" bold color={colors.green}>
                 {fmt(tr.revenue)}
-                {tr.tarifaOverride && <><br /><span style={{ fontSize: 9, fontWeight: 700, color: colors.orange, background: colors.orange+"15", padding: "1px 5px", borderRadius: 5 }}>⚡ {tr.tarifaOverride}</span></>}
+                {tr.tarifaOverride && <><br /><span style={{ fontSize: 11, fontWeight: 700, color: colors.orange, background: colors.orange+"15", padding: "1px 6px", borderRadius: 5, display: "inline-flex", alignItems: "center", gap: 2 }}><Zap size={9} /> {tr.tarifaOverride}</span></>}
               </Td>
               <Td align="right">
                 <div style={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
                   <button onClick={() => openEdit(tr)} style={{ padding: 5, borderRadius: 5, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
-                  <button onClick={() => { setTrips(trips.filter(x => x.id !== tr.id)); setExpenses(expenses.filter(e => e.tripId !== tr.id)); }} style={{ padding: 5, borderRadius: 5, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
+                  <button onClick={() => { if (window.confirm(`¿Eliminar viaje del ${tr.date} a ${tr.municipality}?\nEsta acción eliminará también todos los gastos asociados y no se puede deshacer.`)) { setTrips(trips.filter(x => x.id !== tr.id)); setExpenses(expenses.filter(e => e.tripId !== tr.id)); } }} style={{ padding: 5, borderRadius: 5, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
                 </div>
               </Td>
             </tr>;

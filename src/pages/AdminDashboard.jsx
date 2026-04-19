@@ -24,7 +24,7 @@ function MiniRow({ label, value, color, pct, bar }) {
     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${colors.border}11` }}>
       <div style={{ flex: 1, fontSize: 12, color: colors.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
       {bar !== undefined && (
-        <div style={{ width: 60, height: 4, background: colors.border, borderRadius: 2, flexShrink: 0 }}>
+        <div style={{ width: 90, height: 4, background: colors.border, borderRadius: 2, flexShrink: 0 }}>
           <div style={{ width: `${Math.min(100, bar)}%`, height: "100%", background: color || colors.accent, borderRadius: 2 }} />
         </div>
       )}
@@ -189,14 +189,33 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         </div>
       </Card>
 
+      {/* ── Hero KPI: Beneficio Real ── */}
+      <div style={{ background: `linear-gradient(135deg, ${colors.card}, ${colors.cardHover})`, borderRadius: 12, border: `1px solid ${realProfit >= 0 ? colors.green + "40" : colors.red + "40"}`, padding: "20px 24px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>Beneficio Real del Periodo</div>
+          <div style={{ fontSize: 36, fontWeight: 800, color: realProfit >= 0 ? colors.green : colors.red, lineHeight: 1 }}>{fmt(realProfit)}</div>
+          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>{realMargin.toFixed(1)}% margen · {mt.length} viaje{mt.length !== 1 ? "s" : ""} · tras liquidaciones de socios</div>
+        </div>
+        <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Ingresos</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: colors.green }}>{fmt(revenue)}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Gastos Totales</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: colors.red }}>{fmt(totalExp)}</div>
+          </div>
+          {totalPartnerComm > 0 && (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Liquidaciones Socios</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: colors.purple }}>−{fmt(totalPartnerComm)}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ── Row 1: KPIs financieros ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 16 }}>
-        <Stat label="INGRESOS" value={fmt(revenue)} color={colors.green}
-          sub={`${mt.length} viaje${mt.length !== 1 ? "s" : ""}`} />
-        <Stat label="GASTOS TOTALES" value={fmt(totalExp)} color={colors.red}
-          sub={`Nomina + brokers + oper.`} />
-        <Stat label="BENEFICIO REAL" value={fmt(realProfit)} color={realProfit >= 0 ? colors.green : colors.red}
-          sub={`${realMargin.toFixed(1)}% · tras socios`} />
         <Stat label="CxC POR COBRAR" value={fmt(totalCxC)} color={colors.orange}
           sub={`${cxcPending.length} periodo${cxcPending.length !== 1 ? "s" : ""} pendiente${cxcPending.length !== 1 ? "s" : ""} (historico)`}
           onClick={() => setPage("cxc")} />
@@ -205,6 +224,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
           onClick={() => setPage("cxp")} />
         <Stat label="POSICION DE CAJA" value={fmt(cashPosition)} color={cashPosition >= 0 ? colors.cyan : colors.red}
           sub={cashPosition >= 0 ? "CxC supera CxP ok" : "CxP supera CxC alerta"} />
+        <Stat label="MARGEN BRUTO" value={`${margin.toFixed(1)}%`} color={margin >= 20 ? colors.green : margin >= 10 ? colors.yellow : colors.red}
+          sub={`Antes de socios`} />
       </div>
 
       {/* ── Row 2: CxC · CxP · Brokers ── */}

@@ -120,6 +120,7 @@ export default function App() {
 
   const adminNav = [
     { id: "dashboard",   icon: LayoutDashboard, label: t.dashboard },
+    { divider: true },
     { id: "clients",     icon: Building2,        label: t.clients },
     { id: "cxc",         icon: TrendingUp,       label: "Cuentas x Cobrar" },
     { id: "trips",       icon: Route,            label: t.trips },
@@ -127,11 +128,13 @@ export default function App() {
     { id: "drivers",     icon: Users,            label: t.drivers },
     { id: "partners",    icon: UserCog,          label: t.partners },
     { id: "brokers",     icon: Briefcase,        label: t.brokers },
+    { divider: true },
     { id: "expenses",    icon: Receipt,          label: t.expenses },
     { id: "cxp",         icon: CreditCard,       label: "Cuentas x Pagar" },
     { id: "nomina",      icon: Banknote,         label: "Nómina" },
     { id: "suppliers",   icon: Store,            label: t.suppliers },
     { id: "settlements", icon: Handshake,        label: t.settlements },
+    { divider: true },
     { id: "agents",      icon: ShieldCheck,      label: t.agents, badge: alertCount },
   ];
   const partnerNav = [
@@ -162,15 +165,18 @@ export default function App() {
         </div>
 
         <nav style={{ flex: 1, padding: "10px 6px", display: "flex", flexDirection: "column", gap: 1 }}>
-          {navItems.map(item => {
+          {navItems.map((item, idx) => {
+            if (item.divider) {
+              return <div key={`div-${idx}`} style={{ height: 1, background: colors.border, margin: "4px 6px", opacity: 0.6 }} />;
+            }
             const act = page === item.id; const Icon = item.icon;
-            return <button key={item.id} onClick={() => { setPage(item.id); if (isMobile) setSidebarOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 7, border: "none", background: act ? colors.accent : "transparent", color: act ? "white" : colors.text, cursor: "pointer", fontSize: 13, textAlign: "left", width: "100%", transition: "background 0.15s", position: "relative" }}>
+            return <button key={item.id} onClick={() => { setPage(item.id); if (isMobile) setSidebarOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 7, border: "none", borderLeft: act ? `3px solid ${colors.accent}` : "3px solid transparent", background: act ? colors.accent + "18" : "transparent", color: act ? colors.accentLight : colors.text, cursor: "pointer", fontSize: 13, textAlign: "left", width: "100%", transition: "background 0.15s, border-color 0.15s", position: "relative" }}>
               <div style={{ position: "relative", flexShrink: 0 }}>
                 <Icon size={16} />
                 {item.badge > 0 && <span style={{ position: "absolute", top: -5, right: -6, background: colors.red, color: "white", borderRadius: 10, fontSize: 9, fontWeight: 700, minWidth: 14, height: 14, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{item.badge > 99 ? "99+" : item.badge}</span>}
               </div>
               {sidebarOpen && <span style={{ whiteSpace: "nowrap", flex: 1 }}>{item.label}</span>}
-              {sidebarOpen && item.badge > 0 && <span style={{ background: act ? "rgba(255,255,255,0.3)" : colors.red + "22", color: act ? "white" : colors.red, borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 7px" }}>{item.badge}</span>}
+              {sidebarOpen && item.badge > 0 && <span style={{ background: act ? colors.accent + "30" : colors.red + "22", color: act ? colors.accentLight : colors.red, borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 7px" }}>{item.badge}</span>}
             </button>;
           })}
         </nav>
@@ -179,7 +185,7 @@ export default function App() {
           <button onClick={() => setLang(lang === "en" ? "es" : "en")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
             <Globe size={14} />{sidebarOpen && <span>{lang === "en" ? "Español" : "English"}</span>}
           </button>
-          <button onClick={() => { try { localStorage.removeItem("blogix_session"); } catch {} setUser(null); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.red, cursor: "pointer", fontSize: 12, width: "100%" }}>
+          <button onClick={() => { try { localStorage.removeItem("blogix_session"); } catch {} setUser(null); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
             <LogIn size={14} />{sidebarOpen && <span>{t.logout}</span>}
           </button>
           {sidebarOpen && <div style={{ padding: "6px 10px", fontSize: 11, color: colors.textMuted, display: "flex", alignItems: "center", gap: 6 }}><UserCheck size={12} /> {user.name} <Badge label={user.role} color={user.role === "admin" ? colors.green : user.role === "partner" ? colors.orange : colors.accent} /></div>}
@@ -193,7 +199,7 @@ export default function App() {
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "56px 14px 14px" : 20, position: "relative" }}>
-        {isMobile && <button onClick={() => setSidebarOpen(true)} style={{ position: "fixed", top: 10, left: 10, zIndex: 150, background: colors.accent, border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", color: "white", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}><Menu size={18} /></button>}
+        {isMobile && <button onClick={() => setSidebarOpen(true)} style={{ position: "fixed", top: 16, left: 16, zIndex: 150, background: colors.accent, border: "none", borderRadius: 8, padding: "8px 11px", cursor: "pointer", color: "white", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}><Menu size={18} /></button>}
 
         {page === "dashboard"   && isAdmin   && <AdminDashboard   {...ctx} setPage={setPage} />}
         {page === "partnerDash" && isPartner  && <PartnerDashboard {...ctx} />}
