@@ -153,8 +153,16 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
     const tkExp     = periodExpenses.filter(e => e.tripId && tkTripIds.has(e.tripId)).reduce((s,e) => s + e.amount, 0);
     const tkNet     = tkRev - tkExp;
     const tkMargin  = tkRev > 0 ? tkNet / tkRev * 100 : 0;
-    return { truck: tk, trips: tkTrips.length, revenue: tkRev, expenses: tkExp, net: tkNet, margin: tkMargin };
+    const partner     = tk.owner === "partner" ? partners.find(p => p.id === tk.partnerId) : null;
+    const partnerComm = partner ? Math.max(0, tkNet) * ((partner.commissionPct || 0) / 100) : 0;
+    const adminNet    = tkNet - partnerComm;
+    const adminMargin = tkRev > 0 ? adminNet / tkRev * 100 : 0;
+    return { truck: tk, trips: tkTrips.length, revenue: tkRev, expenses: tkExp, net: tkNet, margin: tkMargin, partner, partnerComm, adminNet, adminMargin };
   }).filter(t => t.trips > 0).sort((a,b) => b.revenue - a.revenue);
+
+  const totalPartnerComm = truckStats.reduce((s, ts) => s + ts.partnerComm, 0);
+  const realProfit  = grossProfit - totalPartnerComm;
+  const realMargin  = revenue > 0 ? realProfit / revenue * 100 : 0;
 
   // ── Top clientes (period) ───────────────────────────────────────────────
   const clientStats = clients.map(cl => {
@@ -213,8 +221,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
           sub={`${mt.length} viaje${mt.length !== 1 ? "s" : ""}`} />
         <Stat label="GASTOS TOTALES" value={fmt(totalExp)} color={colors.red}
           sub={`Nomina + brokers + oper.`} />
-        <Stat label="MARGEN BRUTO" value={fmt(grossProfit)} color={grossProfit >= 0 ? colors.green : colors.red}
-          sub={`${margin.toFixed(1)}% del ingreso`} />
+        <Stat label="BENEFICIO REAL" value={fmt(realProfit)} color={realProfit >= 0 ? colors.green : colors.red}
+          sub={`${realMargin.toFixed(1)}% · tras socios`} />
         <Stat label="CxC POR COBRAR" value={fmt(totalCxC)} color={colors.orange}
           sub={`${cxcPending.length} periodo${cxcPending.length !== 1 ? "s" : ""} pendiente${cxcPending.length !== 1 ? "s" : ""}`}
           onClick={() => setPage("cxc")} />
@@ -287,6 +295,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
               { label: `Nomina conductores (${revenue > 0 ? (nomina/revenue*100).toFixed(0) : 0}%)`, value: -nomina, color: colors.accent, icon: "dn" },
               { label: `Comisiones brokers (${revenue > 0 ? (brokerFees/revenue*100).toFixed(0) : 0}%)`, value: -brokerFees, color: colors.yellow, icon: "dn" },
               { label: `Gastos operativos (${revenue > 0 ? (operExp/revenue*100).toFixed(0) : 0}%)`, value: -operExp, color: colors.orange, icon: "dn" },
+              ...(totalPartnerComm > 0 ? [{ label: `Liquidaciones socios (${revenue > 0 ? (totalPartnerComm/revenue*100).toFixed(0) : 0}%)`, value: -totalPartnerComm, color: colors.purple, icon: "dn" }] : []),
             ].map(({ label, value, color, icon }) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: `1px solid ${colors.border}11` }}>
                 <span style={{ fontSize: 12, color: colors.textMuted }}>{icon === "up" ? "+" : "-"} {label}</span>
@@ -294,10 +303,10 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
               </div>
             ))}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0 0", marginTop: 4, borderTop: `2px solid ${colors.border}` }}>
-              <span style={{ fontSize: 13, fontWeight: 700 }}>Margen neto</span>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Beneficio real admin</span>
               <div style={{ textAlign: "right" }}>
-                <span style={{ fontSize: 18, fontWeight: 800, color: grossProfit >= 0 ? colors.green : colors.red }}>{fmt(grossProfit)}</span>
-                <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 8 }}>{margin.toFixed(1)}%</span>
+                <span style={{ fontSize: 18, fontWeight: 800, color: realProfit >= 0 ? colors.green : colors.red }}>{fmt(realProfit)}</span>
+                <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 8 }}>{realMargin.toFixed(1)}%</span>
               </div>
             </div>
           </div>
