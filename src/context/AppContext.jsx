@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useMemo } from "react";
-import { loadData, saveData } from "../api.js";
+import { loadData, saveData, saveToken, clearToken, resetApiCache } from "../api.js";
 import { translations } from "../constants/translations.js";
 import { USERS, initSettlementStatus } from "../constants/users.js";
 import { computeAlerts } from "../utils/helpers.js";
@@ -95,7 +95,7 @@ export function AppProvider({ children }) {
   const isPartner = user?.role === "partner";
   const isDriver = user?.role === "driver";
 
-  const partner = isPartner ? partners.find(p => p.name === user?.name) : null;
+  const partner = isPartner ? partners.find(p => p.id === user?.refId) : null;
   const partnerTruckIds = useMemo(
     () => partner ? trucks.filter(tk => tk.partnerId === partner.id).map(tk => tk.id) : [],
     [partner, trucks]
@@ -107,15 +107,17 @@ export function AppProvider({ children }) {
     [isAdmin, trips, expenses, clients, drivers, trucks, partners, brokers, settlementStatus]
   );
 
-  const login = (u, remember) => {
+  const login = (u, remember, token) => {
     if (remember) {
       try { const { password: _pw, ...safe } = u; localStorage.setItem("blogix_session", JSON.stringify(safe)); } catch {}
     }
+    if (token) { saveToken(token); resetApiCache(); }
     setUser(u);
   };
 
   const logout = () => {
     try { localStorage.removeItem("blogix_session"); } catch {}
+    clearToken();
     setUser(null);
   };
 

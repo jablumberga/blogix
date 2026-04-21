@@ -218,7 +218,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks }) {
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         <select value={filterClient} onChange={e => setFilterClient(e.target.value)}
-          style={{ padding: "6px 10px", borderRadius: 7, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 12, cursor: "pointer" }}>
+          style={{ padding: "6px 10px", borderRadius: 7, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 16, cursor: "pointer" }}>
           <option value="all">Todos los clientes</option>
           {clients.filter(c => allPeriods.some(p => p.clientId === c.id)).map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
         </select>
@@ -241,7 +241,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks }) {
 
         {allYears.length > 1 && (
           <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
-            style={{ padding: "6px 10px", borderRadius: 7, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 12, cursor: "pointer" }}>
+            style={{ padding: "6px 10px", borderRadius: 7, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 16, cursor: "pointer" }}>
             <option value="all">Todos los años</option>
             {allYears.map(y => <option key={y} value={y}>{y}</option>)}
           </select>

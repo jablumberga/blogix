@@ -1,16 +1,14 @@
 /**
- * B-Logix – Auth Function (Back-End)
- * Endpoint: /api/auth
- *
- * Simple authentication against users stored in Netlify Blobs.
- *
- * POST /api/auth/login  → { username, password } → { ok, user }
+ * B-Logix – Auth Function
+ * POST /api/auth/login  → { username, password } → { ok, user, token }
  * POST /api/auth/logout → {} → { ok }
+ *
+ * Required env vars:
+ *   BLOGIX_SECRET  secret for signing session JWTs
  */
 
 import { getStore } from "@netlify/blobs";
-
-const BLOB_KEY = "blogix-appdata";
+import { signToken } from "./api.mjs";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,17 +20,21 @@ const defaultUsers = [
   { id: 1, username: "admin", password: "admin123", role: "admin", name: "Alexander", refId: null },
 ];
 
-export default async (request, context) => {
+export default async (request) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
-
   if (request.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
   }
 
+  const { BLOGIX_SECRET } = process.env;
+  if (!BLOGIX_SECRET) {
+    return Response.json({ error: "Missing BLOGIX_SECRET env var" }, { status: 500, headers: corsHeaders });
+  }
+
   const url = new URL(request.url);
-  const action = url.pathname.split("/").pop(); // "login" or "logout"
+  const action = url.pathname.split("/").pop();
 
   if (action === "logout") {
     return Response.json({ ok: true }, { headers: corsHeaders });
@@ -40,11 +42,8 @@ export default async (request, context) => {
 
   if (action === "login") {
     let body;
-    try {
-      body = await request.json();
-    } catch {
-      return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders });
-    }
+    try { body = await request.json(); }
+    catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
 
     const { username, password } = body;
     if (!username || !password) {
@@ -52,17 +51,21 @@ export default async (request, context) => {
     }
 
     const store = getStore("blogix");
-    let data = await store.get(BLOB_KEY, { type: "json" });
+    const data  = await store.get("blogix-appdata", { type: "json" });
     const users = data?.users || defaultUsers;
 
-    const user = users.find((u) => u.username === username && u.password === password);
+    const user = users.find(u => u.username === username && u.password === password);
     if (!user) {
       return Response.json({ ok: false, error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
     }
 
-    // Return user without password
     const { password: _pw, ...safeUser } = user;
-    return Response.json({ ok: true, user: safeUser }, { headers: corsHeaders });
+    const token = await signToken(
+      { id: safeUser.id, role: safeUser.role, name: safeUser.name, refId: safeUser.refId ?? null },
+      BLOGIX_SECRET
+    );
+
+    return Response.json({ ok: true, user: safeUser, token }, { headers: corsHeaders });
   }
 
   return Response.json({ error: "Unknown action" }, { status: 400, headers: corsHeaders });

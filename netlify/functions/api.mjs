@@ -2,17 +2,16 @@
  * B-Logix – Netlify Function (Back-End)
  * Endpoint: /api/data
  *
- * Stores and retrieves the full app state using Supabase (PostgreSQL).
- * Uses the Supabase REST API directly — no SDK needed.
+ * Stores and retrieves app state via Supabase (PostgreSQL).
+ * Row Level Security enforced at API layer:
+ *   - admin  → full read/write
+ *   - partner → read own trucks/trips/expenses/settlements only
+ *   - driver  → read own trips/expenses only
  *
- * Required env vars (set in Netlify → Site config → Environment variables):
+ * Required env vars:
  *   SUPABASE_URL          e.g. https://xxxx.supabase.co
- *   SUPABASE_SERVICE_KEY  service_role JWT key
- *
- * Methods:
- *  GET  /api/data          → Load all app data
- *  POST /api/data          → Save all app data
- *  GET  /api/data/export   → Download data as JSON file
+ *   SUPABASE_SERVICE_KEY  service_role JWT
+ *   BLOGIX_SECRET         secret for signing session tokens
  */
 
 const corsHeaders = {
@@ -21,39 +20,141 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
-const defaultData = {
-  trips: [], drivers: [], trucks: [], clients: [], partners: [],
-  brokers: [], suppliers: [], expenses: [], settlementStatus: {},
-  users: [{ id: 1, username: "admin", password: "admin123", role: "admin", name: "Alexander", refId: null }],
-};
+// ── JWT helpers (no external deps — Web Crypto API) ──────────────────────────
+const enc = new TextEncoder();
 
-function supabaseHeaders(env) {
+async function hmacSign(secret, data) {
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(data));
+  return btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+function b64url(obj) {
+  // Use TextEncoder so Unicode chars (accents, etc.) are handled correctly
+  const bytes = enc.encode(JSON.stringify(obj));
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+export async function signToken(payload, secret) {
+  const header  = b64url({ alg: "HS256", typ: "JWT" });
+  const body    = b64url({ ...payload, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 });
+  const sig     = await hmacSign(secret, `${header}.${body}`);
+  return `${header}.${body}.${sig}`;
+}
+
+export async function verifyToken(token, secret) {
+  try {
+    const [header, body, sig] = token.split(".");
+    const expected = await hmacSign(secret, `${header}.${body}`);
+    if (sig !== expected) return null;
+    const payload = JSON.parse(atob(body.replace(/-/g, "+").replace(/_/g, "/")));
+    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+// ── Row Level Security filter ─────────────────────────────────────────────────
+function applyRLS(data, user) {
+  if (user.role === "admin") return data; // admin sees everything
+
+  if (user.role === "partner") {
+    const partner    = (data.partners || []).find(p => p.id === user.refId);
+    if (!partner) return { error: "Partner not found" };
+    const myTrucks   = (data.trucks   || []).filter(tk => tk.partnerId === partner.id);
+    const myTruckIds = new Set(myTrucks.map(tk => tk.id));
+    const myTrips    = (data.trips    || []).filter(tr => myTruckIds.has(tr.truckId));
+    const myTripIds  = new Set(myTrips.map(tr => tr.id));
+    const myExp      = (data.expenses || []).filter(e  => myTripIds.has(e.tripId));
+    // Only expose clients/drivers actually referenced in partner's trips
+    const myClientIds = new Set(myTrips.map(tr => tr.clientId).filter(Boolean));
+    const myDriverIds = new Set(myTrips.map(tr => tr.driverId).filter(Boolean));
+    return {
+      partners:         [partner],
+      trucks:           myTrucks,
+      trips:            myTrips,
+      expenses:         myExp,
+      clients:          (data.clients || []).filter(c => myClientIds.has(c.id)),
+      drivers:          (data.drivers || []).filter(d => myDriverIds.has(d.id)),
+      settlementStatus: data.settlementStatus || {},
+      brokers:          [],
+      suppliers:        [],
+      fixedTemplates:   [],
+      cobros:           [],
+    };
+  }
+
+  if (user.role === "driver") {
+    const driver    = (data.drivers || []).find(d => d.id === user.refId);
+    if (!driver) return { error: "Driver not found" };
+    const myTrips   = (data.trips   || []).filter(tr => tr.driverId === driver.id);
+    const myTripIds = new Set(myTrips.map(tr => tr.id));
+    const myExp     = (data.expenses|| []).filter(e  => myTripIds.has(e.tripId));
+    // Only expose the truck(s) assigned to this driver
+    const myTruck   = driver.truckId ? (data.trucks || []).filter(tk => tk.id === driver.truckId) : [];
+    return {
+      drivers:          [driver],
+      trips:            myTrips,
+      expenses:         myExp,
+      trucks:           myTruck,
+      clients:          [],
+      partners:         [], brokers: [], suppliers: [],
+      settlementStatus: {}, fixedTemplates: [], cobros: [],
+    };
+  }
+
+  return { error: "Unknown role" };
+}
+
+// ── Supabase helpers ──────────────────────────────────────────────────────────
+function supabaseHeaders(key) {
   return {
     "Content-Type": "application/json",
-    "apikey": env.SUPABASE_SERVICE_KEY,
-    "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+    "apikey": key,
+    "Authorization": `Bearer ${key}`,
   };
 }
 
-export default async (request, context) => {
+const defaultData = {
+  trips: [], drivers: [], trucks: [], clients: [], partners: [],
+  brokers: [], suppliers: [], expenses: [], settlementStatus: {},
+  cobros: [], fixedTemplates: [],
+};
+
+// ── Handler ───────────────────────────────────────────────────────────────────
+export default async (request) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  const { SUPABASE_URL, SUPABASE_SERVICE_KEY } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-    return Response.json({ error: "Missing Supabase env vars" }, { status: 500, headers: corsHeaders });
+  const { SUPABASE_URL, SUPABASE_SERVICE_KEY, BLOGIX_SECRET } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !BLOGIX_SECRET) {
+    return Response.json({ error: "Missing env vars" }, { status: 500, headers: corsHeaders });
   }
 
-  const env = { SUPABASE_URL, SUPABASE_SERVICE_KEY };
+  // ── Auth: verify session token ────────────────────────────────────────────
+  const authHeader = request.headers.get("Authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const sessionUser = token ? await verifyToken(token, BLOGIX_SECRET) : null;
+
+  if (!sessionUser) {
+    return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+  }
+
+  const tableUrl = `${SUPABASE_URL}/rest/v1/appdata`;
   const url = new URL(request.url);
   const isExport = url.pathname.endsWith("/export");
-  const tableUrl = `${SUPABASE_URL}/rest/v1/appdata`;
 
-  // ── GET ──────────────────────────────────────────────────────────────────
+  // ── GET ───────────────────────────────────────────────────────────────────
   if (request.method === "GET") {
     const res = await fetch(`${tableUrl}?id=eq.1&select=data`, {
-      headers: supabaseHeaders(env),
+      headers: supabaseHeaders(SUPABASE_SERVICE_KEY),
     });
 
     let data = defaultData;
@@ -62,7 +163,12 @@ export default async (request, context) => {
       if (rows.length > 0) data = rows[0].data;
     }
 
-    if (isExport) {
+    const filtered = applyRLS(data, sessionUser);
+    if (filtered.error) {
+      return Response.json({ error: filtered.error }, { status: 403, headers: corsHeaders });
+    }
+
+    if (isExport && sessionUser.role === "admin") {
       return new Response(JSON.stringify(data, null, 2), {
         status: 200,
         headers: {
@@ -73,11 +179,15 @@ export default async (request, context) => {
       });
     }
 
-    return Response.json(data, { headers: corsHeaders });
+    return Response.json(filtered, { headers: corsHeaders });
   }
 
-  // ── POST ─────────────────────────────────────────────────────────────────
+  // ── POST (write — admin only) ─────────────────────────────────────────────
   if (request.method === "POST") {
+    if (sessionUser.role !== "admin") {
+      return Response.json({ error: "Forbidden: only admins can write" }, { status: 403, headers: corsHeaders });
+    }
+
     let body;
     try { body = await request.json(); }
     catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
@@ -89,10 +199,7 @@ export default async (request, context) => {
 
     const res = await fetch(tableUrl, {
       method: "POST",
-      headers: {
-        ...supabaseHeaders(env),
-        "Prefer": "resolution=merge-duplicates",
-      },
+      headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" },
       body: JSON.stringify({ id: 1, data: body, updated_at: new Date().toISOString() }),
     });
 

@@ -9,18 +9,47 @@ export default function LoginPage({ t, onLogin, allUsers }) {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [keepSignedIn, setKeepSignedIn] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      // Try server auth first (gets signed JWT for RLS)
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (res.ok) {
+        const { user, token } = await res.json();
+        onLogin(user, keepSignedIn, token);
+        setLoading(false);
+        return;
+      }
+      // Server reachable but rejected — don't bypass to offline auth
+      if (res.status === 401 || res.status === 400) {
+        setError(t.invalidLogin);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // Server unavailable — fall back to local user list
+    }
+    // Offline fallback: validate against allUsers
     const user = allUsers.find(u => u.username === username && u.password === password);
-    if (user) { onLogin(user, keepSignedIn); setError(""); }
+    if (user) { onLogin(user, keepSignedIn, null); setError(""); }
     else setError(t.invalidLogin);
+    setLoading(false);
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${colors.bg} 0%, #0a1628 50%, #0f1d35 100%)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ width: 400, background: colors.card, borderRadius: 16, border: `1px solid ${colors.border}`, padding: 40, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
+    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${colors.bg} 0%, #0a1628 50%, #0f1d35 100%)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', sans-serif", padding: "20px 16px", boxSizing: "border-box" }}>
+      <div style={{ width: "100%", maxWidth: 400, background: colors.card, borderRadius: 16, border: `1px solid ${colors.border}`, padding: "40px 32px", boxShadow: "0 20px 60px rgba(0,0,0,0.5)", boxSizing: "border-box" }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <img src="/logo.png" alt="B-Logix" style={{ width: 72, height: 72, objectFit: "contain", marginBottom: 12 }} />
+          <div style={{ width: 80, height: 80, borderRadius: "22%", background: "white", overflow: "hidden", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 14, boxShadow: "0 4px 20px rgba(239,68,68,0.3)" }}>
+            <img src="/logo.png" alt="B-Logix" style={{ width: "95%", height: "95%", objectFit: "contain" }} />
+          </div>
           <h1 style={{ fontSize: 26, fontWeight: 800, color: colors.text, margin: "0 0 4px", letterSpacing: -0.5 }}>B-Logix</h1>
           <p style={{ color: colors.textMuted, fontSize: 13, margin: 0 }}>{t.loginTitle}</p>
         </div>
@@ -65,9 +94,10 @@ export default function LoginPage({ t, onLogin, allUsers }) {
           </label>
           <Btn
             onClick={handleLogin}
+            disabled={loading}
             style={{ width: "100%", justifyContent: "center", padding: "10px 0", fontSize: 14, marginTop: 4 }}
           >
-            <LogIn size={16} /> {t.login}
+            <LogIn size={16} /> {loading ? "Entrando..." : t.login}
           </Btn>
         </div>
       </div>

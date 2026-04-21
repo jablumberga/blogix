@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { colors } from "./constants/theme.js";
 import { Badge } from "./components/ui/index.jsx";
@@ -52,8 +52,8 @@ export default function App() {
     return () => window.removeEventListener("resize", handle);
   }, []);
 
-  if (!user) return <LoginPage t={t} allUsers={allUsers} onLogin={(u, remember) => {
-    login(u, remember);
+  if (!user) return <LoginPage t={t} allUsers={allUsers} onLogin={(u, remember, token) => {
+    login(u, remember, token);
     setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : "dashboard");
   }} />;
 
@@ -95,7 +95,9 @@ export default function App() {
 
       <div style={{ width: isMobile ? (sidebarOpen ? 220 : 0) : (sidebarOpen ? 220 : 60), ...(isMobile ? { position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 200 } : {}), background: colors.sidebar, borderRight: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", transition: "width 0.2s", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ padding: "14px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${colors.border}`, cursor: "pointer" }} onClick={() => setSidebarOpen(!sidebarOpen)}>
-          <img src="/logo.png" alt="B-Logix" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
+          <div style={{ width: 34, height: 34, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "white", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <img src="/logo.png" alt="B-Logix" style={{ width: "95%", height: "95%", objectFit: "contain" }} />
+          </div>
           {sidebarOpen && <span style={{ fontWeight: 700, fontSize: 16 }}>B-Logix</span>}
         </div>
 
@@ -117,6 +119,7 @@ export default function App() {
         </nav>
 
         <div style={{ padding: "8px 6px", borderTop: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", gap: 4 }}>
+          {isAdmin && <CfoChat data={{ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, settlementStatus }} t={t} sidebarOpen={sidebarOpen} isMobile={isMobile} />}
           <button onClick={() => setLang(lang === "en" ? "es" : "en")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
             <Globe size={14} />{sidebarOpen && <span>{lang === "en" ? "Español" : "English"}</span>}
           </button>
@@ -139,22 +142,21 @@ export default function App() {
         {page === "dashboard"   && isAdmin   && <AdminDashboard   {...ctx} setPage={setPage} />}
         {page === "partnerDash" && isPartner  && <PartnerDashboard {...ctx} />}
         {page === "driverDash"  && isDriver   && <DriverDashboard  {...ctx} />}
-        {page === "clients"                   && <ClientsPage      {...ctx} />}
-        {page === "cxc"                       && <CxCPage          {...ctx} />}
-        {page === "trips"                     && <TripsPage         {...ctx} />}
-        {page === "fleet"                     && <FleetPage         {...ctx} />}
-        {page === "drivers"                   && <DriversPage       {...ctx} />}
-        {page === "partners"    && isAdmin    && <PartnersPage      {...ctx} />}
-        {page === "brokers"                   && <BrokersPage       {...ctx} />}
-        {page === "expenses"                  && <ExpensesPage      {...ctx} />}
-        {page === "cxp"                       && <CxPPage           {...ctx} />}
-        {page === "nomina"                    && <NominaPage        {...ctx} />}
-        {page === "suppliers"                 && <SuppliersPage     {...ctx} />}
-        {page === "settlements"               && <SettlementsPage   {...ctx} />}
-        {page === "agents"      && isAdmin    && <AgentsPage        {...ctx} />}
+        {page === "clients"     && isAdmin    && <ClientsPage      {...ctx} />}
+        {page === "cxc"         && isAdmin    && <CxCPage          {...ctx} />}
+        {page === "trips"       && isAdmin    && <TripsPage        {...ctx} />}
+        {page === "fleet"       && isAdmin    && <FleetPage        {...ctx} />}
+        {page === "drivers"     && isAdmin    && <DriversPage      {...ctx} />}
+        {page === "partners"    && isAdmin    && <PartnersPage     {...ctx} />}
+        {page === "brokers"     && isAdmin    && <BrokersPage      {...ctx} />}
+        {page === "expenses"    && isAdmin    && <ExpensesPage     {...ctx} />}
+        {page === "cxp"         && isAdmin    && <CxPPage          {...ctx} />}
+        {page === "nomina"      && isAdmin    && <NominaPage       {...ctx} />}
+        {page === "suppliers"   && isAdmin    && <SuppliersPage    {...ctx} />}
+        {page === "settlements"               && <SettlementsPage  {...ctx} />}
+        {page === "agents"      && isAdmin    && <AgentsPage       {...ctx} />}
       </div>
 
-      {isAdmin && <CfoChat data={{ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, settlementStatus }} t={t} />}
     </div>
   );
 }

@@ -172,10 +172,10 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <Calendar size={14} color={colors.textMuted} />
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            style={{ padding: "5px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 12 }} />
+            style={{ padding: "5px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 16 }} />
           <span style={{ fontSize: 12, color: colors.textMuted }}>—</span>
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            style={{ padding: "5px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 12 }} />
+            style={{ padding: "5px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 16 }} />
           {[
             { key: "thisMonth", label: "Este mes" },
             { key: "lastMonth", label: "Mes anterior" },
