@@ -50,6 +50,11 @@ export function AppProvider({ children }) {
   // ── Load on mount ─────────────────────────────────────────────────────────
   useEffect(() => {
     loadData().then(({ source, data }) => {
+      if (source === "unauthenticated") {
+        setUser(null);
+        dataLoadedRef.current = true;
+        return;
+      }
       if (data && Object.keys(data).length > 0) {
         if (Array.isArray(data.clients))        setClients(data.clients);
         if (Array.isArray(data.partners))       setPartners(data.partners);

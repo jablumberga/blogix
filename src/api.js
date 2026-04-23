@@ -48,6 +48,12 @@ export async function loadData() {
   if (online) {
     try {
       const res = await fetch(API_URL, { headers: authHeaders() });
+      if (res.status === 401) {
+        // No valid token — clear session and force re-login
+        clearToken();
+        try { localStorage.removeItem("blogix_session"); } catch {}
+        return { source: "unauthenticated", data: null };
+      }
       if (res.ok) {
         const apiData = await res.json();
         if (apiData && Object.keys(apiData).length > 0) {
