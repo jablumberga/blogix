@@ -51,6 +51,11 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   };
 
   const handleTarifaOverride = (val) => {
+    if (val === "custom") {
+      setForm({ ...form, tarifaOverride: "custom" });
+      setRateMsg("✏️ Monto personalizado");
+      return;
+    }
     const override = val === "auto" ? null : val;
     const f = { ...form, tarifaOverride: override };
     const cl = clients.find(c => c.id === Number(f.clientId));
@@ -201,10 +206,25 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         </div>
         <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginTop: 10 }}>
-          <Sel label={t.truck} value={form.truckId} onChange={e => handleTruckChange(e.target.value)}>
-            <option value="">— {t.selectTruck || "Seleccionar camión"} —</option>
-            {trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate} ({tk.size || "T1"})</option>)}
-          </Sel>
+          <div>
+            <Sel label={t.truck} value={form.truckId} onChange={e => handleTruckChange(e.target.value)}>
+              <option value="">— {t.selectTruck || "Seleccionar camión"} —</option>
+              {trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate} ({tk.size || "T1"})</option>)}
+            </Sel>
+            {(() => {
+              const cl = clients.find(c => c.id === Number(form.clientId));
+              const rate = cl?.rates?.find(r => r.province === form.province && r.municipality === form.municipality);
+              const tk = trucks.find(t2 => t2.id === Number(form.truckId));
+              if (!rate || !tk) return null;
+              const activeSize = form.tarifaOverride === "custom" ? null : (form.tarifaOverride || tk.size || "T1");
+              return (
+                <div style={{ marginTop: 4, fontSize: 10, display: "flex", gap: 6 }}>
+                  {rate.priceT1 > 0 && <span style={{ padding: "2px 6px", borderRadius: 4, background: activeSize === "T1" ? colors.green+"22" : colors.bg, border: `1px solid ${activeSize === "T1" ? colors.green : colors.border}`, color: activeSize === "T1" ? colors.green : colors.textMuted, fontWeight: activeSize === "T1" ? 700 : 400 }}>T1 {fmt(rate.priceT1)}</span>}
+                  {rate.priceT2 > 0 && <span style={{ padding: "2px 6px", borderRadius: 4, background: activeSize === "T2" ? colors.accent+"22" : colors.bg, border: `1px solid ${activeSize === "T2" ? colors.accent : colors.border}`, color: activeSize === "T2" ? colors.accent : colors.textMuted, fontWeight: activeSize === "T2" ? 700 : 400 }}>T2 {fmt(rate.priceT2)}</span>}
+                </div>
+              );
+            })()}
+          </div>
           <Sel label={t.driver} value={form.driverId} onChange={e => setForm({ ...form, driverId: e.target.value })}>
             <option value="">— {t.selectDriver || "Seleccionar chofer"} —</option>
             {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -212,7 +232,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           <Sel label={t.broker + " (opt.)"} value={form.brokerId || ""} onChange={e => setForm({ ...form, brokerId: e.target.value })}><option value="">{t.none}</option>{brokers.map(b => <option key={b.id} value={b.id}>{b.name} ({b.commissionPct}%)</option>)}</Sel>
           <div>
             <Inp label={t.rate} type="number" value={form.revenue} onChange={e => setForm({ ...form, revenue: e.target.value })} />
-            {rateMsg && <div style={{ fontSize: 10, color: form.tarifaOverride ? colors.orange : colors.green, marginTop: 3 }}><CheckCircle2 size={10} /> {rateMsg}</div>}
+            {rateMsg && <div style={{ fontSize: 10, color: form.tarifaOverride === "custom" ? "#9b7fe8" : form.tarifaOverride ? colors.orange : colors.green, marginTop: 3 }}><CheckCircle2 size={10} /> {rateMsg}</div>}
           </div>
         </div>
         <div style={{ marginTop: 10, padding: "10px 14px", background: form.tarifaOverride ? colors.orange + "10" : "transparent", borderRadius: 8, border: `1px dashed ${form.tarifaOverride ? colors.orange + "80" : colors.border}`, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -221,10 +241,13 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
             <option value="auto">Auto — usar tamaño del camión</option>
             <option value="T1">T1 — tarifa estándar</option>
             <option value="T2">T2 — tarifa premium ↑</option>
+            <option value="custom">✏️ Custom — monto manual</option>
           </select>
-          {form.tarifaOverride
-            ? <span style={{ fontSize: 11, color: colors.orange, fontWeight: 700 }}>⚡ Override activo: tarifa {form.tarifaOverride} aplicada</span>
-            : <span style={{ fontSize: 11, color: colors.textMuted }}>Camión registrado como {trucks.find(t2 => t2.id === Number(form.truckId))?.size || "T1"} — auto</span>
+          {form.tarifaOverride === "custom"
+            ? <Inp type="number" placeholder="Monto personalizado RD$" value={form.revenue} onChange={e => setForm({ ...form, revenue: e.target.value })} style={{ width: 180, fontSize: 12 }} />
+            : form.tarifaOverride
+              ? <span style={{ fontSize: 11, color: colors.orange, fontWeight: 700 }}>⚡ Override activo: tarifa {form.tarifaOverride} aplicada</span>
+              : <span style={{ fontSize: 11, color: colors.textMuted }}>Camión registrado como {trucks.find(t2 => t2.id === Number(form.truckId))?.size || "T1"} — auto</span>
           }
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, marginTop: 10 }}>
