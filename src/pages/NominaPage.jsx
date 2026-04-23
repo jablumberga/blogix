@@ -81,6 +81,7 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
     e.date >= periodDateFrom && e.date <= periodDateTo
   );
   const effectivePendingTotal = totalOverrideExp ? totalOverrideExp.amount : pendingTotal;
+  const effectivePaidTotal    = (totalOverrideExp && totalOverrideExp.status === "paid") ? totalOverrideExp.amount : paidTotal;
   const netoAPagar = Math.max(0, effectivePendingTotal - adelantos);
 
   const saveTotalOverride = (amount, note) => {
@@ -253,9 +254,9 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
         </button>
         {pending.length > 0
           ? <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {paidTotal > 0 && (
+              {effectivePaidTotal > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 11, color: colors.green }}>Pagado: {fmt(paidTotal)}</span>
+                  <span style={{ fontSize: 11, color: colors.green }}>Pagado: {fmt(effectivePaidTotal)}</span>
                   <button onClick={onMarkUnpaid} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 10 }}>
                     Desmarcar
                   </button>
@@ -300,7 +301,7 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
             </div>
           : <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, color: colors.green, background: colors.green+"18", padding: "6px 12px", borderRadius: 20 }}>
-                <CheckCircle2 size={13} /><span style={{ fontSize: 12, fontWeight: 600 }}>Pagado · {fmt(paidTotal)}</span>
+                <CheckCircle2 size={13} /><span style={{ fontSize: 12, fontWeight: 600 }}>Pagado · {fmt(effectivePaidTotal)}</span>
               </div>
               <button onClick={onMarkUnpaid} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 11 }}>
                 Desmarcar
