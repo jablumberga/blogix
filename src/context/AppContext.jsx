@@ -86,10 +86,11 @@ export function AppProvider({ children }) {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Auto-save (debounced 1.5s) ────────────────────────────────────────────
+  // ── Auto-save (debounced 1.5s, admin only) ───────────────────────────────
   useEffect(() => {
     if (!dataLoadedRef.current) return;
-    if (isReloadingRef.current) return; // don't save empty state during post-login reload
+    if (isReloadingRef.current) return;
+    if (user?.role !== "admin") return; // partners/drivers are read-only
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSyncStatus("saving");
