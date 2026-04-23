@@ -197,6 +197,23 @@ export default async (request) => {
       return Response.json({ error: "Invalid data structure" }, { status: 400, headers: corsHeaders });
     }
 
+    // Safety guard: reject a save where ALL core arrays are empty when DB already has data.
+    // This prevents accidental data wipes (e.g. save firing before state loads).
+    const coreKeys = ["trips", "clients", "trucks", "drivers", "expenses"];
+    const incomingTotal = coreKeys.reduce((s, k) => s + (Array.isArray(body[k]) ? body[k].length : 0), 0);
+    if (incomingTotal === 0) {
+      // Check what's currently in the DB before allowing a full wipe
+      const chkRes = await fetch(`${tableUrl}?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+      if (chkRes.ok) {
+        const rows = await chkRes.json();
+        const existing = rows[0]?.data;
+        const existingTotal = coreKeys.reduce((s, k) => s + (Array.isArray(existing?.[k]) ? existing[k].length : 0), 0);
+        if (existingTotal > 0) {
+          return Response.json({ error: "Rejected: incoming data has no records but DB already has data. Possible accidental wipe." }, { status: 409, headers: corsHeaders });
+        }
+      }
+    }
+
     const res = await fetch(tableUrl, {
       method: "POST",
       headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" },
