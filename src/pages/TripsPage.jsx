@@ -133,7 +133,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
 
   const addDiscountRow = () => setForm({ ...form, discounts: [...form.discounts, { desc: "", amount: 0 }] });
 
-  let filtered = trips;
+  let filtered = [...trips].sort((a, b) => b.date.localeCompare(a.date));
   if (filterStatus !== "all") filtered = filtered.filter(tr => tr.status === filterStatus);
   if (filterClient !== "all") filtered = filtered.filter(tr => tr.clientId === Number(filterClient));
   if (filterDriver !== "all") filtered = filtered.filter(tr => tr.driverId === Number(filterDriver));

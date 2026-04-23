@@ -43,9 +43,29 @@ function OverrideInline({ exp, onSave, onCancel }) {
   );
 }
 
+function TotalOverrideInline({ current, note, onSave, onCancel }) {
+  const [amount, setAmount] = useState(current);
+  const [n, setN] = useState(note || "");
+  const inp = { background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 5, color: colors.text, padding: "4px 8px", fontSize: 12 };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8, padding: "8px 10px", background: "#7c3aed18", borderRadius: 7, border: `1px solid #7c3aed40` }}>
+      <span style={{ fontSize: 11, color: "#9b7fe8", fontWeight: 600 }}>✏️ Override total:</span>
+      <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} style={{ ...inp, width: 100 }} />
+      <input placeholder="Nota (ej: acuerdo especial, descuento...)" value={n} onChange={e => setN(e.target.value)} style={{ ...inp, width: 230 }} />
+      <button onClick={() => onSave(amount, n)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, border: "none", background: colors.green, color: "white", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+        <Check size={11} /> Guardar
+      </button>
+      <button onClick={onCancel} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 11 }}>
+        <X size={11} /> Cancelar
+      </button>
+    </div>
+  );
+}
+
 function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal, trips, allExpenses, periodDateFrom, periodDateTo, periodLabel, onMarkPaid, setExpenses }) {
   const [showDetail, setShowDetail] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [editingTotal, setEditingTotal] = useState(false);
 
   const adelantoExps = (allExpenses||[]).filter(e =>
     e.category === "adelanto_conductor" &&
@@ -53,7 +73,44 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
     e.date >= periodDateFrom && e.date <= periodDateTo
   );
   const adelantos = adelantoExps.reduce((s, e) => s + e.amount, 0);
-  const netoAPagar = Math.max(0, pendingTotal - adelantos);
+
+  // Total override: a special expense entry that replaces the sum of all individual entries
+  const totalOverrideExp = (allExpenses||[]).find(e =>
+    e.category === "nominaTotalOverride" &&
+    e.driverId === driver.id &&
+    e.date >= periodDateFrom && e.date <= periodDateTo
+  );
+  const effectivePendingTotal = totalOverrideExp ? totalOverrideExp.amount : pendingTotal;
+  const netoAPagar = Math.max(0, effectivePendingTotal - adelantos);
+
+  const saveTotalOverride = (amount, note) => {
+    setExpenses(prev => {
+      const existing = prev.find(e =>
+        e.category === "nominaTotalOverride" && e.driverId === driver.id &&
+        e.date >= periodDateFrom && e.date <= periodDateTo
+      );
+      if (existing) {
+        return prev.map(e => e.id === existing.id
+          ? { ...e, amount, overrideNote: note || undefined, calcAmount: pendingTotal }
+          : e);
+      }
+      const newId = Math.max(0, ...prev.map(e => e.id)) + 1;
+      return [...prev, {
+        id: newId, category: "nominaTotalOverride", driverId: driver.id,
+        amount, overrideNote: note || undefined, calcAmount: pendingTotal,
+        date: periodDateFrom, description: note || "Override total nómina",
+        paymentMethod: "transfer", status: "pending", supplierId: null, tripId: null,
+      }];
+    });
+    setEditingTotal(false);
+  };
+
+  const clearTotalOverride = () => {
+    setExpenses(prev => prev.filter(e =>
+      !(e.category === "nominaTotalOverride" && e.driverId === driver.id &&
+        e.date >= periodDateFrom && e.date <= periodDateTo)
+    ));
+  };
 
   const handleOverrideSave = (exp, newAmount, note) => {
     setExpenses(prev => prev.map(e => {
@@ -138,10 +195,15 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
   <tbody>
     ${tripRowsHTML}
     <tr class="sep">
-      <td colspan="3" class="total-lbl">Bruto a pagar:</td>
+      <td colspan="3" class="total-lbl">Bruto calculado:</td>
       <td class="total-val" style="color:#e67e22">${fmt(pendingTotal)}</td>
       <td></td>
     </tr>
+    ${totalOverrideExp ? `<tr>
+      <td colspan="3" class="total-lbl" style="color:#7c3aed">✏️ Override total${totalOverrideExp.overrideNote ? ` (${totalOverrideExp.overrideNote})` : ""}:</td>
+      <td class="total-val" style="color:#7c3aed">${fmt(totalOverrideExp.amount)}</td>
+      <td></td>
+    </tr>` : ""}
     ${adelantos > 0 ? `<tr>
       <td colspan="3" class="total-lbl red">Adelantos a descontar:</td>
       <td class="total-val red">− ${fmt(adelantos)}</td>
@@ -193,20 +255,39 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
           ? <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               {paidTotal > 0 && <span style={{ fontSize: 11, color: colors.green }}>Pagado: {fmt(paidTotal)}</span>}
               <div style={{ textAlign: "right" }}>
-                {adelantos > 0
+                {totalOverrideExp
                   ? <>
-                      <div style={{ fontSize: 10, color: colors.textMuted }}>Bruto: {fmt(pendingTotal)}</div>
-                      <div style={{ fontSize: 10, color: colors.orange }}>Adelanto: –{fmt(adelantos)}</div>
-                      <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>A TRANSFERIR</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: colors.orange }}>{fmt(netoAPagar)}</div>
+                      <div style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(pendingTotal)}</div>
+                      <div style={{ fontSize: 10, color: "#9b7fe8", fontWeight: 600 }}>✏️ OVERRIDE</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: "#9b7fe8" }}>{fmt(netoAPagar)}</div>
+                      {totalOverrideExp.overrideNote && <div style={{ fontSize: 10, color: "#9b7fe8" }}>{totalOverrideExp.overrideNote}</div>}
                     </>
-                  : <>
-                      <div style={{ fontSize: 10, color: colors.textMuted }}>A PAGAR</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: colors.orange }}>{fmt(pendingTotal)}</div>
-                    </>
+                  : adelantos > 0
+                    ? <>
+                        <div style={{ fontSize: 10, color: colors.textMuted }}>Bruto: {fmt(pendingTotal)}</div>
+                        <div style={{ fontSize: 10, color: colors.orange }}>Adelanto: –{fmt(adelantos)}</div>
+                        <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>A TRANSFERIR</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: colors.orange }}>{fmt(netoAPagar)}</div>
+                      </>
+                    : <>
+                        <div style={{ fontSize: 10, color: colors.textMuted }}>A PAGAR</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: colors.orange }}>{fmt(effectivePendingTotal)}</div>
+                      </>
                 }
               </div>
-              <button onClick={onMarkPaid} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 8, border: "none", background: colors.green, color: "white", cursor: "pointer", fontWeight: 600, fontSize: 12 }}>
+              <button
+                onClick={() => setEditingTotal(t => !t)}
+                title="Override total"
+                style={{ background: totalOverrideExp ? "#7c3aed22" : "transparent", border: `1px solid ${totalOverrideExp ? "#7c3aed60" : colors.border}`, color: totalOverrideExp ? "#9b7fe8" : colors.textMuted, borderRadius: 6, padding: "5px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11 }}
+              >
+                <Pencil size={11} /> Total
+              </button>
+              {totalOverrideExp && (
+                <button onClick={clearTotalOverride} title="Quitar override" style={{ background: "transparent", border: "none", color: colors.textMuted, cursor: "pointer", padding: 4 }}>
+                  <X size={12} />
+                </button>
+              )}
+              <button onClick={() => onMarkPaid(effectivePendingTotal)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 8, border: "none", background: colors.green, color: "white", cursor: "pointer", fontWeight: 600, fontSize: 12 }}>
                 <CheckCircle2 size={13} /> Marcar Pagado
               </button>
             </div>
@@ -216,6 +297,14 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
         }
       </div>
     </div>
+    {editingTotal && (
+      <TotalOverrideInline
+        current={totalOverrideExp ? totalOverrideExp.amount : pendingTotal}
+        note={totalOverrideExp?.overrideNote || ""}
+        onSave={saveTotalOverride}
+        onCancel={() => setEditingTotal(false)}
+      />
+    )}
     {showDetail && <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${colors.border}` }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
@@ -306,7 +395,7 @@ function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, 
     {open && driverCards.map(g => (
       <NominaDriverCard key={g.driver.id} {...g} trips={trips} allExpenses={allExpenses}
         periodDateFrom={pd.dateFrom} periodDateTo={pd.dateTo} periodLabel={pd.label}
-        onMarkPaid={() => markPaid(g.driver, pd)} setExpenses={setExpenses} />
+        onMarkPaid={(effectiveTotal) => markPaid(g.driver, pd, effectiveTotal)} setExpenses={setExpenses} />
     ))}
   </div>;
 }
@@ -356,11 +445,12 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
     setTimeout(() => setRepairMsg(""), 6000);
   };
 
-  const markPaid = (driver, pd) => {
+  const markPaid = (driver, pd, effectiveTotal) => {
     setExpenses(prev => prev.map(e => {
       const inPeriod = e.date >= pd.dateFrom && e.date <= pd.dateTo;
       const isThisDriver = e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name));
-      if (e.category === "driverPay" && inPeriod && isThisDriver && (!e.status || e.status === "pending")) {
+      const isPayEntry = (e.category === "driverPay" || e.category === "nominaTotalOverride") && inPeriod && isThisDriver;
+      if (isPayEntry && (!e.status || e.status === "pending")) {
         return { ...e, status: "paid", paidDate: new Date().toISOString().slice(0,10) };
       }
       return e;
