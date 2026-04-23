@@ -45,6 +45,8 @@ export default function App() {
   });
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== "undefined" ? window.innerWidth > 768 : true);
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
+  const [recovering, setRecovering] = useState(false);
+  const [recovered, setRecovered] = useState(false);
 
   useEffect(() => {
     const handle = () => { const m = window.innerWidth <= 768; setIsMobile(m); if (!m) setSidebarOpen(true); };
@@ -58,8 +60,6 @@ export default function App() {
   }} />;
 
   const alertCount = alerts.filter(a => a.severity === "error" || a.severity === "warning").length;
-  const [recovering, setRecovering] = useState(false);
-  const [recovered, setRecovered] = useState(false);
   const localDataCount = trips.length + clients.length + trucks.length + drivers.length + expenses.length;
   const showRecoveryBanner = isAdmin && localDataCount > 0 && syncStatus === "offline" && !recovered;
 
