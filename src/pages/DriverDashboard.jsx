@@ -108,7 +108,15 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
     if (driverObj?.salaryType === "porcentaje") return (tr.revenue || 0) * ((driverObj.percentageAmount || 0) / 100);
     return 0;
   };
-  const totalBruto = driverObj?.salaryType === "fixed" ? (driverObj.fixedAmount || 0) : allMyTrips.reduce((s, tr) => s + calcPay(tr), 0);
+  const totalBruto = activePeriods.reduce((sum, pd) => {
+    const override = (expenses || []).find(e =>
+      e.category === "nominaTotalOverride" && e.driverId === driverObj?.id &&
+      e.date >= pd.dateFrom && e.date <= pd.dateTo
+    );
+    if (override) return sum + override.amount;
+    if (driverObj?.salaryType === "fixed") return sum + (driverObj.fixedAmount || 0);
+    return sum + allMyTrips.filter(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo).reduce((s, tr) => s + calcPay(tr), 0);
+  }, 0);
   const totalHelpers = allMyTrips.reduce((s, tr) => s + (tr.helpers || []).reduce((h, x) => h + (x.pay || 0), 0), 0);
   const totalDescuentos = allMyTrips.reduce((s, tr) => s + (tr.discounts || []).reduce((d, x) => d + (x.amount || 0), 0), 0);
   const totalAdelantos = (expenses || []).filter(e => e.category === "adelanto_conductor" && (e.driverId === driverObj?.id || (e.tripId && allMyTrips.some(tr => tr.id === e.tripId)))).reduce((s, e) => s + (e.amount || 0), 0);
@@ -198,9 +206,16 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
     return 0;
   };
 
-  const brutoPay = driverObj?.salaryType === "fixed"
+  const calcBruto = driverObj?.salaryType === "fixed"
     ? (driverObj.fixedAmount || 0)
     : periodTrips.reduce((s, tr) => s + calcDriverPay(tr), 0);
+
+  const totalOverrideExp = (expenses || []).find(e =>
+    e.category === "nominaTotalOverride" &&
+    e.driverId === driverObj?.id &&
+    e.date >= pd.dateFrom && e.date <= pd.dateTo
+  );
+  const brutoPay = totalOverrideExp ? totalOverrideExp.amount : calcBruto;
 
   const helperPay = periodTrips.reduce((s, tr) => s + (tr.helpers || []).reduce((h, x) => h + (x.pay || 0), 0), 0);
   const discountsTotal = periodTrips.reduce((s, tr) => s + (tr.discounts || []).reduce((d, x) => d + (x.amount || 0), 0), 0);
@@ -213,9 +228,10 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
   const adelantos = adelantoExps.reduce((s, e) => s + (e.amount || 0), 0);
 
   const isPaid = (expenses || []).some(e =>
-    e.category === "driverPay" &&
+    (e.category === "driverPay" || e.category === "nominaTotalOverride") &&
+    e.driverId === driverObj?.id &&
     e.date >= pd.dateFrom && e.date <= pd.dateTo &&
-    periodTrips.some(tr => tr.id === e.tripId)
+    e.status === "paid"
   );
 
   const netoAPagar = Math.max(0, brutoPay - helperPay - adelantos - discountsTotal);
@@ -324,7 +340,13 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
           </>}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${colors.border}33`, paddingTop: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>{driverObj?.salaryType === "fixed" ? "Salario Fijo" : driverObj?.salaryType === "porcentaje" ? `Comisión (${driverObj.percentageAmount || 0}%)` : "Pago por Viajes"}</span><span style={{ color: colors.green, fontWeight: 600 }}>{fmt(brutoPay)}</span></div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <span style={{ color: colors.textMuted }}>{totalOverrideExp ? "✏️ Override (ajuste admin)" : driverObj?.salaryType === "fixed" ? "Salario Fijo" : driverObj?.salaryType === "porcentaje" ? `Comisión (${driverObj.percentageAmount || 0}%)` : "Pago por Viajes"}</span>
+              <div style={{ textAlign: "right" }}>
+                {totalOverrideExp && <div style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(calcBruto)}</div>}
+                <span style={{ color: totalOverrideExp ? "#9b7fe8" : colors.green, fontWeight: 600 }}>{fmt(brutoPay)}</span>
+              </div>
+            </div>
             {helperPay > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Ayudantes</span><span style={{ color: colors.orange, fontWeight: 600 }}>− {fmt(helperPay)}</span></div>}
             {adelantos > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Adelantos</span><span style={{ color: colors.red, fontWeight: 600 }}>− {fmt(adelantos)}</span></div>}
             {discountsTotal > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Descuentos</span><span style={{ color: colors.red, fontWeight: 600 }}>− {fmt(discountsTotal)}</span></div>}
