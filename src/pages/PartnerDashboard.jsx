@@ -40,7 +40,29 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, partner, 
   let filtered = trips.filter(tr => (partnerTruckIds||[]).includes(tr.truckId) && tr.date >= dateFrom && tr.date <= dateTo);
   if (truckFilter !== "all") filtered = filtered.filter(tr => tr.truckId === Number(truckFilter));
 
-  const tripExpenses   = expenses.filter(e => filtered.some(tr => tr.id === e.tripId));
+  const tripIdSet      = new Set(filtered.map(tr => tr.id));
+  const driverIds      = new Set(filtered.map(tr => tr.driverId).filter(Boolean));
+  const tripDriverMap  = new Map(filtered.map(tr => [tr.id, tr.driverId]).filter(([,d]) => d));
+
+  // nominaTotalOverride replaces individual driverPay for that driver in this period
+  const overrideExps   = expenses.filter(e =>
+    e.category === "nominaTotalOverride" &&
+    driverIds.has(e.driverId) &&
+    e.date >= dateFrom && e.date <= dateTo
+  );
+  const overriddenDriverIds = new Set(overrideExps.map(e => e.driverId));
+
+  const tripExpenses   = [
+    ...expenses.filter(e => {
+      if (!tripIdSet.has(e.tripId)) return false;
+      if (e.category === "driverPay") {
+        const dId = e.driverId || tripDriverMap.get(e.tripId);
+        if (dId && overriddenDriverIds.has(dId)) return false;
+      }
+      return true;
+    }),
+    ...overrideExps,
+  ];
   const retenciones    = tripExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s+e.amount, 0);
   const otrosGastos    = tripExpenses.filter(e => e.category !== "broker_commission").reduce((s,e) => s+e.amount, 0);
   const rev  = filtered.reduce((s,tr) => s+tr.revenue, 0);
