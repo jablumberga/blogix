@@ -70,11 +70,14 @@ function applyRLS(data, user) {
     const myTrucks   = (data.trucks   || []).filter(tk => tk.partnerId === partner.id);
     const myTruckIds = new Set(myTrucks.map(tk => tk.id));
     const myTrips    = (data.trips    || []).filter(tr => myTruckIds.has(tr.truckId));
-    const myTripIds  = new Set(myTrips.map(tr => tr.id));
-    const myExp      = (data.expenses || []).filter(e  => myTripIds.has(e.tripId));
-    // Only expose clients/drivers actually referenced in partner's trips
+    const myTripIds   = new Set(myTrips.map(tr => tr.id));
     const myClientIds = new Set(myTrips.map(tr => tr.clientId).filter(Boolean));
     const myDriverIds = new Set(myTrips.map(tr => tr.driverId).filter(Boolean));
+    // Include nominaTotalOverride expenses (tripId: null) for drivers on partner's trips
+    const myExp = (data.expenses || []).filter(e =>
+      myTripIds.has(e.tripId) ||
+      (e.category === "nominaTotalOverride" && myDriverIds.has(e.driverId))
+    );
     return {
       partners:         [partner],
       trucks:           myTrucks,
@@ -95,7 +98,11 @@ function applyRLS(data, user) {
     if (!driver) return { error: "Driver not found" };
     const myTrips   = (data.trips   || []).filter(tr => tr.driverId === driver.id);
     const myTripIds = new Set(myTrips.map(tr => tr.id));
-    const myExp     = (data.expenses|| []).filter(e  => myTripIds.has(e.tripId));
+    // Include nominaTotalOverride expenses (tripId: null) for this driver
+    const myExp     = (data.expenses|| []).filter(e =>
+      myTripIds.has(e.tripId) ||
+      (e.category === "nominaTotalOverride" && e.driverId === driver.id)
+    );
     // Only expose the truck(s) assigned to this driver
     const myTruck   = driver.truckId ? (data.trucks || []).filter(tk => tk.id === driver.truckId) : [];
     return {
