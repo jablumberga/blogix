@@ -70,12 +70,21 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, t, isPart
             const catTotals = EXPENSE_CATEGORIES.filter(c => c !== "broker_commission").map(c => ({
               cat: c, label: t[c] || c, total: pExpenses.filter(e => e.category === c).reduce((s,e) => s+e.amount, 0)
             })).filter(x => x.total > 0);
-            return catTotals.map(x => (
-              <div key={x.cat} style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: colors.textMuted }}>{x.label}</span>
-                <span style={{ color: colors.orange }}>− {fmt(x.total)}</span>
-              </div>
-            ));
+            const overrideTotal = pExpenses.filter(e => e.category === "nominaTotalOverride").reduce((s,e) => s+e.amount, 0);
+            return <>
+              {catTotals.map(x => (
+                <div key={x.cat} style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: colors.textMuted }}>{x.label}</span>
+                  <span style={{ color: colors.orange }}>− {fmt(x.total)}</span>
+                </div>
+              ))}
+              {overrideTotal > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: colors.textMuted }}>Nómina (override)</span>
+                  <span style={{ color: colors.orange }}>− {fmt(overrideTotal)}</span>
+                </div>
+              )}
+            </>;
           })()}
           <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 6, borderTop: `1px solid ${colors.border}` }}>
             <span style={{ fontWeight: 600 }}>Neto</span>
@@ -100,9 +109,31 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
 
   const toggleStatus = (key) => setSettlementStatus(prev => ({ ...prev, [key]: prev[key] === "paid" ? "unpaid" : "paid" }));
 
-  const buildCard = (p, pTrips, key) => {
-    const tripIdSet  = new Set(pTrips.map(tr => tr.id));
-    const pExpenses  = expenses.filter(e => tripIdSet.has(e.tripId));
+  const buildCard = (p, pTrips, pd, key) => {
+    const tripIdSet     = new Set(pTrips.map(tr => tr.id));
+    const driverIds     = new Set(pTrips.map(tr => tr.driverId).filter(Boolean));
+    // map tripId → driverId so we can resolve old expenses that lack driverId field
+    const tripDriverMap = new Map(pTrips.map(tr => [tr.id, tr.driverId]).filter(([,d]) => d));
+
+    // nominaTotalOverride expenses replace individual driverPay for that driver
+    const overrideExpenses = expenses.filter(e =>
+      e.category === "nominaTotalOverride" &&
+      driverIds.has(e.driverId) &&
+      e.date >= pd.dateFrom && e.date <= pd.dateTo
+    );
+    const overriddenDriverIds = new Set(overrideExpenses.map(e => e.driverId));
+
+    // Exclude driverPay for drivers that have a total override.
+    // Fall back to tripDriverMap for old expenses that may lack the driverId field.
+    const tripExpenses = expenses.filter(e => {
+      if (!tripIdSet.has(e.tripId)) return false;
+      if (e.category === "driverPay") {
+        const dId = e.driverId || tripDriverMap.get(e.tripId);
+        if (dId && overriddenDriverIds.has(dId)) return false;
+      }
+      return true;
+    });
+    const pExpenses  = [...tripExpenses, ...overrideExpenses];
     const retenciones = pExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s+e.amount, 0);
     const otrosGastos = pExpenses.filter(e => e.category !== "broker_commission").reduce((s,e) => s+e.amount, 0);
     const rev        = pTrips.reduce((s,tr) => s+tr.revenue, 0);
@@ -120,7 +151,7 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
       const myTrips = trips.filter(tr => (partnerTruckIds||[]).includes(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo);
       if (myTrips.length === 0) return null;
       const key = `${partner?.id}-${pd.mStr}-${pd.half}`;
-      return { pd, card: buildCard(partner||{}, myTrips, key) };
+      return { pd, card: buildCard(partner||{}, myTrips, pd, key) };
     }).filter(Boolean);
 
     return <div>
@@ -138,7 +169,7 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
       const pTrips  = trips.filter(tr => pTruckSet.has(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo);
       if (pTrips.length === 0) return null;
       const key = `${p.id}-${pd.mStr}-${pd.half}`;
-      return { p, card: buildCard(p, pTrips, key) };
+      return { p, card: buildCard(p, pTrips, pd, key) };
     }).filter(Boolean);
     if (partnerCards.length === 0) return null;
     const periodTotal = partnerCards.reduce((s,x) => s + x.card.toTransfer, 0);

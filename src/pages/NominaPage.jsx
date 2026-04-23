@@ -62,7 +62,7 @@ function TotalOverrideInline({ current, note, onSave, onCancel }) {
   );
 }
 
-function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal, trips, allExpenses, periodDateFrom, periodDateTo, periodLabel, onMarkPaid, setExpenses }) {
+function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal, trips, allExpenses, periodDateFrom, periodDateTo, periodLabel, onMarkPaid, onMarkUnpaid, setExpenses }) {
   const [showDetail, setShowDetail] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editingTotal, setEditingTotal] = useState(false);
@@ -253,7 +253,14 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
         </button>
         {pending.length > 0
           ? <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {paidTotal > 0 && <span style={{ fontSize: 11, color: colors.green }}>Pagado: {fmt(paidTotal)}</span>}
+              {paidTotal > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 11, color: colors.green }}>Pagado: {fmt(paidTotal)}</span>
+                  <button onClick={onMarkUnpaid} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 10 }}>
+                    Desmarcar
+                  </button>
+                </div>
+              )}
               <div style={{ textAlign: "right" }}>
                 {totalOverrideExp
                   ? <>
@@ -291,8 +298,13 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
                 <CheckCircle2 size={13} /> Marcar Pagado
               </button>
             </div>
-          : <div style={{ display: "flex", alignItems: "center", gap: 6, color: colors.green, background: colors.green+"18", padding: "6px 12px", borderRadius: 20 }}>
-              <CheckCircle2 size={13} /><span style={{ fontSize: 12, fontWeight: 600 }}>Pagado · {fmt(paidTotal)}</span>
+          : <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, color: colors.green, background: colors.green+"18", padding: "6px 12px", borderRadius: 20 }}>
+                <CheckCircle2 size={13} /><span style={{ fontSize: 12, fontWeight: 600 }}>Pagado · {fmt(paidTotal)}</span>
+              </div>
+              <button onClick={onMarkUnpaid} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 11 }}>
+                Desmarcar
+              </button>
             </div>
         }
       </div>
@@ -371,7 +383,7 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
   </Card>;
 }
 
-function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, allExpenses, markPaid, defaultOpen, setExpenses }) {
+function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, allExpenses, markPaid, markUnpaid, defaultOpen, setExpenses }) {
   const [open, setOpen] = useState(defaultOpen);
   const allPaid = periodPending === 0;
 
@@ -395,20 +407,32 @@ function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, 
     {open && driverCards.map(g => (
       <NominaDriverCard key={g.driver.id} {...g} trips={trips} allExpenses={allExpenses}
         periodDateFrom={pd.dateFrom} periodDateTo={pd.dateTo} periodLabel={pd.label}
-        onMarkPaid={(effectiveTotal) => markPaid(g.driver, pd, effectiveTotal)} setExpenses={setExpenses} />
+        onMarkPaid={(effectiveTotal) => markPaid(g.driver, pd, effectiveTotal)}
+        onMarkUnpaid={() => markUnpaid(g.driver, pd)}
+        setExpenses={setExpenses} />
     ))}
   </div>;
 }
 
 export default function NominaPage({ t, expenses, setExpenses, trips, drivers, trucks }) {
+  const isPayEntry = (e, driver, pd) => {
+    const inPeriod = e.date >= pd.dateFrom && e.date <= pd.dateTo;
+    const isThisDriver = e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name));
+    return (e.category === "driverPay" || e.category === "nominaTotalOverride") && inPeriod && isThisDriver;
+  };
+
   const markPaid = (driver, pd, effectiveTotal) => {
     setExpenses(prev => prev.map(e => {
-      const inPeriod = e.date >= pd.dateFrom && e.date <= pd.dateTo;
-      const isThisDriver = e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name));
-      const isPayEntry = (e.category === "driverPay" || e.category === "nominaTotalOverride") && inPeriod && isThisDriver;
-      if (isPayEntry && (!e.status || e.status === "pending")) {
-        return { ...e, status: "paid", paidDate: new Date().toISOString().slice(0,10) };
-      }
+      if (isPayEntry(e, driver, pd) && (!e.status || e.status === "pending"))
+        return { ...e, status: "paid", paidDate: new Date().toISOString().slice(0, 10) };
+      return e;
+    }));
+  };
+
+  const markUnpaid = (driver, pd) => {
+    setExpenses(prev => prev.map(e => {
+      if (isPayEntry(e, driver, pd) && e.status === "paid")
+        return { ...e, status: "pending", paidDate: null };
       return e;
     }));
   };
@@ -451,7 +475,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
     {periodGroups.map(({ pd, driverCards, periodPending, periodPaid }, idx) => (
       <NominaPeriodGroup key={`${pd.mStr}-${pd.half}`} pd={pd} driverCards={driverCards}
         periodPending={periodPending} periodPaid={periodPaid} trips={trips}
-        allExpenses={expenses} markPaid={markPaid} defaultOpen={idx === 0}
+        allExpenses={expenses} markPaid={markPaid} markUnpaid={markUnpaid} defaultOpen={idx === 0}
         setExpenses={setExpenses} />
     ))}
   </div>;
