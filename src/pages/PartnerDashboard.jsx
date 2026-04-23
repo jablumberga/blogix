@@ -41,13 +41,18 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, partner, 
   if (truckFilter !== "all") filtered = filtered.filter(tr => tr.truckId === Number(truckFilter));
 
   const tripIdSet      = new Set(filtered.map(tr => tr.id));
-  const driverIds      = new Set(filtered.map(tr => tr.driverId).filter(Boolean));
   const tripDriverMap  = new Map(filtered.map(tr => [tr.id, tr.driverId]).filter(([,d]) => d));
+
+  // Collect driver IDs from both trips and driverPay expenses (covers trips without driverId)
+  const tripDriverPayExps  = expenses.filter(e => e.category === "driverPay" && tripIdSet.has(e.tripId));
+  const driverIdsFromTrips = new Set(filtered.map(tr => tr.driverId).filter(Boolean));
+  const driverIdsFromPay   = new Set(tripDriverPayExps.map(e => e.driverId).filter(Boolean));
+  const allDriverIds       = new Set([...driverIdsFromTrips, ...driverIdsFromPay]);
 
   // nominaTotalOverride replaces individual driverPay for that driver in this period
   const overrideExps   = expenses.filter(e =>
     e.category === "nominaTotalOverride" &&
-    driverIds.has(e.driverId) &&
+    allDriverIds.has(e.driverId) &&
     e.date >= dateFrom && e.date <= dateTo
   );
   const overriddenDriverIds = new Set(overrideExps.map(e => e.driverId));

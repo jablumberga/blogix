@@ -111,20 +111,25 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
 
   const buildCard = (p, pTrips, pd, key) => {
     const tripIdSet     = new Set(pTrips.map(tr => tr.id));
-    const driverIds     = new Set(pTrips.map(tr => tr.driverId).filter(Boolean));
-    // map tripId → driverId so we can resolve old expenses that lack driverId field
+
+    // All driverPay expenses for these trips
+    const tripDriverPayExps = expenses.filter(e => e.category === "driverPay" && tripIdSet.has(e.tripId));
+
+    // Collect all driver IDs referenced by driverPay — via driverId field or trip lookup
     const tripDriverMap = new Map(pTrips.map(tr => [tr.id, tr.driverId]).filter(([,d]) => d));
+    const driverIdsFromTrips = new Set(pTrips.map(tr => tr.driverId).filter(Boolean));
+    const driverIdsFromPay   = new Set(tripDriverPayExps.map(e => e.driverId).filter(Boolean));
+    const allDriverIds = new Set([...driverIdsFromTrips, ...driverIdsFromPay]);
 
     // nominaTotalOverride expenses replace individual driverPay for that driver
     const overrideExpenses = expenses.filter(e =>
       e.category === "nominaTotalOverride" &&
-      driverIds.has(e.driverId) &&
+      allDriverIds.has(e.driverId) &&
       e.date >= pd.dateFrom && e.date <= pd.dateTo
     );
     const overriddenDriverIds = new Set(overrideExpenses.map(e => e.driverId));
 
-    // Exclude driverPay for drivers that have a total override.
-    // Fall back to tripDriverMap for old expenses that may lack the driverId field.
+    // Exclude driverPay for drivers that have a total override
     const tripExpenses = expenses.filter(e => {
       if (!tripIdSet.has(e.tripId)) return false;
       if (e.category === "driverPay") {
