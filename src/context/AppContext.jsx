@@ -129,11 +129,8 @@ export function AppProvider({ children }) {
   const login = (u, remember, token) => {
     if (remember) {
       try { const { password: _pw, ...safe } = u; localStorage.setItem("blogix_session", JSON.stringify(safe)); } catch {}
-      if (token) saveToken(token); // only persist token if user wants to stay logged in
-    } else {
-      clearToken(); // clear any stale token from previous session
     }
-    if (token) resetApiCache();
+    if (token) { saveToken(token); resetApiCache(); } // always save token for current session
     setUser(u);
 
     // Reload data from API with new token
