@@ -9,8 +9,10 @@ const LS_KEY  = "blogix_data";
 const TK_KEY  = "blogix_token";
 
 let _apiAvailable = null;
+let _apiCheckedAt = 0;
+const API_CACHE_TTL = 30_000; // retry offline after 30s
 
-export function resetApiCache() { _apiAvailable = null; }
+export function resetApiCache() { _apiAvailable = null; _apiCheckedAt = 0; }
 
 export function getToken() {
   try { return localStorage.getItem(TK_KEY); } catch { return null; }
@@ -31,58 +33,78 @@ function authHeaders() {
     : { "Content-Type": "application/json" };
 }
 
-async function checkApiAvailable() {
-  if (_apiAvailable !== null) return _apiAvailable;
-  try {
-    const res = await fetch(API_URL, { method: "GET", headers: authHeaders() });
-    _apiAvailable = res.ok || res.status === 401; // reachable even if auth fails
-  } catch {
-    _apiAvailable = false;
-  }
-  return _apiAvailable;
-}
-
+// Single fetch — no separate availability pre-check to avoid double requests and cache poisoning
 export async function loadData() {
-  const online = await checkApiAvailable();
+  const token = getToken();
 
-  if (online) {
-    try {
-      const res = await fetch(API_URL, { headers: authHeaders() });
-      if (res.status === 401) {
-        // No valid token — clear session and force re-login
-        clearToken();
-        try { localStorage.removeItem("blogix_session"); } catch {}
-        return { source: "unauthenticated", data: null };
+  // No token at all — skip API, go straight to localStorage
+  if (!token) {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      try { return { source: "localStorage", data: JSON.parse(raw) }; } catch {
+        localStorage.removeItem(LS_KEY);
       }
-      if (res.ok) {
-        const apiData = await res.json();
-        if (apiData && Object.keys(apiData).length > 0) {
-          localStorage.setItem(LS_KEY, JSON.stringify(apiData));
-          return { source: "api", data: apiData };
-        }
-      }
-    } catch (err) {
-      console.warn("[B-Logix] API load failed, falling back to localStorage", err);
     }
+    return { source: "default", data: null };
+  }
+
+  // Respect negative cache TTL so a momentary network blip doesn't lock us offline forever
+  const now = Date.now();
+  if (_apiAvailable === false && (now - _apiCheckedAt) < API_CACHE_TTL) {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      try { return { source: "localStorage", data: JSON.parse(raw) }; } catch {}
+    }
+    return { source: "default", data: null };
+  }
+
+  try {
+    const res = await fetch(API_URL, { headers: authHeaders() });
+    _apiCheckedAt = Date.now();
+
+    if (res.status === 401) {
+      _apiAvailable = true; // server reachable
+      clearToken();
+      try { localStorage.removeItem("blogix_session"); } catch {}
+      return { source: "unauthenticated", data: null };
+    }
+
+    if (res.ok) {
+      _apiAvailable = true;
+      const apiData = await res.json();
+      if (apiData && Object.keys(apiData).length > 0) {
+        localStorage.setItem(LS_KEY, JSON.stringify(apiData));
+        return { source: "api", data: apiData };
+      }
+    }
+
+    _apiAvailable = false;
+  } catch (err) {
+    console.warn("[B-Logix] API load failed, falling back to localStorage", err);
+    _apiAvailable = false;
+    _apiCheckedAt = Date.now();
   }
 
   const raw = localStorage.getItem(LS_KEY);
   if (raw) {
-    try {
-      return { source: "localStorage", data: JSON.parse(raw) };
-    } catch {
+    try { return { source: "localStorage", data: JSON.parse(raw) }; } catch {
       localStorage.removeItem(LS_KEY);
     }
   }
-
   return { source: "default", data: null };
 }
 
 export async function saveData(data) {
   localStorage.setItem(LS_KEY, JSON.stringify(data));
 
-  const online = await checkApiAvailable();
-  if (!online) return { saved: "localStorage" };
+  const token = getToken();
+  if (!token) return { saved: "localStorage" };
+
+  // Respect negative cache TTL
+  const now = Date.now();
+  if (_apiAvailable === false && (now - _apiCheckedAt) < API_CACHE_TTL) {
+    return { saved: "localStorage" };
+  }
 
   try {
     const res = await fetch(API_URL, {
@@ -90,9 +112,11 @@ export async function saveData(data) {
       headers: authHeaders(),
       body: JSON.stringify(data),
     });
-    if (res.ok) return { saved: "api" };
+    if (res.ok) { _apiAvailable = true; return { saved: "api" }; }
   } catch (err) {
     console.warn("[B-Logix] API save failed, data kept in localStorage", err);
+    _apiAvailable = false;
+    _apiCheckedAt = Date.now();
   }
 
   return { saved: "localStorage" };

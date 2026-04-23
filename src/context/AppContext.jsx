@@ -6,6 +6,24 @@ import { computeAlerts } from "../utils/helpers.js";
 
 const AppContext = createContext(null);
 
+function applyData(data, setters) {
+  const { setClients, setPartners, setTrucks, setDrivers, setTrips,
+          setExpenses, setBrokers, setSuppliers, setFixedTemplates,
+          setSettlementStatus, setCobros } = setters;
+  if (!data || Object.keys(data).length === 0) return;
+  if (Array.isArray(data.clients))        setClients(data.clients);
+  if (Array.isArray(data.partners))       setPartners(data.partners);
+  if (Array.isArray(data.trucks))         setTrucks(data.trucks);
+  if (Array.isArray(data.drivers))        setDrivers(data.drivers);
+  if (Array.isArray(data.trips))          setTrips(data.trips);
+  if (Array.isArray(data.expenses))       setExpenses(data.expenses);
+  if (Array.isArray(data.brokers))        setBrokers(data.brokers);
+  if (Array.isArray(data.suppliers))      setSuppliers(data.suppliers);
+  if (Array.isArray(data.fixedTemplates)) setFixedTemplates(data.fixedTemplates);
+  if (data.settlementStatus)              setSettlementStatus(data.settlementStatus);
+  if (Array.isArray(data.cobros))         setCobros(data.cobros);
+}
+
 export function AppProvider({ children }) {
   const [lang, setLang] = useState("es");
   const [user, setUser] = useState(() => {
@@ -46,6 +64,13 @@ export function AppProvider({ children }) {
 
   const saveTimerRef = useRef(null);
   const dataLoadedRef = useRef(false);
+  const isReloadingRef = useRef(false); // blocks auto-save during post-login reload
+
+  const setters = {
+    setClients, setPartners, setTrucks, setDrivers, setTrips,
+    setExpenses, setBrokers, setSuppliers, setFixedTemplates,
+    setSettlementStatus, setCobros,
+  };
 
   // ── Load on mount ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -55,27 +80,16 @@ export function AppProvider({ children }) {
         dataLoadedRef.current = true;
         return;
       }
-      if (data && Object.keys(data).length > 0) {
-        if (Array.isArray(data.clients))        setClients(data.clients);
-        if (Array.isArray(data.partners))       setPartners(data.partners);
-        if (Array.isArray(data.trucks))         setTrucks(data.trucks);
-        if (Array.isArray(data.drivers))        setDrivers(data.drivers);
-        if (Array.isArray(data.trips))          setTrips(data.trips);
-        if (Array.isArray(data.expenses))       setExpenses(data.expenses);
-        if (Array.isArray(data.brokers))        setBrokers(data.brokers);
-        if (Array.isArray(data.suppliers))      setSuppliers(data.suppliers);
-        if (Array.isArray(data.fixedTemplates)) setFixedTemplates(data.fixedTemplates);
-        if (data.settlementStatus)              setSettlementStatus(data.settlementStatus);
-        if (Array.isArray(data.cobros))         setCobros(data.cobros);
-      }
+      applyData(data, setters);
       dataLoadedRef.current = true;
       setSyncStatus(source === "api" ? "saved" : "offline");
     });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-save (debounced 1.5s) ────────────────────────────────────────────
   useEffect(() => {
     if (!dataLoadedRef.current) return;
+    if (isReloadingRef.current) return; // don't save empty state during post-login reload
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSyncStatus("saving");
@@ -115,26 +129,27 @@ export function AppProvider({ children }) {
   const login = (u, remember, token) => {
     if (remember) {
       try { const { password: _pw, ...safe } = u; localStorage.setItem("blogix_session", JSON.stringify(safe)); } catch {}
+      if (token) saveToken(token); // only persist token if user wants to stay logged in
+    } else {
+      clearToken(); // clear any stale token from previous session
     }
-    if (token) { saveToken(token); resetApiCache(); }
+    if (token) resetApiCache();
     setUser(u);
-    // Reload data after login in case it was cleared by a 401
+
+    // Reload data from API with new token
+    isReloadingRef.current = true;
     dataLoadedRef.current = false;
     loadData().then(({ source, data }) => {
-      if (data && Object.keys(data).length > 0) {
-        if (Array.isArray(data.clients))        setClients(data.clients);
-        if (Array.isArray(data.partners))       setPartners(data.partners);
-        if (Array.isArray(data.trucks))         setTrucks(data.trucks);
-        if (Array.isArray(data.drivers))        setDrivers(data.drivers);
-        if (Array.isArray(data.trips))          setTrips(data.trips);
-        if (Array.isArray(data.expenses))       setExpenses(data.expenses);
-        if (Array.isArray(data.brokers))        setBrokers(data.brokers);
-        if (Array.isArray(data.suppliers))      setSuppliers(data.suppliers);
-        if (Array.isArray(data.fixedTemplates)) setFixedTemplates(data.fixedTemplates);
-        if (data.settlementStatus)              setSettlementStatus(data.settlementStatus);
-        if (Array.isArray(data.cobros))         setCobros(data.cobros);
+      if (source === "unauthenticated") {
+        clearToken();
+        setUser(null);
+        dataLoadedRef.current = true;
+        isReloadingRef.current = false;
+        return;
       }
+      applyData(data, setters);
       dataLoadedRef.current = true;
+      isReloadingRef.current = false;
       setSyncStatus(source === "api" ? "saved" : "offline");
     });
   };
