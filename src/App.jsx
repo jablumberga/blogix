@@ -24,7 +24,7 @@ import CxCPage from "./pages/CxCPage.jsx";
 
 export default function App() {
   const {
-    lang, setLang, t, user, login, logout,
+    lang, setLang, t, user, login, logout, forceSync,
     isAdmin, isPartner, isDriver, allUsers,
     clients, setClients, partners, setPartners, trucks, setTrucks,
     drivers, setDrivers, trips, setTrips, expenses, setExpenses,
@@ -58,6 +58,10 @@ export default function App() {
   }} />;
 
   const alertCount = alerts.filter(a => a.severity === "error" || a.severity === "warning").length;
+  const [recovering, setRecovering] = useState(false);
+  const [recovered, setRecovered] = useState(false);
+  const localDataCount = trips.length + clients.length + trucks.length + drivers.length + expenses.length;
+  const showRecoveryBanner = isAdmin && localDataCount > 0 && syncStatus === "offline" && !recovered;
 
   const adminNav = [
     { id: "dashboard",   icon: LayoutDashboard, label: t.dashboard },
@@ -138,7 +142,24 @@ export default function App() {
 
       <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "56px 14px 14px" : 20, position: "relative" }}>
         {isMobile && <button onClick={() => setSidebarOpen(true)} style={{ position: "fixed", top: 16, left: 16, zIndex: 150, background: colors.accent, border: "none", borderRadius: 8, padding: "8px 11px", cursor: "pointer", color: "white", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}><Menu size={18} /></button>}
-        {syncStatus === "offline" && (
+        {showRecoveryBanner && (
+          <div style={{ position: "sticky", top: 0, zIndex: 101, background: "#7c3aed", color: "#fff", padding: "10px 16px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderRadius: 8, marginBottom: 12 }}>
+            <span>🔔 Tienes {localDataCount} registros locales que no están en el servidor. ¿Restaurar ahora?</span>
+            <button
+              disabled={recovering}
+              onClick={async () => {
+                setRecovering(true);
+                const result = await forceSync();
+                setRecovering(false);
+                if (result?.saved === "api") setRecovered(true);
+              }}
+              style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.5)", color: "#fff", borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}
+            >
+              {recovering ? "Guardando..." : "💾 Restaurar al servidor"}
+            </button>
+          </div>
+        )}
+        {!showRecoveryBanner && syncStatus === "offline" && (
           <div style={{ position: "sticky", top: 0, zIndex: 100, background: colors.red, color: "#fff", padding: "8px 16px", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderRadius: 8, marginBottom: 12 }}>
             <span>⚠️ Sin conexión al servidor — los cambios se guardan localmente pero NO en la nube.</span>
             <button onClick={() => window.location.reload()} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>

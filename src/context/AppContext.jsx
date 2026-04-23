@@ -158,9 +158,20 @@ export function AppProvider({ children }) {
     setUser(null);
   };
 
+  const forceSync = async () => {
+    setSyncStatus("saving");
+    const result = await saveData({
+      clients, partners, trucks, drivers, trips, expenses,
+      brokers, suppliers, fixedTemplates, settlementStatus, cobros,
+    });
+    if (result.saved === "unauthorized") { setUser(null); return; }
+    setSyncStatus(result.saved === "api" ? "saved" : "offline");
+    return result;
+  };
+
   const value = {
     // UI
-    lang, setLang, t, user, login, logout,
+    lang, setLang, t, user, login, logout, forceSync,
     sidebarOpen, setSidebarOpen, isMobile, syncStatus,
     // Auth
     isAdmin, isPartner, isDriver, allUsers,
