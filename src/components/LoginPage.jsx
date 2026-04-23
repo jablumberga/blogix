@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { LogIn, Eye, EyeOff, AlertCircle } from "lucide-react";
+import bcrypt from "bcryptjs";
 import { colors } from "../constants/theme.js";
 import { Inp, Btn } from "./ui/index.jsx";
 
@@ -36,10 +37,16 @@ export default function LoginPage({ t, onLogin, allUsers }) {
     } catch {
       // Server unavailable — fall back to local user list
     }
-    // Offline fallback: validate against allUsers
-    const user = allUsers.find(u => u.username === username && u.password === password);
-    if (user) { onLogin(user, keepSignedIn, null); setError(""); }
-    else setError(t.invalidLogin);
+    // Offline fallback: validate against allUsers (supports both hashed and plaintext passwords)
+    const candidate = allUsers.find(u => u.username === username);
+    if (candidate) {
+      const isHashed = typeof candidate.password === "string" && candidate.password.startsWith("$2");
+      const match = isHashed
+        ? await bcrypt.compare(password, candidate.password)
+        : candidate.password === password;
+      if (match) { onLogin(candidate, keepSignedIn, null); setError(""); setLoading(false); return; }
+    }
+    setError(t.invalidLogin);
     setLoading(false);
   };
 
