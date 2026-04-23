@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp, RefreshCw } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { colors } from "./constants/theme.js";
 import { Badge } from "./components/ui/index.jsx";
@@ -22,9 +22,31 @@ import SuppliersPage from "./pages/SuppliersPage.jsx";
 import SettlementsPage from "./pages/SettlementsPage.jsx";
 import CxCPage from "./pages/CxCPage.jsx";
 
+function SyncAllButton({ syncAll, sidebarOpen }) {
+  const [msg, setMsg] = useState(null);
+  const handle = () => {
+    const added = syncAll();
+    const text = added > 0 ? `✅ +${added} entrada${added !== 1 ? "s" : ""} de nómina` : "✅ Todo sincronizado";
+    setMsg(text);
+    setTimeout(() => setMsg(null), 4000);
+  };
+  return (
+    <div style={{ position: "relative" }}>
+      <button onClick={handle} title="Sincronizar todo" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
+        <RefreshCw size={14} />{sidebarOpen && <span>Sincronizar todo</span>}
+      </button>
+      {msg && sidebarOpen && (
+        <div style={{ position: "absolute", bottom: "110%", left: 8, background: colors.card, border: `1px solid ${colors.border}`, borderRadius: 7, padding: "6px 10px", fontSize: 11, color: colors.green, whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.3)", zIndex: 300 }}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const {
-    lang, setLang, t, user, login, logout, forceSync,
+    lang, setLang, t, user, login, logout, forceSync, syncAll,
     isAdmin, isPartner, isDriver, allUsers,
     clients, setClients, partners, setPartners, trucks, setTrucks,
     drivers, setDrivers, trips, setTrips, expenses, setExpenses,
@@ -124,6 +146,7 @@ export default function App() {
 
         <div style={{ padding: "8px 6px", borderTop: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", gap: 4 }}>
           {isAdmin && <CfoChat data={{ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, settlementStatus }} t={t} sidebarOpen={sidebarOpen} isMobile={isMobile} />}
+          {isAdmin && <SyncAllButton syncAll={syncAll} sidebarOpen={sidebarOpen} />}
           <button onClick={() => setLang(lang === "en" ? "es" : "en")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
             <Globe size={14} />{sidebarOpen && <span>{lang === "en" ? "Español" : "English"}</span>}
           </button>

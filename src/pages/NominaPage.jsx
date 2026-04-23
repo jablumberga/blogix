@@ -1,8 +1,8 @@
 import { useState } from "react";
 
-import { Clock, ChevronDown, ChevronRight, CheckCircle2, Users, Wrench, FileText, Pencil, X, Check } from "lucide-react";
+import { Clock, ChevronDown, ChevronRight, CheckCircle2, Users, FileText, Pencil, X, Check } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, nxId, pad, MONTHS_ES, genPeriods } from "../utils/helpers.js";
+import { fmt, genPeriods } from "../utils/helpers.js";
 import { Card, PageHeader, Badge, Th, Td } from "../components/ui/index.jsx";
 
 function OverrideInline({ exp, onSave, onCancel }) {
@@ -401,50 +401,6 @@ function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, 
 }
 
 export default function NominaPage({ t, expenses, setExpenses, trips, drivers, trucks }) {
-  const [repairMsg, setRepairMsg] = useState("");
-
-  const repairNomina = () => {
-    const toAdd = [];
-    trips.forEach(tr => {
-      if (!tr.driverId) return;
-      const driver = drivers.find(d => d.id === tr.driverId);
-      if (!driver || driver.salaryType === "fixed") return;
-      const alreadyExists = expenses.some(e => e.category === "driverPay" && e.tripId === tr.id);
-      if (alreadyExists) return;
-      let driverPay = 0;
-      if (driver.salaryType === "porcentaje") {
-        driverPay = Math.round((tr.revenue || 0) * (driver.percentageAmount || 20) / 100);
-      } else if (driver.salaryType === "perTrip") {
-        const rate = (driver.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality);
-        if (rate) {
-          const tk = (trucks || []).find(t2 => t2.id === tr.truckId);
-          const size = tr.tarifaOverride || tk?.size || "T1";
-          driverPay = size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
-        }
-      } else {
-        driverPay = Math.round((tr.revenue || 0) * 0.20);
-      }
-      const tripDiscounts = (tr.discounts || []).reduce((s, d) => s + (d.amount || 0), 0);
-      driverPay = Math.max(0, driverPay - tripDiscounts);
-      if (driverPay > 0) {
-        const pct = driver.salaryType === "porcentaje" ? (driver.percentageAmount || 20) : 20;
-        const discNote = tripDiscounts > 0 ? ` (−${fmt(tripDiscounts)} desc.)` : "";
-        toAdd.push({ tripId: tr.id, date: tr.date, category: "driverPay", amount: driverPay, description: `Nómina ${pct}%: ${driver.name}${discNote}`, paymentMethod: "transfer", driverId: driver.id, status: "pending", supplierId: null });
-      }
-    });
-    if (toAdd.length > 0) {
-      setExpenses(prev => {
-        let next = [...prev];
-        toAdd.forEach(exp => { next = [...next, { id: nxId(next), ...exp }]; });
-        return next;
-      });
-      setRepairMsg(`✅ Se crearon ${toAdd.length} entrada${toAdd.length !== 1 ? "s" : ""} de nómina que faltaba${toAdd.length !== 1 ? "n" : ""}.`);
-    } else {
-      setRepairMsg("✅ Todo correcto — no hay entradas faltantes.");
-    }
-    setTimeout(() => setRepairMsg(""), 6000);
-  };
-
   const markPaid = (driver, pd, effectiveTotal) => {
     setExpenses(prev => prev.map(e => {
       const inPeriod = e.date >= pd.dateFrom && e.date <= pd.dateTo;
@@ -481,12 +437,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
   const grandPending = periodGroups.reduce((s,g) => s+g.periodPending, 0);
 
   return <div>
-    <PageHeader title="Nómina" action={
-      <button onClick={repairNomina} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12 }}>
-        <Wrench size={13} /> Sincronizar Nómina
-      </button>
-    } />
-    {repairMsg && <div style={{ background: colors.green + "18", border: `1px solid ${colors.green}40`, borderRadius: 8, padding: "8px 14px", marginBottom: 12, fontSize: 13, color: colors.green, fontWeight: 600 }}>{repairMsg}</div>}
+    <PageHeader title="Nómina" />
     {grandPending > 0 && (
       <div style={{ background: colors.orange + "15", border: `1px solid ${colors.orange}40`, borderRadius: 10, padding: "10px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}>
         <Clock size={18} color={colors.orange} />

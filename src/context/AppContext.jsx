@@ -158,6 +158,52 @@ export function AppProvider({ children }) {
     setUser(null);
   };
 
+  const syncAll = () => {
+    const toAdd = [];
+    trips.forEach(tr => {
+      if (!tr.driverId) return;
+      const driver = drivers.find(d => d.id === tr.driverId);
+      if (!driver || driver.salaryType === "fixed") return;
+      const alreadyExists = expenses.some(e => e.category === "driverPay" && e.tripId === tr.id);
+      if (alreadyExists) return;
+      let pay = 0;
+      if (driver.salaryType === "porcentaje") {
+        pay = Math.round((tr.revenue || 0) * (driver.percentageAmount || 20) / 100);
+      } else if (driver.salaryType === "perTrip") {
+        const rate = (driver.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality);
+        if (rate) {
+          const tk = trucks.find(t2 => t2.id === tr.truckId);
+          const size = tr.tarifaOverride || tk?.size || "T1";
+          pay = size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
+        }
+      } else {
+        pay = Math.round((tr.revenue || 0) * 0.20);
+      }
+      const tripDiscounts = (tr.discounts || []).reduce((s, d) => s + (d.amount || 0), 0);
+      pay = Math.max(0, pay - tripDiscounts);
+      if (pay > 0) {
+        const pct = driver.salaryType === "porcentaje" ? (driver.percentageAmount || 20) : 20;
+        const discNote = tripDiscounts > 0 ? ` (−${pay + tripDiscounts - pay} desc.)` : "";
+        toAdd.push({
+          tripId: tr.id, date: tr.date, category: "driverPay", amount: pay,
+          description: `Nómina ${pct}%: ${driver.name}${discNote}`,
+          paymentMethod: "transfer", driverId: driver.id, status: "pending", supplierId: null,
+        });
+      }
+    });
+    if (toAdd.length > 0) {
+      setExpenses(prev => {
+        let next = [...prev];
+        toAdd.forEach(exp => {
+          const newId = Math.max(0, ...next.map(e => e.id)) + 1;
+          next = [...next, { id: newId, ...exp }];
+        });
+        return next;
+      });
+    }
+    return toAdd.length;
+  };
+
   const forceSync = async () => {
     setSyncStatus("saving");
     const result = await saveData({
@@ -171,7 +217,7 @@ export function AppProvider({ children }) {
 
   const value = {
     // UI
-    lang, setLang, t, user, login, logout, forceSync,
+    lang, setLang, t, user, login, logout, forceSync, syncAll,
     sidebarOpen, setSidebarOpen, isMobile, syncStatus,
     // Auth
     isAdmin, isPartner, isDriver, allUsers,
