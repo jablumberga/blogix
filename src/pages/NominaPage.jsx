@@ -1,13 +1,52 @@
 import { useState } from "react";
 
-import { Clock, ChevronDown, ChevronRight, CheckCircle2, Users, Wrench, FileText } from "lucide-react";
+import { Clock, ChevronDown, ChevronRight, CheckCircle2, Users, Wrench, FileText, Pencil, X, Check } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, pad, MONTHS_ES, genPeriods } from "../utils/helpers.js";
 import { Card, PageHeader, Badge, Th, Td } from "../components/ui/index.jsx";
 
+function OverrideInline({ exp, onSave, onCancel }) {
+  const [amount, setAmount] = useState(exp.amount);
+  const [note, setNote] = useState(exp.overrideNote || "");
 
-function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal, trips, allExpenses, periodDateFrom, periodDateTo, periodLabel, onMarkPaid }) {
+  const inputStyle = {
+    background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 5,
+    color: colors.text, padding: "3px 6px", fontSize: 12,
+  };
+
+  return (
+    <tr style={{ background: colors.accent + "0a" }}>
+      <td colSpan={5} style={{ padding: "8px 10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: colors.textMuted }}>Override pago:</span>
+          <input
+            type="number"
+            value={amount}
+            onChange={e => setAmount(Number(e.target.value))}
+            style={{ ...inputStyle, width: 90 }}
+          />
+          <input
+            placeholder="Nota (ej: ajuste por daño, bono, etc.)"
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            style={{ ...inputStyle, width: 220 }}
+          />
+          <button onClick={() => onSave(amount, note)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 5, border: "none", background: colors.green, color: "white", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+            <Check size={11} /> Guardar
+          </button>
+          <button onClick={onCancel} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 5, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 11 }}>
+            <X size={11} /> Cancelar
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal, trips, allExpenses, periodDateFrom, periodDateTo, periodLabel, onMarkPaid, setExpenses }) {
   const [showDetail, setShowDetail] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
   const adelantoExps = (allExpenses||[]).filter(e =>
     e.category === "adelanto_conductor" &&
     (e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name))) &&
@@ -16,15 +55,30 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
   const adelantos = adelantoExps.reduce((s, e) => s + e.amount, 0);
   const netoAPagar = Math.max(0, pendingTotal - adelantos);
 
+  const handleOverrideSave = (exp, newAmount, note) => {
+    setExpenses(prev => prev.map(e => {
+      if (e.id !== exp.id) return e;
+      return {
+        ...e,
+        amount: newAmount,
+        overrideNote: note || undefined,
+        calcAmount: e.calcAmount ?? e.amount, // preserve original calculated amount
+      };
+    }));
+    setEditingId(null);
+  };
+
   const generateReport = () => {
     const tripRowsHTML = exps.map(exp => {
       const trip = trips.find(tr => tr.id === exp.tripId);
       const route = trip ? `${trip.municipality || trip.destination || "—"}, ${trip.province || ""}` : "—";
       const tripDiscounts = trip ? (trip.discounts || []).filter(d => d.amount > 0) : [];
       const linkedAdel = adelantoExps.find(a => a.tripId === exp.tripId);
+      const isOverridden = exp.calcAmount !== undefined && exp.calcAmount !== exp.amount;
       const deductionsHTML = [
         ...tripDiscounts.map(d => `<div style="font-size:11px;color:#c0392b;padding-left:8px">↳ Desc: ${d.desc || "—"} − ${fmt(d.amount)}</div>`),
-        ...(linkedAdel ? [`<div style="font-size:11px;color:#e67e22;padding-left:8px">↳ Adelanto: − ${fmt(linkedAdel.amount)}</div>`] : [])
+        ...(linkedAdel ? [`<div style="font-size:11px;color:#e67e22;padding-left:8px">↳ Adelanto: − ${fmt(linkedAdel.amount)}</div>`] : []),
+        ...(isOverridden ? [`<div style="font-size:11px;color:#7c5cbf;padding-left:8px">✏️ Override (calc: ${fmt(exp.calcAmount)})${exp.overrideNote ? ` — ${exp.overrideNote}` : ""}</div>`] : []),
       ].join("");
       const isPaid = exp.status === "paid";
       return `<tr>
@@ -78,7 +132,7 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
 <table>
   <thead>
     <tr>
-      <th>Fecha</th><th>Viaje</th><th>Ruta</th><th class="right">Tu Pago</th><th>Descuentos / Adelantos</th>
+      <th>Fecha</th><th>Viaje</th><th>Ruta</th><th class="right">Tu Pago</th><th>Descuentos / Notas</th>
     </tr>
   </thead>
   <tbody>
@@ -165,21 +219,50 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
     {showDetail && <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${colors.border}` }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-          <Th>Fecha</Th><Th>Viaje #</Th><Th>Ruta</Th><Th align="right">Tu Pago</Th><Th align="right">Estado</Th>
+          <Th>Fecha</Th><Th>Viaje #</Th><Th>Ruta</Th><Th align="right">Pago</Th><Th align="right">Estado</Th>
         </tr></thead>
         <tbody>{exps.map(exp => {
           const trip = trips.find(tr => tr.id === exp.tripId);
           const isPaid = exp.status === "paid";
           const linkedAdel = adelantoExps.find(a => a.tripId === exp.tripId);
           const tripDiscounts = trip ? (trip.discounts || []).filter(d => d.amount > 0) : [];
+          const isOverridden = exp.calcAmount !== undefined && exp.calcAmount !== exp.amount;
+          const isEditing = editingId === exp.id;
           return <>
             <tr key={exp.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
               <Td>{exp.date}</Td>
               <Td>{exp.tripId ? `#${exp.tripId}` : "—"}</Td>
               <Td>{trip ? `${trip.municipality || trip.destination || "—"}, ${trip.province || ""}` : exp.description}</Td>
-              <Td align="right" bold color={isPaid ? colors.green : colors.orange}>{fmt(exp.amount)}</Td>
+              <Td align="right">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                  {isOverridden && (
+                    <span style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(exp.calcAmount)}</span>
+                  )}
+                  <span style={{ fontWeight: 700, color: isOverridden ? "#9b7fe8" : (isPaid ? colors.green : colors.orange) }}>{fmt(exp.amount)}</span>
+                  {!isPaid && (
+                    <button
+                      onClick={() => setEditingId(isEditing ? null : exp.id)}
+                      title="Override pago"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: isOverridden ? "#9b7fe8" : colors.textMuted, padding: 2, lineHeight: 1, display: "flex" }}
+                    >
+                      <Pencil size={11} />
+                    </button>
+                  )}
+                </div>
+                {isOverridden && exp.overrideNote && (
+                  <div style={{ fontSize: 10, color: "#9b7fe8", marginTop: 2 }}>✏️ {exp.overrideNote}</div>
+                )}
+              </Td>
               <Td align="right"><Badge label={isPaid ? "✓ Pagado" : "Pendiente"} color={isPaid ? colors.green : colors.orange} /></Td>
             </tr>
+            {isEditing && (
+              <OverrideInline
+                key={`edit-${exp.id}`}
+                exp={exp}
+                onSave={(amt, note) => handleOverrideSave(exp, amt, note)}
+                onCancel={() => setEditingId(null)}
+              />
+            )}
             {tripDiscounts.map((d, i) => (
               <tr key={`d-${exp.id}-${i}`} style={{ background: "#c0392b08" }}>
                 <Td></Td><Td colSpan={2} style={{ fontSize: 11, color: "#c0392b", paddingLeft: 20 }}>↳ Desc: {d.desc || "—"}</Td>
@@ -199,7 +282,7 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
   </Card>;
 }
 
-function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, allExpenses, markPaid, defaultOpen }) {
+function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, allExpenses, markPaid, defaultOpen, setExpenses }) {
   const [open, setOpen] = useState(defaultOpen);
   const allPaid = periodPending === 0;
 
@@ -223,7 +306,7 @@ function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, 
     {open && driverCards.map(g => (
       <NominaDriverCard key={g.driver.id} {...g} trips={trips} allExpenses={allExpenses}
         periodDateFrom={pd.dateFrom} periodDateTo={pd.dateTo} periodLabel={pd.label}
-        onMarkPaid={() => markPaid(g.driver, pd)} />
+        onMarkPaid={() => markPaid(g.driver, pd)} setExpenses={setExpenses} />
     ))}
   </div>;
 }
@@ -327,7 +410,8 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
     {periodGroups.map(({ pd, driverCards, periodPending, periodPaid }, idx) => (
       <NominaPeriodGroup key={`${pd.mStr}-${pd.half}`} pd={pd} driverCards={driverCards}
         periodPending={periodPending} periodPaid={periodPaid} trips={trips}
-        allExpenses={expenses} markPaid={markPaid} defaultOpen={idx === 0} />
+        allExpenses={expenses} markPaid={markPaid} defaultOpen={idx === 0}
+        setExpenses={setExpenses} />
     ))}
   </div>;
-                                }
+}
