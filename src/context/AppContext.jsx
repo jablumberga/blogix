@@ -97,6 +97,7 @@ export function AppProvider({ children }) {
         clients, partners, trucks, drivers, trips, expenses,
         brokers, suppliers, fixedTemplates, settlementStatus, cobros,
       });
+      if (result.saved === "unauthorized") { setUser(null); return; }
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);

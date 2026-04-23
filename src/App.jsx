@@ -139,8 +139,11 @@ export default function App() {
       <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "56px 14px 14px" : 20, position: "relative" }}>
         {isMobile && <button onClick={() => setSidebarOpen(true)} style={{ position: "fixed", top: 16, left: 16, zIndex: 150, background: colors.accent, border: "none", borderRadius: 8, padding: "8px 11px", cursor: "pointer", color: "white", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}><Menu size={18} /></button>}
         {syncStatus === "offline" && (
-          <div style={{ position: "sticky", top: 0, zIndex: 100, background: colors.red, color: "#fff", padding: "8px 16px", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, borderRadius: 8, marginBottom: 12 }}>
-            ⚠️ Sin conexión al servidor — los cambios NO se están guardando en la nube. Verifica tu conexión o recarga la página.
+          <div style={{ position: "sticky", top: 0, zIndex: 100, background: colors.red, color: "#fff", padding: "8px 16px", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderRadius: 8, marginBottom: 12 }}>
+            <span>⚠️ Sin conexión al servidor — los cambios se guardan localmente pero NO en la nube.</span>
+            <button onClick={() => window.location.reload()} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+              🔄 Reconectar
+            </button>
           </div>
         )}
 

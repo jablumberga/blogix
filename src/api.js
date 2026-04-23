@@ -10,7 +10,7 @@ const TK_KEY  = "blogix_token";
 
 let _apiAvailable = null;
 let _apiCheckedAt = 0;
-const API_CACHE_TTL = 30_000; // retry offline after 30s
+const API_CACHE_TTL = 8_000; // retry offline after 8s
 
 export function resetApiCache() { _apiAvailable = null; _apiCheckedAt = 0; }
 
@@ -113,6 +113,12 @@ export async function saveData(data) {
       body: JSON.stringify(data),
     });
     if (res.ok) { _apiAvailable = true; return { saved: "api" }; }
+    if (res.status === 401) {
+      // Token expired or invalid — force re-login, don't show "offline"
+      clearToken();
+      try { localStorage.removeItem("blogix_session"); } catch {}
+      return { saved: "unauthorized" };
+    }
   } catch (err) {
     console.warn("[B-Logix] API save failed, data kept in localStorage", err);
     _apiAvailable = false;
