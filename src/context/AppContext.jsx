@@ -118,6 +118,25 @@ export function AppProvider({ children }) {
     }
     if (token) { saveToken(token); resetApiCache(); }
     setUser(u);
+    // Reload data after login in case it was cleared by a 401
+    dataLoadedRef.current = false;
+    loadData().then(({ source, data }) => {
+      if (data && Object.keys(data).length > 0) {
+        if (Array.isArray(data.clients))        setClients(data.clients);
+        if (Array.isArray(data.partners))       setPartners(data.partners);
+        if (Array.isArray(data.trucks))         setTrucks(data.trucks);
+        if (Array.isArray(data.drivers))        setDrivers(data.drivers);
+        if (Array.isArray(data.trips))          setTrips(data.trips);
+        if (Array.isArray(data.expenses))       setExpenses(data.expenses);
+        if (Array.isArray(data.brokers))        setBrokers(data.brokers);
+        if (Array.isArray(data.suppliers))      setSuppliers(data.suppliers);
+        if (Array.isArray(data.fixedTemplates)) setFixedTemplates(data.fixedTemplates);
+        if (data.settlementStatus)              setSettlementStatus(data.settlementStatus);
+        if (Array.isArray(data.cobros))         setCobros(data.cobros);
+      }
+      dataLoadedRef.current = true;
+      setSyncStatus(source === "api" ? "saved" : "offline");
+    });
   };
 
   const logout = () => {
