@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp, RefreshCw } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { colors } from "./constants/theme.js";
@@ -42,6 +42,29 @@ function SyncAllButton({ syncAll, sidebarOpen }) {
       )}
     </div>
   );
+}
+
+async function initPushNotifications(userRole) {
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    if (!Capacitor.isNativePlatform()) return;
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    const perm = await PushNotifications.requestPermissions();
+    if (perm.receive !== "granted") return;
+    await PushNotifications.register();
+    PushNotifications.addListener("registration", (token) => {
+      // Store token for server-side sending (future feature)
+      localStorage.setItem("blogix_push_token", token.value);
+    });
+    PushNotifications.addListener("pushNotificationReceived", (notification) => {
+      console.log("Push recibido:", notification.title);
+    });
+    PushNotifications.addListener("pushNotificationActionPerformed", () => {
+      // User tapped notification — app already opens to foreground
+    });
+  } catch (e) {
+    // Not on native platform, ignore silently
+  }
 }
 
 export default function App() {
@@ -113,6 +136,7 @@ export default function App() {
   if (!user) return <LoginPage t={t} allUsers={allUsers} onLogin={(u, remember, token) => {
     login(u, remember, token);
     setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : "dashboard");
+    initPushNotifications(u.role);
   }} />;
 
   const alertCount = alerts.filter(a => a.severity === "error" || a.severity === "warning").length;
