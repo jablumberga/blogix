@@ -107,8 +107,8 @@ export function AppProvider({ children }) {
   // ── Dynamic user list ─────────────────────────────────────────────────────
   const allUsers = [
     ...USERS.filter(u => u.role === "admin"),
-    ...partners.map(p => ({ id: `p-${p.id}`, username: p.username, password: p.password, role: "partner", name: p.name, refId: p.id })),
-    ...drivers.map(d => ({ id: `d-${d.id}`, username: d.username, password: d.password, role: "driver", name: d.name, refId: d.id })),
+    ...partners.map(p => ({ id: `p-${p.id}`, username: p.username, role: "partner", name: p.name, refId: p.id })),
+    ...drivers.map(d => ({ id: `d-${d.id}`, username: d.username, role: "driver", name: d.name, refId: d.id })),
   ];
 
   // ── Computed helpers ──────────────────────────────────────────────────────

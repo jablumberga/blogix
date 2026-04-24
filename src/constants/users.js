@@ -1,10 +1,10 @@
 export const USERS = [
-  { id: 1, username: "admin",   password: "$2b$10$HBq3kbDZ9QosHuLd/Kewi.XcSfz904GusJFwyP7YNZkorQKA8MGyW", role: "admin",   name: "Alexander",      refId: null },
-  { id: 2, username: "carlos",  password: "$2b$10$Pky8FUU1hAJUTk5rrRApM.pYPKSD6l59guFhkoVJldZrn9vXuGNAW", role: "partner", name: "Carlos Mìndez",  refId: 1 },
-  { id: 3, username: "maria",   password: "$2b$10$KlcIqOkDFFGkFJS7ZBmdJuTO3yr6isKKpaa8/7Af4cf86UcreKoH2", role: "partner", name: "María López",    refId: 2 },
-  { id: 4, username: "juan",    password: "$2b$10$apeRImCTKNTNIaHku1CbYut36izu6Miu03prQEcd/n0HFa17giuLi", role: "driver",  name: "Juan Pérez",     refId: 1 },
-  { id: 5, username: "roberto", password: "$2b$10$Gl4olUiqsekaPHzSw1eX3unaDmUUncR3fkMetTHC64nd5ChJar2KG", role: "driver",  name: "Roberto Gómez",  refId: 2 },
-  { id: 6, username: "pedro",   password: "$2b$10$QdTU/DNo8i/4kMUJJ4SlXuAyg/uENz1cRW5bRV.9INOW7VgUSmyMq", role: "driver",  name: "Pedro Ramírez",  refId: 3 },
+  { id: 1, username: "admin",   role: "admin",   name: "Alexander",     refId: null },
+  { id: 2, username: "carlos",  role: "partner", name: "Carlos Mìndez", refId: 1 },
+  { id: 3, username: "maria",   role: "partner", name: "María López",   refId: 2 },
+  { id: 4, username: "juan",    role: "driver",  name: "Juan Pérez",    refId: 1 },
+  { id: 5, username: "roberto", role: "driver",  name: "Roberto Gómez", refId: 2 },
+  { id: 6, username: "pedro",   role: "driver",  name: "Pedro Ramírez", refId: 3 },
 ];
 
 // ── Seed data (only used if Supabase returns nothing) ─────────────────────────

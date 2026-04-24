@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp, RefreshCw } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
+import { getToken } from "./api.js";
 import { colors } from "./constants/theme.js";
 import { Badge } from "./components/ui/index.jsx";
 import LoginPage from "./components/LoginPage.jsx";
@@ -52,9 +53,14 @@ async function initPushNotifications(userRole) {
     const perm = await PushNotifications.requestPermissions();
     if (perm.receive !== "granted") return;
     await PushNotifications.register();
-    PushNotifications.addListener("registration", (token) => {
-      // Store token for server-side sending (future feature)
-      localStorage.setItem("blogix_push_token", token.value);
+    PushNotifications.addListener("registration", async (token) => {
+      try {
+        await fetch("/api/push/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${getToken()}` },
+          body: JSON.stringify({ token: token.value, platform: "ios" }),
+        });
+      } catch { /* non-critical — token will be retried on next login */ }
     });
     PushNotifications.addListener("pushNotificationReceived", (notification) => {
       console.log("Push recibido:", notification.title);
@@ -133,7 +139,7 @@ export default function App() {
     );
   }
 
-  if (!user) return <LoginPage t={t} allUsers={allUsers} onLogin={(u, remember, token) => {
+  if (!user) return <LoginPage t={t} onLogin={(u, remember, token) => {
     login(u, remember, token);
     setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : "dashboard");
     initPushNotifications(u.role);

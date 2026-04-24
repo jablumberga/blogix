@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { LogIn, Eye, EyeOff, AlertCircle } from "lucide-react";
-import bcrypt from "bcryptjs";
 import { colors } from "../constants/theme.js";
 import { Inp, Btn } from "./ui/index.jsx";
 
-export default function LoginPage({ t, onLogin, allUsers }) {
+export default function LoginPage({ t, onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -28,23 +27,16 @@ export default function LoginPage({ t, onLogin, allUsers }) {
         setLoading(false);
         return;
       }
-      // Server reachable but rejected — don't bypass to offline auth
+      // Server reachable but rejected
       if (res.status === 401 || res.status === 400) {
         setError(t.invalidLogin);
         setLoading(false);
         return;
       }
     } catch {
-      // Server unavailable — fall back to local user list
-    }
-    // Offline fallback: validate against allUsers (supports both hashed and plaintext passwords)
-    const candidate = allUsers.find(u => u.username === username);
-    if (candidate) {
-      const isHashed = typeof candidate.password === "string" && candidate.password.startsWith("$2");
-      const match = isHashed
-        ? await bcrypt.compare(password, candidate.password)
-        : candidate.password === password;
-      if (match) { onLogin(candidate, keepSignedIn, null); setError(""); setLoading(false); return; }
+      setError("Sin conexión. Verifica tu internet e intenta de nuevo.");
+      setLoading(false);
+      return;
     }
     setError(t.invalidLogin);
     setLoading(false);

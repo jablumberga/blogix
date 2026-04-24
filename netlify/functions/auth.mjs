@@ -18,9 +18,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Admin user — password must be a bcrypt hash stored in ADMIN_PASSWORD_HASH env var,
-// falling back to the hardcoded hash of "admin123" for local dev.
-const ADMIN_PASSWORD_HASH_FALLBACK = "$2b$10$HBq3kbDZ9QosHuLd/Kewi.XcSfz904GusJFwyP7YNZkorQKA8MGyW";
 
 export default async (request) => {
   if (request.method === "OPTIONS") {
@@ -33,6 +30,9 @@ export default async (request) => {
   const { BLOGIX_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY, ADMIN_PASSWORD_HASH } = process.env;
   if (!BLOGIX_SECRET) {
     return Response.json({ error: "Missing BLOGIX_SECRET env var" }, { status: 500, headers: corsHeaders });
+  }
+  if (!ADMIN_PASSWORD_HASH) {
+    return Response.json({ error: "Missing ADMIN_PASSWORD_HASH env var" }, { status: 500, headers: corsHeaders });
   }
 
   const url = new URL(request.url);
@@ -54,7 +54,7 @@ export default async (request) => {
 
     // Admin user list (hardcoded + env override for password hash)
     const adminUsers = [
-      { id: 1, username: "admin", password: ADMIN_PASSWORD_HASH || ADMIN_PASSWORD_HASH_FALLBACK, role: "admin", name: "Alexander", refId: null },
+      { id: 1, username: "admin", password: ADMIN_PASSWORD_HASH, role: "admin", name: "Alexander", refId: null },
     ];
 
     // Fetch dynamic partners/drivers from Supabase
