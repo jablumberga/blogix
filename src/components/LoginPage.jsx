@@ -27,12 +27,15 @@ export default function LoginPage({ t, onLogin }) {
         setLoading(false);
         return;
       }
-      // Server reachable but rejected
       if (res.status === 401 || res.status === 400) {
         setError(t.invalidLogin);
         setLoading(false);
         return;
       }
+      // Server error (5xx or unexpected)
+      setError("Error del servidor. Intenta de nuevo en unos momentos.");
+      setLoading(false);
+      return;
     } catch {
       setError("Sin conexión. Verifica tu internet e intenta de nuevo.");
       setLoading(false);

@@ -58,8 +58,8 @@ export const initClients = [
 ];
 
 export const initPartners = [
-  { id: 1, name: "Carlos Mìndez", phone: "+1 809 555 1111", email: "carlos@email.do", commissionPct: 15, negotiationType: "Net Profit %", notes: "Tiene 2 camiones", username: "carlos", password: "$2b$10$Pky8FUU1hAJUTk5rrRApM.pYPKSD6l59guFhkoVJldZrn9vXuGNAW" },
-  { id: 2, name: "María López",   phone: "+1 809 555 2222", email: "maria@email.do",  commissionPct: 12, negotiationType: "Net Profit %", notes: "",              username: "maria",  password: "$2b$10$KlcIqOkDFFGkFJS7ZBmdJuTO3yr6isKKpaa8/7Af4cf86UcreKoH2" },
+  { id: 1, name: "Carlos Mìndez", phone: "+1 809 555 1111", email: "carlos@email.do", commissionPct: 15, negotiationType: "Net Profit %", notes: "Tiene 2 camiones", username: "carlos" },
+  { id: 2, name: "María López",   phone: "+1 809 555 2222", email: "maria@email.do",  commissionPct: 12, negotiationType: "Net Profit %", notes: "",              username: "maria"  },
 ];
 
 export const initTrucks = [
@@ -71,10 +71,10 @@ export const initTrucks = [
 ];
 
 export const initDrivers = [
-  { id: 1, name: "Juan Pérez",     phone: "+1 809 555 1234", license: "LIC-001", truckId: 1, salaryType: "perTrip", fixedAmount: 0,     username: "juan",    password: "$2b$10$apeRImCTKNTNIaHku1CbYut36izu6Miu03prQEcd/n0HFa17giuLi",
+  { id: 1, name: "Juan Pérez",     phone: "+1 809 555 1234", license: "LIC-001", truckId: 1, salaryType: "perTrip", fixedAmount: 0,     username: "juan",
     rates: [{ id: 1, province: "Santiago", municipality: "Santiago de los Caballeros", priceT1: 2500, priceT2: 3500 }, { id: 2, province: "Puerto Plata", municipality: "San Felipe de Puerto Plata", priceT1: 3200, priceT2: 4500 }] },
-  { id: 2, name: "Roberto Gómez", phone: "+1 809 555 5678", license: "LIC-002", truckId: 2, salaryType: "fixed",   fixedAmount: 25000, username: "roberto", password: "$2b$10$Gl4olUiqsekaPHzSw1eX3unaDmUUncR3fkMetTHC64nd5ChJar2KG", rates: [] },
-  { id: 3, name: "Pedro Ramírez", phone: "+1 809 555 9012", license: "LIC-003", truckId: 3, salaryType: "perTrip", fixedAmount: 0,     username: "pedro",   password: "$2b$10$QdTU/DNo8i/4kMUJJ4SlXuAyg/uENz1cRW5bRV.9INOW7VgUSmyMq",
+  { id: 2, name: "Roberto Gómez", phone: "+1 809 555 5678", license: "LIC-002", truckId: 2, salaryType: "fixed",   fixedAmount: 25000, username: "roberto", rates: [] },
+  { id: 3, name: "Pedro Ramírez", phone: "+1 809 555 9012", license: "LIC-003", truckId: 3, salaryType: "perTrip", fixedAmount: 0,     username: "pedro",
     rates: [{ id: 1, province: "Santiago", municipality: "Santiago de los Caballeros", priceT1: 2000, priceT2: 3000 }] },
 ];
 

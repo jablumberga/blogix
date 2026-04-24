@@ -6,3 +6,7 @@ dist/
 .env.*
 *.keystore
 *.jks
+
+# Local Netlify folder
+.netlify
+supabase/.temp
