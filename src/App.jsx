@@ -76,6 +76,40 @@ export default function App() {
     return () => window.removeEventListener("resize", handle);
   }, []);
 
+  if (window.location.pathname.startsWith("/privacy")) {
+    return (
+      <div style={{ fontFamily: "Arial, sans-serif", maxWidth: 800, margin: "40px auto", padding: "0 20px", color: "#333", lineHeight: 1.7 }}>
+        <h1 style={{ color: "#c0392b" }}>Política de Privacidad — B-Logix</h1>
+        <p><strong>Última actualización:</strong> 23 de abril de 2026</p>
+        <p>B-Logix es una plataforma de gestión logística para empresas de transporte en República Dominicana. Esta política describe cómo recopilamos, usamos y protegemos su información.</p>
+        <h2>1. Información que recopilamos</h2>
+        <ul>
+          <li><strong>Información de cuenta:</strong> nombre de usuario y contraseña (almacenada encriptada).</li>
+          <li><strong>Datos operativos:</strong> registros de viajes, gastos, camiones y liquidaciones.</li>
+          <li><strong>Datos del dispositivo:</strong> información básica para el funcionamiento de la app.</li>
+        </ul>
+        <h2>2. Cómo usamos la información</h2>
+        <ul>
+          <li>Para proveer las funciones de la plataforma (gestión de flota, nómina, cuentas por cobrar).</li>
+          <li>Para autenticar usuarios y controlar acceso según rol (administrador, socio, conductor).</li>
+          <li>Para enviar notificaciones push sobre nómina y viajes asignados.</li>
+        </ul>
+        <h2>3. Compartir información</h2>
+        <p>No vendemos ni compartimos su información con terceros. Los datos se almacenan en servidores seguros vía Supabase y Netlify.</p>
+        <h2>4. Seguridad</h2>
+        <p>Contraseñas almacenadas con encriptación bcrypt. Comunicaciones vía HTTPS.</p>
+        <h2>5. Permisos de la aplicación</h2>
+        <ul>
+          <li><strong>Cámara:</strong> para adjuntar fotos de recibos a gastos (opcional).</li>
+          <li><strong>Notificaciones:</strong> para avisos de nómina y viajes.</li>
+          <li><strong>Internet:</strong> para sincronizar datos con el servidor.</li>
+        </ul>
+        <h2>6. Contacto</h2>
+        <p>Para preguntas: <a href="mailto:soporte@blogix.do" style={{ color: "#c0392b" }}>soporte@blogix.do</a></p>
+      </div>
+    );
+  }
+
   if (!user) return <LoginPage t={t} allUsers={allUsers} onLogin={(u, remember, token) => {
     login(u, remember, token);
     setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : "dashboard");
