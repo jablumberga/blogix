@@ -30,7 +30,7 @@
 	<string>Main</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
@@ -47,5 +47,10 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>B-Logix usa la cámara para adjuntar fotos de recibos a los gastos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>B-Logix accede a tus fotos para adjuntar imágenes a los gastos.</string>
+
 </dict>
 </plist>

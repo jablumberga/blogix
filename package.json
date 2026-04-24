@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:mobile": "cp capacitor.config.prod.json capacitor.config.json && vite build && npx cap sync && cp capacitor.config.dev.json capacitor.config.json 2>/dev/null || true",
     "preview": "vite preview"
   },
   "dependencies": {
