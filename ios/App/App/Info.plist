@@ -51,6 +51,8 @@
 	<string>B-Logix usa la cámara para adjuntar fotos de recibos a los gastos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>B-Logix accede a tus fotos para adjuntar imágenes a los gastos.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 
 </dict>
 </plist>
