@@ -29,8 +29,9 @@ Gestiona tu flota, conductores y liquidaciones desde tu móvil. Diseñado para e
 
 ## Keywords (100 chars máx, separados por comas, sin espacios)
 ```
-logística,flota,transporte,nómina,conductores,viajes,camiones,gastos,liquidaciones,socios
+transporte,conductores,viajes,camiones,gastos,liquidaciones,socios,carga,RD,empresas
 ```
+_(Nota: "flota", "nómina" y "logística" ya están en el subtítulo — Apple los ignora como keywords duplicados)_
 
 ---
 
@@ -67,7 +68,7 @@ Gestión de Flota
 Administra todas las unidades: estado, asignación y disponibilidad. Mantén tu flota organizada y operativa.
 
 Control de Gastos
-Registra los gastos operativos relacionados a viajes, mantenimiento y otros rubros.
+Registra los gastos operativos relacionados a viajes, mantenimiento y otros rubros. Mantén el control total de los costos de tu operación.
 
 POR QUÉ B-LOGIX
 - Diseñado para la realidad del mercado dominicano
@@ -75,6 +76,8 @@ POR QUÉ B-LOGIX
 - Multi-rol: cada usuario ve solo lo que le corresponde
 - Toda la información centralizada en un solo sistema
 - Reduce errores, ahorra tiempo y mejora la comunicación interna
+- Notificaciones push en tiempo real para viajes asignados y actualizaciones clave
+- Captura de fotos de recibos y gastos directamente desde la cámara del dispositivo
 ```
 
 ---
@@ -97,20 +100,38 @@ Plataforma de gestión logística para empresas de transporte en República Domi
 
 ## Clasificación de edad
 - **Rating:** 4+ (sin contenido objetable)
-- No contiene: violencia, lenguaje adulto, contenido sexual, sustancias, apuestas
+
+Cuestionario de contenido (todas las respuestas: None / No):
+- Cartoon or Fantasy Violence: None
+- Realistic Violence: None
+- Sexual Content or Nudity: None
+- Profanity or Crude Humor: None
+- Medical/Treatment Information: None
+- Alcohol, Tobacco, or Drug Use: None
+- Simulated Gambling: None
+- Horror/Fear Themes: None
+- Mature/Suggestive Themes: None
+- Unrestricted Web Access: No
+- Gambling and Contests: No
 
 ---
 
 ## App Privacy (cuestionario en App Store Connect)
 
 ### Datos recopilados
-| Tipo de dato | ¿Se recopila? | Vinculado al usuario | Tracking |
-|---|---|---|---|
-| Email | Sí | Sí | No |
-| Credenciales (contraseña hasheada) | Sí | Sí | No |
-| ID de usuario | Sí | Sí | No |
-| Tokens push (APNS) | Sí | Sí | No |
-| Fotos (adjuntas a gastos) | Sí (temporal) | No | No |
+| Tipo de dato | ¿Se recopila? | Vinculado al usuario | Tracking | Propósito |
+|---|---|---|---|---|
+| Email | Sí | Sí | No | Autenticación |
+| Credenciales (hash) | Sí | Sí | No | Autenticación |
+| Nombre | Sí | Sí | No | Funcionalidad de la app |
+| Teléfono | [VERIFICAR] | Sí | No | Funcionalidad de la app |
+| ID de usuario | Sí | Sí | No | Autenticación |
+| Device ID | [VERIFICAR] | No | No | Seguridad / Sesión |
+| Tokens push (APNS) | Sí | Sí | No | Notificaciones |
+| Fotos (recibos/gastos) | [VERIFICAR — ¿pasan por servidor?] | No | No | Funcionalidad de la app |
+| Datos de crash/diagnóstico | [VERIFICAR] | No | No | Diagnóstico |
+
+> Los campos `[VERIFICAR]` requieren confirmación antes de someter. Si las fotos pasan por el servidor aunque sea en tránsito, deben declararse como recopiladas.
 
 ### Propósitos del uso de datos
 - **Email + ID:** autenticación y funcionalidad de la app
@@ -129,7 +150,8 @@ Plataforma de gestión logística para empresas de transporte en República Domi
 ## Screenshots requeridos
 
 ### iPhone (obligatorio)
-- **6.7" — iPhone 15 Pro Max / 16 Pro Max:** 1290×2796 px o 1320×2868 px
+- **6.9" — iPhone 16 Pro Max / 16 Plus:** 1320×2868 px — **REQUERIDO para 2025**
+- **6.7" — iPhone 15 Pro Max (alternativa aceptada):** 1290×2796 px
   - Mínimo 3 screenshots, máximo 10
   - Formato: PNG o JPEG
   - Sin transparencia, sin bordes de dispositivo (App Store los agrega)
@@ -146,8 +168,9 @@ Plataforma de gestión logística para empresas de transporte en República Domi
 5. Gestión de flota / unidades
 
 ### Cómo capturar
-- Safari DevTools → Responsive → iPhone 15 Pro Max (390×844 logical) → escala 3x → 1170×2532
-- O directo desde simulador Xcode: Device → iPhone 15 Pro Max
+- **Recomendado:** Simulador Xcode → Device → iPhone 16 Pro Max → File → Take Screenshot (1320×2868 px)
+- **Alternativa:** Safari DevTools → Responsive → iPhone 16 Pro Max (430×956 pt lógicos, escala 3x)
+- NOTA: 390×844 lógicos / 1170×2532 px corresponden al iPhone 13/14 estándar (6.1"), NO al 6.9" Pro Max
 
 ---
 
@@ -155,16 +178,13 @@ Plataforma de gestión logística para empresas de transporte en República Domi
 
 ### Prerequisitos
 ```bash
-# Instalar CocoaPods si no está
-sudo gem install cocoapods
-
-# Sincronizar assets web con iOS
+# Sincronizar assets web con iOS (usa SPM, no CocoaPods)
 npm run build:mobile
 ```
 
 ### Abrir en Xcode
 ```bash
-open ios/App/App.xcworkspace
+open ios/App/App.xcodeproj
 ```
 
 ### Configuración en Xcode
@@ -188,7 +208,7 @@ open ios/App/App.xcworkspace
 
 ### Alternativa con xcodebuild
 ```bash
-xcodebuild -workspace ios/App/App.xcworkspace \
+xcodebuild -project ios/App/App.xcodeproj \
   -scheme App \
   -configuration Release \
   -archivePath build/App.xcarchive \
@@ -202,25 +222,8 @@ xcodebuild -exportArchive \
 
 ---
 
-## ExportOptions.plist (crear en ios/)
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>method</key>
-    <string>app-store</string>
-    <key>teamID</key>
-    <string>TU_TEAM_ID</string>
-    <key>uploadBitcode</key>
-    <false/>
-    <key>uploadSymbols</key>
-    <true/>
-    <key>compileBitcode</key>
-    <false/>
-</dict>
-</plist>
-```
+## ExportOptions.plist (ya creado en ios/ExportOptions.plist)
+Ver `/Users/jablumberg/blogix/ios/ExportOptions.plist` — reemplazar `TU_TEAM_ID` con el Team ID real de developer.apple.com → Membership.
 
 ---
 
@@ -232,7 +235,7 @@ xcodebuild -exportArchive \
 - [ ] Provisioning profile App Store creado para com.blogix.app
 - [ ] Subir build vía Xcode Organizer o Transporter
 - [ ] Completar metadata: nombre, subtítulo, descripción, keywords
-- [ ] Subir screenshots (iPhone 6.7" obligatorio)
+- [ ] Subir screenshots iPhone 6.9" — 1320×2868 px (obligatorio para 2025)
 - [ ] Configurar App Privacy en App Store Connect
 - [ ] Responder cuestionario de cifrado (Export Compliance → No)
 - [ ] Agregar Privacy Policy URL
@@ -244,12 +247,46 @@ xcodebuild -exportArchive \
 
 ---
 
+## Información de contacto para App Review (App Store Connect)
+- **Nombre:** [Nombre del responsable técnico o de negocio]
+- **Apellido:** [Apellido]
+- **Teléfono:** +1-809-XXX-XXXX (con código de país)
+- **Email:** [email de contacto — no el email de usuario final]
+
+## Cuentas demo para revisores de Apple
+Apple intentará iniciar sesión. Sin demo credentials = rechazo automático por "unable to review."
+- **Admin:** admin@demo.blogix.do / [password segura]
+- **Socio:** socio@demo.blogix.do / [password segura]
+- **Conductor:** conductor@demo.blogix.do / [password segura]
+
+Datos mínimos precargados antes de someter:
+- 3 viajes (1 completado, 1 en curso, 1 pendiente)
+- 1 nómina procesada con al menos 2 conductores
+- 1 liquidación a socio con detalle
+- 2-3 gastos con fotos adjuntas
+
+---
+
 ## Riesgo principal: Guideline 4.2 (funcionalidad limitada)
-Apple puede rechazar una app que "parece un sitio web". Mitigaciones ya implementadas:
-- Push notifications nativas (APNS)
-- Cámara nativa (adjuntar fotos a gastos)
+Apple puede rechazar una app Capacitor que "parece un sitio web".
+
+### Ya implementadas
+- Push notifications nativas (APNS) — notificaciones de viajes asignados
+- Cámara nativa — adjuntar fotos de recibos a gastos
 - Entitlements de producción configurados
-- Si rechazan: agregar offline mode o un widget nativo
+
+### Acciones críticas antes de someter
+1. **App Review Notes (campo en App Store Connect — CRÍTICO):** Incluir este texto al someter:
+   > "B-Logix is a B2B SaaS platform for Dominican trucking and logistics companies. The app uses native APNS push notifications for real-time trip assignment alerts and the native camera API for receipt photo capture. Built with Capacitor 8 on top of a React business interface."
+
+2. **Cuentas demo (ver sección arriba) — sin esto Apple rechaza.**
+
+### Si rechazan (plan de respuesta)
+- **Primera opción:** Widget nativo iOS (WidgetKit) con viajes activos — los widgets no pueden usar WKWebView, demostrando presencia nativa
+- **Segunda opción:** Autenticación biométrica (Face ID / Touch ID) via LocalAuthentication
+- **Tercera opción:** Offline mode con datos cacheados localmente
+
+---
 
 ## APNS Key para Supabase
 - Generar en developer.apple.com → Keys → AuthKey .p8

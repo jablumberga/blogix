@@ -8,6 +8,7 @@
     "webContentsDebuggingEnabled": false
   },
   "ios": {
-    "contentInset": "always"
+    "contentInset": "always",
+    "backgroundColor": "#1a2332"
   }
 }
