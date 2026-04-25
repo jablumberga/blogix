@@ -42,9 +42,9 @@ function SectionTitle({ label, color }) {
 export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, alerts, setPage }) {
   const cm = monthStr();
   const today = new Date().toISOString().slice(0, 10);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
+    const handler = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
