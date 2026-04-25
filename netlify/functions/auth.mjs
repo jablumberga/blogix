@@ -27,7 +27,7 @@ export default async (request) => {
     return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
   }
 
-  const { BLOGIX_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY, ADMIN_PASSWORD_HASH } = process.env;
+  const { BLOGIX_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY, ADMIN_PASSWORD_HASH, DEMO_PASSWORD_HASH } = process.env;
   if (!BLOGIX_SECRET) {
     return Response.json({ error: "Missing BLOGIX_SECRET env var" }, { status: 500, headers: corsHeaders });
   }
@@ -55,6 +55,7 @@ export default async (request) => {
     // Admin user list (hardcoded + env override for password hash)
     const adminUsers = [
       { id: 1, username: "admin", password: ADMIN_PASSWORD_HASH, role: "admin", name: "Alexander", refId: null },
+      ...(DEMO_PASSWORD_HASH ? [{ id: 99, username: "demo", password: DEMO_PASSWORD_HASH, role: "admin", name: "Demo", refId: null }] : []),
     ];
 
     // Fetch dynamic partners/drivers from Supabase
