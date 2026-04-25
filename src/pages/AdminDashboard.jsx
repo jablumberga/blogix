@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, monthStr, getPeriodInfo } from "../utils/helpers.js";
+import { fmt, monthStr, getPeriodInfo, expenseTruckId } from "../utils/helpers.js";
 import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
 
 // ── Mini stat block ─────────────────────────────────────────────────────────
@@ -131,11 +131,11 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   }).filter(b => b.trips > 0 || b.fee > 0).sort((a,b) => b.fee - a.fee);
 
   // ── Rentabilidad por camion (period) ────────────────────────────────────
+  const _tripMap = new Map(trips.map(tr => [tr.id, tr]));
   const truckStats = trucks.map(tk => {
     const tkTrips   = mt.filter(tr => tr.truckId === tk.id);
     const tkRev     = tkTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
-    const tkTripIds = new Set(tkTrips.map(tr => tr.id));
-    const tkExp     = periodExpenses.filter(e => e.tripId && tkTripIds.has(e.tripId)).reduce((s,e) => s + e.amount, 0);
+    const tkExp     = periodExpenses.filter(e => expenseTruckId(e, _tripMap) === tk.id).reduce((s,e) => s + e.amount, 0);
     const tkNet     = tkRev - tkExp;
     const tkMargin  = tkRev > 0 ? tkNet / tkRev * 100 : 0;
     const partner     = tk.owner === "partner" ? partners.find(p => p.id === tk.partnerId) : null;

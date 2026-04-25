@@ -72,6 +72,7 @@ export const t_en = {
   accumulated: "Accumulated", earnings: "Earnings",
   payrollSummary: "Payroll Summary", tripPay: "Trip Pay", helperPay: "Helper Pay",
   totalEarnings: "Total Earnings", totalDiscounts: "Total Discounts", netPay: "Net Pay",
+  truckProfitability: "Truck Profitability", noTruckLinked: "No truck", selectTruck: "Select Truck",
 };
 
 export const t_es = {
@@ -155,6 +156,7 @@ export const t_es = {
   accumulated: "Acumulado", earnings: "Ingresos",
   payrollSummary: "Resumen Nómina", tripPay: "Pago Viajes", helperPay: "Pago Ayudantes",
   totalEarnings: "Total Ingresos", totalDiscounts: "Total Descuentos", netPay: "Pago Neto",
+  truckProfitability: "Rentabilidad del Camión", noTruckLinked: "Sin camión", selectTruck: "Seleccionar Camión",
 };
 
 export const translations = { en: t_en, es: t_es };

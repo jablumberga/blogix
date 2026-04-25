@@ -6,6 +6,16 @@ export const pct = (n) => (n * 100).toFixed(1) + "%";
 
 export const nxId = (arr) => (arr.length ? Math.max(...arr.map((x) => x.id)) + 1 : 1);
 
+// Returns the resolved truck id for an expense: direct truckId first, then trip-indirect
+export function expenseTruckId(expense, tripMap) {
+  if (expense.truckId) return expense.truckId;
+  if (expense.tripId && tripMap) {
+    const tr = tripMap.get(expense.tripId);
+    if (tr?.truckId) return tr.truckId;
+  }
+  return null;
+}
+
 export const today = () => new Date().toISOString().slice(0, 10);
 
 export const monthStr = () => {
@@ -132,6 +142,16 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
   clients.filter(c => c.status === "active" && (!c.rates || c.rates.length === 0)).forEach(c => {
     alerts.push({ id: `norates-${c.id}`, severity: "info", category: "rates",
       msg: `Cliente "${c.companyName}" no tiene tarifario definido` });
+  });
+
+  // AGENT 13: Camión con gastos este mes pero sin viajes — unidad que cuesta sin producir
+  const thisMonth13 = monthStr();
+  const tripMap13 = new Map(trips.map(tr => [tr.id, tr]));
+  trucks.forEach(tk => {
+    const hasExp = expenses.some(e => expenseTruckId(e, tripMap13) === tk.id && (e.date || "").startsWith(thisMonth13));
+    const hasTrips = trips.some(tr => tr.truckId === tk.id && (tr.date || "").startsWith(thisMonth13) && tr.status !== "cancelled");
+    if (hasExp && !hasTrips) alerts.push({ id: `idle-${tk.id}`, severity: "warning", category: "fleet",
+      msg: `Camión ${tk.plate} tiene gastos este mes pero 0 viajes — unidad con costo sin ingreso` });
   });
 
   return alerts;
