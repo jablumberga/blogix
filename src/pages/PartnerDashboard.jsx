@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Truck, Route, TrendingUp, TrendingDown, CircleDollarSign } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, pad, MONTHS_ES } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Sel, Badge, Th, Td, StatusBadge } from "../components/ui/index.jsx";
 
 export default function PartnerDashboard({ t, trips, trucks, expenses, partner, partnerTruckIds, clients, settlementStatus, setSettlementStatus }) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
   const [truckFilter, setTruckFilter] = useState("all");
   const now = new Date();
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
@@ -111,26 +117,28 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, partner, 
       </div>
       {filtered.length === 0
         ? <div style={{ textAlign: "center", padding: 32, color: colors.textMuted }}>Sin viajes para el filtro seleccionado.</div>
-        : <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-            <Th>{t.date}</Th><Th>Ruta</Th><Th>{t.client}</Th><Th>{t.truck}</Th><Th align="right">{t.revenue}</Th><Th align="right">Retenciones</Th><Th align="center">{t.status}</Th><Th align="center">{t.document}</Th>
-          </tr></thead>
-          <tbody>{filtered.slice().sort((a,b) => a.date.localeCompare(b.date)).map(tr => {
-            const cl = clients.find(c => c.id === tr.clientId);
-            const tk = trucks.find(t2 => t2.id === tr.truckId);
-            const tripRet = expenses.filter(e => e.tripId === tr.id && e.category === "broker_commission").reduce((s,e) => s+e.amount, 0);
-            return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
-              <Td>{tr.date}</Td>
-              <Td>{tr.municipality}{tr.province ? `, ${tr.province}` : ""}</Td>
-              <Td>{cl?.companyName || "—"}</Td>
-              <Td>{tk?.plate || "—"}</Td>
-              <Td align="right" bold color={colors.green}>{fmt(tr.revenue)}</Td>
-              <Td align="right" color={tripRet > 0 ? colors.orange : colors.textMuted}>{tripRet > 0 ? `− ${fmt(tripRet)}` : "—"}</Td>
-              <Td align="center"><StatusBadge status={tr.status} t={t} /></Td>
-              <Td align="center"><Badge label={tr.docStatus === "delivered" ? t.deliveredDocs : t.pendingDocs} color={tr.docStatus === "delivered" ? colors.green : colors.orange} /></Td>
-            </tr>;
-          })}</tbody>
-        </table>}
+        : <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+              <Th>{t.date}</Th><Th>Ruta</Th><Th>{t.client}</Th><Th>{t.truck}</Th><Th align="right">{t.revenue}</Th><Th align="right">Retenciones</Th><Th align="center">{t.status}</Th><Th align="center">{t.document}</Th>
+            </tr></thead>
+            <tbody>{filtered.slice().sort((a,b) => a.date.localeCompare(b.date)).map(tr => {
+              const cl = clients.find(c => c.id === tr.clientId);
+              const tk = trucks.find(t2 => t2.id === tr.truckId);
+              const tripRet = expenses.filter(e => e.tripId === tr.id && e.category === "broker_commission").reduce((s,e) => s+e.amount, 0);
+              return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+                <Td>{tr.date}</Td>
+                <Td>{tr.municipality}{tr.province ? `, ${tr.province}` : ""}</Td>
+                <Td>{cl?.companyName || "—"}</Td>
+                <Td>{tk?.plate || "—"}</Td>
+                <Td align="right" bold color={colors.green}>{fmt(tr.revenue)}</Td>
+                <Td align="right" color={tripRet > 0 ? colors.orange : colors.textMuted}>{tripRet > 0 ? `− ${fmt(tripRet)}` : "—"}</Td>
+                <Td align="center"><StatusBadge status={tr.status} t={t} /></Td>
+                <Td align="center"><Badge label={tr.docStatus === "delivered" ? t.deliveredDocs : t.pendingDocs} color={tr.docStatus === "delivered" ? colors.green : colors.orange} /></Td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>}
     </Card>
   </div>;
 }

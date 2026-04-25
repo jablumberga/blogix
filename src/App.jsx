@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp, RefreshCw } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { getToken } from "./api.js";
 import { colors } from "./constants/theme.js";
@@ -62,8 +62,7 @@ async function initPushNotifications(userRole) {
         });
       } catch { /* non-critical — token will be retried on next login */ }
     });
-    PushNotifications.addListener("pushNotificationReceived", (notification) => {
-      console.log("Push recibido:", notification.title);
+    PushNotifications.addListener("pushNotificationReceived", () => {
     });
     PushNotifications.addListener("pushNotificationActionPerformed", () => {
       // User tapped notification — app already opens to foreground
@@ -177,11 +176,51 @@ export default function App() {
   ];
   const navItems = isAdmin ? adminNav : isPartner ? partnerNav : driverNav;
 
-  const ctx = { t, user, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, partner, partnerTruckIds, driverObj, alerts };
+  const ctx = { t, user, isMobile, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, partner, partnerTruckIds, driverObj, alerts };
+
+  const pageTitles = {
+    dashboard:   t.dashboard,
+    partnerDash: t.partnerDashboard,
+    driverDash:  t.dashboard,
+    clients:     t.clients,
+    cxc:         "Cuentas x Cobrar",
+    trips:       t.trips,
+    fleet:       t.fleet,
+    drivers:     t.drivers,
+    partners:    t.partners,
+    brokers:     t.brokers,
+    expenses:    t.expenses,
+    cxp:         "Cuentas x Pagar",
+    nomina:      "Nómina",
+    suppliers:   t.suppliers,
+    settlements: t.settlements,
+    agents:      t.agents,
+  };
+
+  const bottomNavTabs = [
+    { id: "dashboard", icon: Home,         label: "Dashboard" },
+    { id: "trips",     icon: Truck,        label: "Viajes"    },
+    { id: "expenses",  icon: DollarSign,   label: "Gastos"    },
+    { id: "__mas__",   icon: Menu,         label: "Más"       },
+  ];
 
   return (
     <div style={{ display: "flex", height: "100vh", background: colors.bg, color: colors.text, fontFamily: "'Inter',-apple-system,sans-serif", fontSize: 13 }}>
       {isMobile && sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 190 }} />}
+
+      {/* Mobile top bar */}
+      {isMobile && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 52, zIndex: 200, background: colors.card, borderBottom: `1px solid ${colors.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
+          <button onClick={() => setSidebarOpen(true)} style={{ background: "transparent", border: "none", color: colors.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8, flexShrink: 0 }}>
+            <Menu size={20} />
+          </button>
+          <span style={{ fontWeight: 600, fontSize: 15, color: colors.text, flex: 1, textAlign: "center" }}>
+            {pageTitles[page] ?? "B-Logix"}
+          </span>
+          {/* Spacer to balance the hamburger and keep title visually centred */}
+          <div style={{ width: 44, flexShrink: 0 }} />
+        </div>
+      )}
 
       <div style={{ width: isMobile ? (sidebarOpen ? 220 : 0) : (sidebarOpen ? 220 : 60), ...(isMobile ? { position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 200 } : {}), background: colors.sidebar, borderRight: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", transition: "width 0.2s", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ padding: "14px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${colors.border}`, cursor: "pointer" }} onClick={() => setSidebarOpen(!sidebarOpen)}>
@@ -227,8 +266,7 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "56px 14px 14px" : 20, position: "relative" }}>
-        {isMobile && <button onClick={() => setSidebarOpen(true)} style={{ position: "fixed", top: 16, left: 16, zIndex: 150, background: colors.accent, border: "none", borderRadius: 8, padding: "8px 11px", cursor: "pointer", color: "white", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}><Menu size={18} /></button>}
+      <div style={{ flex: 1, overflow: "auto", paddingTop: isMobile ? 52 : 20, paddingLeft: isMobile ? 14 : 20, paddingRight: isMobile ? 14 : 20, paddingBottom: isMobile && isAdmin ? `calc(56px + env(safe-area-inset-bottom))` : `calc(${isMobile ? "14px" : "20px"} + env(safe-area-inset-bottom))`, position: "relative" }}>
         {showRecoveryBanner && (
           <div style={{ position: "sticky", top: 0, zIndex: 101, background: "#7c3aed", color: "#fff", padding: "10px 16px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderRadius: 8, marginBottom: 12 }}>
             <span>🔔 Tienes {localDataCount} registros locales que no están en el servidor. ¿Restaurar ahora?</span>
@@ -269,9 +307,30 @@ export default function App() {
         {page === "cxp"         && isAdmin    && <CxPPage          {...ctx} />}
         {page === "nomina"      && isAdmin    && <NominaPage       {...ctx} />}
         {page === "suppliers"   && isAdmin    && <SuppliersPage    {...ctx} />}
-        {page === "settlements"               && <SettlementsPage  {...ctx} />}
+        {page === "settlements" && (isAdmin || isPartner) && <SettlementsPage  {...ctx} />}
         {page === "agents"      && isAdmin    && <AgentsPage       {...ctx} />}
       </div>
+
+      {/* Mobile bottom navigation — admin only */}
+      {isMobile && user.role === "admin" && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 56, zIndex: 200, background: colors.card, borderTop: `1px solid ${colors.border}`, display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)" }}>
+          {bottomNavTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isMas = tab.id === "__mas__";
+            const isActive = !isMas && page === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => isMas ? setSidebarOpen(true) : setPage(tab.id)}
+                style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: isActive ? colors.accent : colors.textMuted, cursor: "pointer", fontSize: 10, fontWeight: isActive ? 600 : 400, padding: "6px 0", minWidth: 0 }}
+              >
+                <Icon size={20} color={isActive ? colors.accent : colors.textMuted} />
+                <span style={{ lineHeight: 1 }}>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
     </div>
   );

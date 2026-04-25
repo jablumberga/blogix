@@ -42,3 +42,22 @@ export const font = {
   xl:   20,
   xxl:  24,
 };
+
+export const bp = { mobile: 768, tablet: 1024 };
+
+export const grid = {
+  cols1: "1fr",
+  cols2: "repeat(auto-fit, minmax(260px, 1fr))",
+  cols3: "repeat(auto-fit, minmax(200px, 1fr))",
+  cols4: "repeat(auto-fit, minmax(160px, 1fr))",
+};
+
+export const mobileFont = {
+  xs:   12,
+  sm:   13,
+  base: 15,
+  md:   16,
+  lg:   18,
+  xl:   22,
+  xxl:  27,
+};

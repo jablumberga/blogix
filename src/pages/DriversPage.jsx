@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, X, Pencil, Trash2 } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId } from "../utils/helpers.js";
@@ -6,6 +6,12 @@ import { DR_PROVINCES } from "../constants/destinations.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
 export default function DriversPage({ t, drivers, setDrivers, trucks }) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, percentageAmount: 0, username: "", password: "", rates: [] });
@@ -29,7 +35,7 @@ export default function DriversPage({ t, drivers, setDrivers, trucks }) {
   return <div>
     <PageHeader title={t.drivers} action={<Btn onClick={openNew}><Plus size={14} /> {t.addDriver}</Btn>} />
     {showForm && <Card style={{ marginBottom: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
         <Inp label={t.driverName} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
         <Inp label={t.phone} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
         <Inp label={t.license} value={form.license} onChange={e => setForm({ ...form, license: e.target.value })} />
@@ -37,7 +43,7 @@ export default function DriversPage({ t, drivers, setDrivers, trucks }) {
           <option value="">{t.none}</option>{trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}
         </Sel>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
         <Sel label={t.salaryType} value={form.salaryType} onChange={e => setForm({ ...form, salaryType: e.target.value })}>
           <option value="fixed">{t.fixedSalary}</option><option value="perTrip">{t.perTrip}</option><option value="porcentaje">{t.porcentaje}</option>
         </Sel>
@@ -69,6 +75,7 @@ export default function DriversPage({ t, drivers, setDrivers, trucks }) {
       <div style={{ display: "flex", gap: 8 }}><Btn onClick={save}>{t.save}</Btn><Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn></div>
     </Card>}
     <Card>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
           <Th>{t.driverName}</Th><Th>{t.phone}</Th><Th>{t.license}</Th><Th>{t.assignedTruck}</Th><Th>{t.salaryType}</Th><Th align="right">{t.actions}</Th>
@@ -79,12 +86,13 @@ export default function DriversPage({ t, drivers, setDrivers, trucks }) {
             <Td bold>{d.name}</Td><Td>{d.phone}</Td><Td>{d.license}</Td><Td>{tk?.plate || "—"}</Td>
             <Td><Badge label={d.salaryType === "fixed" ? `${t.fixedSalary}: ${fmt(d.fixedAmount)}` : d.salaryType === "porcentaje" ? `${t.porcentaje}: ${d.percentageAmount || 0}%` : t.perTrip} color={d.salaryType === "fixed" ? colors.accent : d.salaryType === "porcentaje" ? colors.cyan : colors.green} /></Td>
             <Td align="right">
-              <button onClick={() => openEdit(d)} style={{ padding: 4, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
-              <button onClick={() => setDrivers(drivers.filter(x => x.id !== d.id))} style={{ padding: 4, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
+              <button onClick={() => openEdit(d)} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
+              <button onClick={() => setDrivers(drivers.filter(x => x.id !== d.id))} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
             </Td>
           </tr>;
         })}</tbody>
       </table>
+      </div>
     </Card>
   </div>;
 }

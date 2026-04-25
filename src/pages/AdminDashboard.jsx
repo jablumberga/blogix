@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, monthStr, getPeriodInfo } from "../utils/helpers.js";
@@ -42,6 +42,12 @@ function SectionTitle({ label, color }) {
 export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, alerts, setPage }) {
   const cm = monthStr();
   const today = new Date().toISOString().slice(0, 10);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
   const [dateFrom, setDateFrom] = useState(`${cm}-01`);
   const [dateTo,   setDateTo]   = useState(() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(new Date(n.getFullYear(),n.getMonth()+1,0).getDate()).padStart(2,"0")}`; });
 
@@ -231,7 +237,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       </div>
 
       {/* ── Row 2: CxC · CxP · Brokers ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
 
         {/* CxC */}
         <Card style={{ cursor: "pointer" }} onClick={() => setPage("cxc")}>
@@ -281,7 +287,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       </div>
 
       {/* ── Row 3: P&L desglose · Rentabilidad camiones ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 12, marginBottom: 16 }}>
 
         {/* P&L desglose */}
         <Card>
@@ -352,7 +358,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       </div>
 
       {/* ── Row 4: Top clientes · Pipeline · Alertas ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
 
         {/* Top clientes */}
         <Card>
@@ -373,7 +379,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         {/* Pipeline de viajes */}
         <Card>
           <SectionTitle label="Pipeline de Viajes" color={colors.cyan} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 12 }}>
             {[
               { label: "Pendientes", count: pending_trips, color: colors.textMuted },
               { label: "En transito", count: transit_trips, color: colors.cyan },

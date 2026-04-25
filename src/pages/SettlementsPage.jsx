@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, pad, MONTHS_ES, genPeriods } from "../utils/helpers.js";
@@ -10,6 +10,12 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, t, isPart
   const { pTrips, pExpenses, retenciones, otrosGastos, rev, net, adminComm, toTransfer, status } = card;
   const isPaid = status === "paid";
   const [showDetail, setShowDetail] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   return <Card style={{ marginBottom: 16 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, paddingBottom: 14, borderBottom: `1px solid ${colors.border}` }}>
@@ -36,6 +42,7 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, t, isPart
 
     {showDetail && <>
       <div style={{ marginTop: 12 }}>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
           <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
             <Th>Fecha</Th><Th>Ruta</Th><Th>Cliente</Th><Th>{t.truck}</Th><Th align="center">Estado</Th><Th align="right">Ingreso</Th>
@@ -53,6 +60,7 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, t, isPart
             </tr>;
           })}</tbody>
         </table>
+        </div>
       </div>
 
       <div style={{ background: colors.inputBg, borderRadius: 10, padding: "14px 16px", border: `1px solid ${colors.border}` }}>

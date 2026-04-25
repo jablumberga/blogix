@@ -38,6 +38,10 @@ export default async (request) => {
   if (!token || typeof token !== "string") {
     return Response.json({ error: "token (string) required" }, { status: 400, headers: corsHeaders });
   }
+  const ALLOWED_PLATFORMS = ["ios", "android"];
+  if (!ALLOWED_PLATFORMS.includes(platform)) {
+    return Response.json({ error: "Invalid platform" }, { status: 400, headers: corsHeaders });
+  }
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/push_tokens`, {
     method: "POST",

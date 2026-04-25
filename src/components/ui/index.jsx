@@ -104,6 +104,8 @@ export function Sel({ label, children, ...p }) {
           fontSize: 16, // ≥16px prevents iOS Safari viewport zoom on focus
           outline: "none",
           transition: "border-color 0.15s, box-shadow 0.15s",
+          width: "100%",
+          boxSizing: "border-box",
           ...(p.style || {}),
         }}
       >
@@ -158,6 +160,8 @@ export function Btn({ children, variant = "primary", ...p }) {
       onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
       onMouseDown={e => { if (!p.disabled) e.currentTarget.style.transform = "scale(0.97)"; }}
       onMouseUp={e => { e.currentTarget.style.transform = "scale(1)"; }}
+      onTouchStart={e => { if (!p.disabled) e.currentTarget.style.transform = "scale(0.97)"; }}
+      onTouchEnd={e => { e.currentTarget.style.transform = "scale(1)"; }}
       style={{
         padding: "9px 16px",
         borderRadius: radius.md,
@@ -168,7 +172,7 @@ export function Btn({ children, variant = "primary", ...p }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        minHeight: 36,
+        minHeight: 44,
         transition: "opacity 0.15s, transform 0.1s",
         userSelect: "none",
         opacity: p.disabled ? 0.45 : 1,
@@ -204,9 +208,15 @@ export function StatusBadge({ status, t }) {
 
 // ─── PageHeader ───────────────────────────────────────────────────────────────
 export function PageHeader({ title, action }) {
+  const [width, setWidth] = useState(typeof window !== "undefined" ? window.innerWidth : 1024);
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-      <h1 style={{ fontSize: font.xxl, fontWeight: 700, margin: 0 }}>{title}</h1>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+      <h1 style={{ fontSize: width < 768 ? Math.min(font.xl, 22) : font.xxl, fontWeight: 700, margin: 0 }}>{title}</h1>
       {action}
     </div>
   );
@@ -269,7 +279,7 @@ export function DateFilter({ t, onFilter }) {
         <button
           type="button"
           key={m} onClick={() => apply(m)}
-          style={{ padding: "5px 12px", borderRadius: radius.xl, border: `1px solid ${mode === m ? colors.accent : colors.border}`, background: mode === m ? colors.accent + "18" : "transparent", color: mode === m ? colors.accentLight : colors.textMuted, cursor: "pointer", fontSize: font.xs, fontWeight: 500 }}
+          style={{ padding: "9px 14px", borderRadius: radius.xl, border: `1px solid ${mode === m ? colors.accent : colors.border}`, background: mode === m ? colors.accent + "18" : "transparent", color: mode === m ? colors.accentLight : colors.textMuted, cursor: "pointer", fontSize: font.xs, fontWeight: 500 }}
         >
           {t[m]}
         </button>

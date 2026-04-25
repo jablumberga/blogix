@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { Clock, ChevronDown, ChevronRight, CheckCircle2, Users, FileText, Pencil, X, Check } from "lucide-react";
 import { colors } from "../constants/theme.js";
@@ -319,6 +319,7 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
       />
     )}
     {showDetail && <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${colors.border}` }}>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
           <Th>Fecha</Th><Th>Viaje #</Th><Th>Ruta</Th><Th align="right">Pago</Th><Th align="right">Estado</Th>
@@ -380,6 +381,7 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
           </>;
         })}</tbody>
       </table>
+      </div>
     </div>}
   </Card>;
 }

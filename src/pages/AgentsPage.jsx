@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AlertCircle, AlertTriangle, Bell, CheckCircle2 } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { Card, PageHeader } from "../components/ui/index.jsx";
 
 export default function AgentsPage({ t, alerts }) {
   const [filter, setFilter] = useState("all");
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
   const severityColor  = { error: colors.red, warning: colors.orange, info: colors.accent };
   const severityIcon   = { error: AlertCircle, warning: AlertTriangle, info: Bell };
   const severityBg     = { error: colors.red + "10", warning: colors.orange + "10", info: colors.accent + "10" };
@@ -25,7 +31,7 @@ export default function AgentsPage({ t, alerts }) {
   return <div>
     <PageHeader title={t.agentsTitle} />
 
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
       {[
         { key: "all",     label: "Total",        count: alerts.length, color: colors.textMuted },
         { key: "error",   label: t.agentError,   count: errCount,      color: colors.red },

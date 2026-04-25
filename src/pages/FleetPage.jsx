@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { nxId } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
 export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTrips, clients, setExpenses, drivers }) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ plate: "", type: "Flatbed", size: "T1", owner: "own", partnerId: "" });
@@ -66,7 +72,7 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
   return <div>
     <PageHeader title={t.fleet} action={<Btn onClick={openNew}><Plus size={14} /> {t.addTruck}</Btn>} />
     {showForm && <Card style={{ marginBottom: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
         <Inp label={t.truckPlate} value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })} />
         <Sel label={t.truckType} value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
           <option>Flatbed</option><option>Refrigerated</option><option>Dry Van</option><option>Tanker</option><option>Lowboy</option>
@@ -89,6 +95,7 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
       <div style={{ display: "flex", gap: 8 }}><Btn onClick={save}>{t.save}</Btn><Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn></div>
     </Card>}
     <Card>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
           <Th>{t.truckPlate}</Th><Th>{t.truckType}</Th><Th>{t.truckSize}</Th><Th>{t.ownerType}</Th><Th>{t.partnerName}</Th><Th align="right">{t.actions}</Th>
@@ -101,12 +108,13 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
             <Td><Badge label={tk.owner === "own" ? t.ownTruck : t.partnerTruck} color={tk.owner === "own" ? colors.accent : colors.orange} /></Td>
             <Td>{pt?.name || "—"}</Td>
             <Td align="right">
-              <button onClick={() => openEdit(tk)} style={{ padding: 4, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
-              <button onClick={() => setTrucks(trucks.filter(x => x.id !== tk.id))} style={{ padding: 4, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
+              <button onClick={() => openEdit(tk)} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
+              <button onClick={() => setTrucks(trucks.filter(x => x.id !== tk.id))} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
             </Td>
           </tr>;
         })}</tbody>
       </table>
+      </div>
     </Card>
   </div>;
         }

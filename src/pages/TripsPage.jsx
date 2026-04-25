@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2, Calendar, FileCheck, FileText, Handshake, Hash, Zap } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today } from "../utils/helpers.js";
@@ -18,6 +18,12 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const [filterDriver, setFilterDriver] = useState("all");
   const [filterTruck, setFilterTruck] = useState("all");
   const [rateMsg, setRateMsg] = useState("");
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   const emptyForm = { date: today(), province: "", municipality: "", truckId: "", driverId: "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [], tarifaOverride: null };
 
@@ -205,7 +211,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           </Sel>
         </div>
         <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginTop: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginTop: 10 }}>
           <div>
             <Sel label={t.truck} value={form.truckId} onChange={e => handleTruckChange(e.target.value)}>
               <option value="">— {t.selectTruck || "Seleccionar camión"} —</option>
@@ -263,7 +269,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           {selectedClient.rules.defaultBrokerId && (() => { const b = brokers.find(x => x.id === selectedClient.rules.defaultBrokerId); return b ? <Badge label={`${t.broker}: ${b.name} ${b.commissionPct}%`} color={colors.yellow} icon={Handshake} /> : null; })()}
         </div>}
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22` }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
             <Sel label={t.numHelpers} value={form.numHelpers ?? 0} onChange={e => setForm({ ...form, numHelpers: Number(e.target.value) })}>
               {[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n === 0 ? "0 — " + t.none : `${n} ayudante${n > 1 ? "s" : ""}`}</option>)}
             </Sel>
@@ -292,15 +298,15 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
 
     {/* Expense Modal */}
     {expModal && <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setExpModal(null)}>
-      <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 12, padding: 24, width: 460, border: `1px solid ${colors.border}` }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 12, padding: 24, width: "min(460px, calc(100vw - 24px))", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${colors.border}` }}>
         <h3 style={{ margin: "0 0 14px", fontSize: 16, display: "flex", alignItems: "center", gap: 6 }}><Receipt size={18} color={colors.orange} /> {t.addExpense} — #{expModal}</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 10 }}>
           <Inp label={t.expenseDate} type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} />
           <Sel label={t.expenseCategory} value={expForm.category} onChange={e => setExpForm({ ...expForm, category: e.target.value })}>
             {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{t[c] || c}</option>)}
           </Sel>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 10 }}>
           <Inp label={t.expenseAmount} type="number" value={expForm.amount} onChange={e => setExpForm({ ...expForm, amount: e.target.value })} />
           <Sel label={t.paymentMethod} value={expForm.paymentMethod} onChange={e => setExpForm({ ...expForm, paymentMethod: e.target.value })}>
             {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t[m] || m}</option>)}
@@ -322,11 +328,16 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       </div>
     </div>}
 
-    <Card style={{ overflow: "auto" }}>
+    <Card>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1000 }}>
         <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-          <Th>{t.date}</Th><Th>{t.destination}</Th><Th>{t.status}</Th><Th>{t.client}</Th><Th>{t.createdBy}</Th><Th>{t.driver}</Th><Th>{t.truck}</Th>
-          <Th align="center">{t.conduce}</Th><Th align="center">{t.document}</Th><Th align="center">{t.expenses}</Th><Th align="right">{t.rate}</Th><Th align="right">{t.actions}</Th>
+          <Th>{t.date}</Th><Th>{t.destination}</Th><Th>{t.status}</Th><Th>{t.client}</Th>
+          <Th style={{ display: isMobile ? "none" : "table-cell" }}>{t.createdBy}</Th>
+          <Th>{t.driver}</Th><Th>{t.truck}</Th>
+          <Th align="center">{t.conduce}</Th>
+          <Th align="center" style={{ display: isMobile ? "none" : "table-cell" }}>{t.document}</Th>
+          <Th align="center">{t.expenses}</Th><Th align="right">{t.rate}</Th><Th align="right">{t.actions}</Th>
         </tr></thead>
         <tbody>
           {filtered.map(tr => {
@@ -341,7 +352,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
               <Td><span style={{ fontSize: 12 }}>{tr.municipality}</span><br /><span style={{ fontSize: 10, color: colors.textMuted }}>{tr.province}</span></Td>
               <Td><StatusBadge status={tr.status} t={t} /></Td>
               <Td bold>{cl?.companyName || "—"}{tr.invoiceRef && <><br /><span style={{ fontSize: 9, color: colors.textMuted }}>#{tr.invoiceRef}</span></>}</Td>
-              <Td><span style={{ fontSize: 11, color: colors.textMuted }}>{tr.createdBy}</span></Td>
+              <Td style={{ display: isMobile ? "none" : "table-cell" }}><span style={{ fontSize: 11, color: colors.textMuted }}>{tr.createdBy}</span></Td>
               <Td>{dk?.name || "—"}</Td>
               <Td>{tk?.plate || "—"}</Td>
               <Td align="center">
@@ -349,7 +360,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                   <Printer size={10} /> PDF
                 </button>
               </Td>
-              <Td align="center">
+              <Td align="center" style={{ display: isMobile ? "none" : "table-cell" }}>
                 <button onClick={() => setTrips(trips.map(x => x.id === tr.id ? { ...x, docStatus: x.docStatus === "delivered" ? "pending" : "delivered" } : x))}
                   style={{ padding: "3px 8px", borderRadius: 10, border: "none", fontSize: 10, fontWeight: 600, cursor: "pointer", background: tr.docStatus === "delivered" ? colors.green + "18" : colors.orange + "18", color: tr.docStatus === "delivered" ? colors.green : colors.orange }}>
                   {tr.docStatus === "delivered" ? t.deliveredDocs : t.pendingDocs}
@@ -374,6 +385,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           })}
         </tbody>
       </table>
+      </div>
       {filtered.length === 0 && <div style={{ textAlign: "center", padding: 30, color: colors.textMuted }}>{t.noTrips}</div>}
     </Card>
   </div>;

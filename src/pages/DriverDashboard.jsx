@@ -1,4 +1,4 @@
-import { useState, Fragment } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
@@ -8,6 +8,12 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [rateMsg, setRateMsg] = useState("");
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   const emptyForm = { date: today(), province: "", municipality: "", truckId: driverObj?.truckId || trucks[0]?.id || "", driverId: driverObj?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [] };
 
@@ -143,7 +149,7 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
     </Card>
 
     {showForm && <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowForm(false)}>
-      <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 14, padding: 24, width: 560, maxHeight: "88vh", overflowY: "auto", border: `1px solid ${colors.border}`, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 14, padding: 24, width: "min(560px, calc(100vw - 24px))", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${colors.border}`, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}><Route size={18} color={colors.accent} /> {t.newTrip}</h3>
           <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", color: colors.textMuted, cursor: "pointer", padding: 4 }}><X size={18} /></button>
@@ -261,6 +267,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${colors.border}33` }}>
           {periodTrips.length > 0 && <>
             <div style={{ fontSize: 11, fontWeight: 600, color: colors.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Viajes</div>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 14 }}>
               <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
                 <Th>{t.date}</Th><Th>{t.destination}</Th><Th>{t.client}</Th><Th align="right">Mi Pago</Th><Th align="right">Ayudantes</Th><Th align="right">Descuentos</Th><Th align="center">{t.status}</Th>
@@ -316,10 +323,12 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                 })}
               </tbody>
             </table>
+            </div>
           </>}
 
           {adelantoExps.length > 0 && <>
             <div style={{ fontSize: 11, fontWeight: 600, color: colors.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Adelantos Recibidos</div>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 14 }}>
               <tbody>
                 {adelantoExps.map(e => {
@@ -337,6 +346,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                 })}
               </tbody>
             </table>
+            </div>
           </>}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${colors.border}33`, paddingTop: 12 }}>

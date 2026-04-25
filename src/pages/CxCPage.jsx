@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, getPeriodInfo } from "../utils/helpers.js";
@@ -6,6 +6,12 @@ import { Card, PageHeader } from "../components/ui/index.jsx";
 
 export default function CxCPage({ clients, trips, cobros, setCobros, trucks }) {
   const today = new Date().toISOString().slice(0, 10);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
   const [expanded, setExpanded]         = useState({});
   const [filterClient, setFilterClient] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -202,6 +208,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks }) {
 
         {expanded[expKey] && (
           <div style={{ marginTop: 12, borderTop: `1px solid ${colors.border}33`, paddingTop: 10 }}>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
@@ -250,6 +257,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks }) {
                 </tr>
               </tfoot>
             </table>
+            </div>
           </div>
         )}
       </Card>

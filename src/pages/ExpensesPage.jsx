@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, X, Pencil, Trash2, Landmark, ChevronDown, ChevronRight, Receipt, Clock, CheckCircle2 } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId } from "../utils/helpers.js";
@@ -6,6 +6,12 @@ import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js"
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../components/ui/index.jsx";
 
 export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers, fixedTemplates, setFixedTemplates }) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
   const [filterCat, setFilterCat] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [showForm, setShowForm] = useState(false);
@@ -147,33 +153,35 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
     </Card>
 
     <Card>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-          <Th>{t.date}</Th><Th>{t.expenseCategory}</Th><Th>{t.expenseDesc}</Th><Th>{t.paymentMethod}</Th><Th>Viaje</Th><Th align="right">Estado</Th><Th align="right">{t.expenseAmount}</Th><Th></Th>
-        </tr></thead>
-        <tbody>{filtered.sort((a, b) => (b.date||"").localeCompare(a.date||"")).map(e => {
-          const isPaid = e.status === "paid";
-          return <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11`, opacity: isPaid ? 0.7 : 1 }}>
-            <Td>{e.date||"—"}</Td>
-            <Td><Badge label={t[e.category]||e.category} color={colors.textMuted}/></Td>
-            <Td>{e.description}</Td>
-            <Td><Badge label={t[e.paymentMethod]||e.paymentMethod} color={e.paymentMethod==="credit" ? colors.red : colors.green}/></Td>
-            <Td>{e.tripId ? `#${e.tripId}` : "—"}</Td>
-            <Td align="right">
-              <button onClick={() => togglePaid(e.id)} title={isPaid ? "Marcar pendiente" : "Marcar pagado"} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 10, border: `1px solid ${isPaid ? colors.green : colors.orange}`, background: isPaid ? colors.green+"18" : colors.orange+"18", color: isPaid ? colors.green : colors.orange, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
-                {isPaid ? <><CheckCircle2 size={10}/> Pagado</> : <><Clock size={10}/> Pendiente</>}
-              </button>
-            </Td>
-            <Td align="right" bold color={isPaid ? colors.green : colors.red}>{fmt(e.amount)}</Td>
-            <Td align="right">
-              <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                <button onClick={() => openEdit(e)} title="Editar" style={{ background: "none", border: "none", color: colors.accent, cursor: "pointer", padding: 3 }}><Pencil size={13}/></button>
-                <button onClick={() => deleteExpense(e.id)} title="Eliminar" style={{ background: "none", border: "none", color: colors.red, cursor: "pointer", padding: 3 }}><Trash2 size={13}/></button>
-              </div>
-            </Td>
-          </tr>;
-        })}</tbody>
-      </table>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+            <Th>{t.date}</Th><Th>{t.expenseCategory}</Th><Th>{t.expenseDesc}</Th><Th>{t.paymentMethod}</Th><Th>Viaje</Th><Th align="right">Estado</Th><Th align="right">{t.expenseAmount}</Th><Th></Th>
+          </tr></thead>
+          <tbody>{filtered.sort((a, b) => (b.date||"").localeCompare(a.date||"")).map(e => {
+            const isPaid = e.status === "paid";
+            return <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11`, opacity: isPaid ? 0.7 : 1 }}>
+              <Td>{e.date||"—"}</Td>
+              <Td><Badge label={t[e.category]||e.category} color={colors.textMuted}/></Td>
+              <Td>{e.description}</Td>
+              <Td><Badge label={t[e.paymentMethod]||e.paymentMethod} color={e.paymentMethod==="credit" ? colors.red : colors.green}/></Td>
+              <Td>{e.tripId ? `#${e.tripId}` : "—"}</Td>
+              <Td align="right">
+                <button onClick={() => togglePaid(e.id)} title={isPaid ? "Marcar pendiente" : "Marcar pagado"} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 10, border: `1px solid ${isPaid ? colors.green : colors.orange}`, background: isPaid ? colors.green+"18" : colors.orange+"18", color: isPaid ? colors.green : colors.orange, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
+                  {isPaid ? <><CheckCircle2 size={10}/> Pagado</> : <><Clock size={10}/> Pendiente</>}
+                </button>
+              </Td>
+              <Td align="right" bold color={isPaid ? colors.green : colors.red}>{fmt(e.amount)}</Td>
+              <Td align="right">
+                <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                  <button onClick={() => openEdit(e)} title="Editar" style={{ background: "none", border: "none", color: colors.accent, cursor: "pointer", padding: 3 }}><Pencil size={13}/></button>
+                  <button onClick={() => deleteExpense(e.id)} title="Eliminar" style={{ background: "none", border: "none", color: colors.red, cursor: "pointer", padding: 3 }}><Trash2 size={13}/></button>
+                </div>
+              </Td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
       {filtered.length === 0 && <div style={{ textAlign: "center", padding: 30, color: colors.textMuted }}>Sin gastos para este filtro.</div>}
     </Card>
   </div>;

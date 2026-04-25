@@ -1,9 +1,16 @@
+import { useState, useEffect } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt } from "../utils/helpers.js";
 import { Card, PageHeader, Badge, Th, Td } from "../components/ui/index.jsx";
 
 export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, suppliers, trips }) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
   const pending = expenses.filter(e => !e.status || e.status === "pending");
 
   const groups = [
@@ -63,23 +70,25 @@ export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, su
             </button>
           </div>
         </div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-            <Th>Fecha</Th><Th>Descripción</Th><Th>Categoría</Th><Th>Viaje</Th><Th align="right">Monto</Th><Th align="right"></Th>
-          </tr></thead>
-          <tbody>{grp.exps.sort((a,b) => (b.date||"").localeCompare(a.date||"")).map(e => (
-            <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
-              <Td>{e.date||"—"}</Td>
-              <Td bold>{grp.getLabel(e) || e.description}</Td>
-              <Td><Badge label={t[e.category]||e.category} color={colors.textMuted}/></Td>
-              <Td>{e.tripId ? `#${e.tripId}` : "—"}</Td>
-              <Td align="right" bold color={grp.color}>{fmt(e.amount)}</Td>
-              <Td align="right">
-                <button onClick={() => setExpenses(prev => prev.map(x => x.id === e.id ? { ...x, status: "paid", paidDate: new Date().toISOString().slice(0,10) } : x))} style={{ padding: "2px 8px", borderRadius: 8, border: `1px solid ${colors.green}`, background: "transparent", color: colors.green, cursor: "pointer", fontSize: 10 }}>✓ Pagar</button>
-              </Td>
-            </tr>
-          ))}</tbody>
-        </table>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+              <Th>Fecha</Th><Th>Descripción</Th><Th>Categoría</Th><Th>Viaje</Th><Th align="right">Monto</Th><Th align="right"></Th>
+            </tr></thead>
+            <tbody>{grp.exps.sort((a,b) => (b.date||"").localeCompare(a.date||"")).map(e => (
+              <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+                <Td>{e.date||"—"}</Td>
+                <Td bold>{grp.getLabel(e) || e.description}</Td>
+                <Td><Badge label={t[e.category]||e.category} color={colors.textMuted}/></Td>
+                <Td>{e.tripId ? `#${e.tripId}` : "—"}</Td>
+                <Td align="right" bold color={grp.color}>{fmt(e.amount)}</Td>
+                <Td align="right">
+                  <button onClick={() => setExpenses(prev => prev.map(x => x.id === e.id ? { ...x, status: "paid", paidDate: new Date().toISOString().slice(0,10) } : x))} style={{ padding: "2px 8px", borderRadius: 8, border: `1px solid ${colors.green}`, background: "transparent", color: colors.green, cursor: "pointer", fontSize: 10 }}>✓ Pagar</button>
+                </Td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
         <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 8, borderTop: `1px solid ${colors.border}`, marginTop: 4 }}>
           <span style={{ fontWeight: 700, fontSize: 13, color: grp.color }}>Subtotal: {fmt(total)}</span>
         </div>
