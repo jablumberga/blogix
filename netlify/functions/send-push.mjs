@@ -141,8 +141,8 @@ export default async (request) => {
   }
 
   const authHeader = request.headers.get("Authorization") || "";
-  const rawToken = authHeader.replace("Bearer ", "").trim();
-  const caller = await verifyToken(rawToken, BLOGIX_SECRET);
+  const rawToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const caller = rawToken ? await verifyToken(rawToken, BLOGIX_SECRET) : null;
   if (!caller || caller.role !== "admin") {
     return Response.json({ error: "Admin only" }, { status: 403, headers: corsHeaders });
   }

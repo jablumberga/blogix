@@ -51,7 +51,12 @@ export async function verifyToken(token, secret) {
   try {
     const [header, body, sig] = token.split(".");
     const expected = await hmacSign(secret, `${header}.${body}`);
-    if (sig !== expected) return null;
+    const sigBytes = enc.encode(sig);
+    const expBytes = enc.encode(expected);
+    if (sigBytes.length !== expBytes.length) return null;
+    let diff = 0;
+    for (let i = 0; i < sigBytes.length; i++) diff |= sigBytes[i] ^ expBytes[i];
+    if (diff !== 0) return null;
     const payload = JSON.parse(atob(body.replace(/-/g, "+").replace(/_/g, "/")));
     if (payload.exp < Math.floor(Date.now() / 1000)) return null;
     return payload;

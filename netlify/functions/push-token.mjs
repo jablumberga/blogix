@@ -24,8 +24,8 @@ export default async (request) => {
   }
 
   const authHeader = request.headers.get("Authorization") || "";
-  const rawToken = authHeader.replace("Bearer ", "").trim();
-  const sessionUser = await verifyToken(rawToken, BLOGIX_SECRET);
+  const rawToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const sessionUser = rawToken ? await verifyToken(rawToken, BLOGIX_SECRET) : null;
   if (!sessionUser) {
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
   }
@@ -35,8 +35,8 @@ export default async (request) => {
   catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
 
   const { token, platform = "ios" } = body;
-  if (!token || typeof token !== "string") {
-    return Response.json({ error: "token (string) required" }, { status: 400, headers: corsHeaders });
+  if (!token || typeof token !== "string" || token.length > 512) {
+    return Response.json({ error: "token (string, max 512 chars) required" }, { status: 400, headers: corsHeaders });
   }
   const ALLOWED_PLATFORMS = ["ios", "android"];
   if (!ALLOWED_PLATFORMS.includes(platform)) {

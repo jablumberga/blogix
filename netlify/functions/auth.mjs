@@ -94,8 +94,8 @@ export default async (request) => {
       return Response.json({ ok: false, error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
     }
 
-    // Support bcrypt hashes (starting with $2) and plaintext (migration period)
     const isHashed = typeof candidate.password === "string" && candidate.password.startsWith("$2");
+    if (!isHashed) console.warn(`[auth] WARNING: plaintext password for user ${candidate.username} — migrate to bcrypt`);
     const match = isHashed
       ? await bcrypt.compare(password, candidate.password)
       : candidate.password === password;
