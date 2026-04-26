@@ -251,22 +251,51 @@ export default function App() {
           })}
         </nav>
 
-        <div style={{ padding: "8px 6px", borderTop: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ padding: "8px 6px", borderTop: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", gap: 2 }}>
           {isAdmin && <CfoChat data={{ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, settlementStatus }} t={t} sidebarOpen={sidebarOpen} isMobile={isMobile} />}
           {isAdmin && <SyncAllButton syncAll={syncAll} sidebarOpen={sidebarOpen} />}
-          <button onClick={logout} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
-            <LogIn size={14} />{sidebarOpen && <span>{t.logout}</span>}
-          </button>
-          <button onClick={() => setLang(lang === "en" ? "es" : "en")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
-            <Globe size={14} />{sidebarOpen && <span>{lang === "en" ? "Español" : "English"}</span>}
-          </button>
-          {sidebarOpen && <div style={{ padding: "6px 10px", fontSize: 11, color: colors.textMuted, display: "flex", alignItems: "center", gap: 6 }}><UserCheck size={12} /> {user.name} <Badge label={user.role} color={user.role === "admin" ? colors.green : user.role === "partner" ? colors.orange : colors.accent} /></div>}
+
+          {/* User info row — visible only when sidebar is open */}
           {sidebarOpen && (
-            <div style={{ padding: "4px 10px 8px", fontSize: 10, color: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : colors.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : "#555", display: "inline-block" }} />
+            <div style={{ padding: "6px 10px 4px", display: "flex", alignItems: "center", gap: 6 }}>
+              <UserCheck size={13} color={colors.textMuted} style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: colors.text, fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</span>
+              <Badge label={user.role} color={user.role === "admin" ? colors.green : user.role === "partner" ? colors.orange : colors.accent} />
+            </div>
+          )}
+
+          {/* Sync status — visible only when sidebar is open */}
+          {sidebarOpen && (
+            <div style={{ padding: "2px 10px 6px", fontSize: 10, color: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : colors.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : "#555", flexShrink: 0, display: "inline-block" }} />
               {syncStatus === "saved" ? "Guardado ✓" : syncStatus === "saving" ? "Guardando..." : "Sin conexión (local)"}
             </div>
           )}
+
+          {/* Divider above action buttons */}
+          <div style={{ height: 1, background: colors.border, margin: "2px 4px 4px", opacity: 0.7 }} />
+
+          {/* Language toggle button */}
+          <button
+            onClick={() => setLang(lang === "en" ? "es" : "en")}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", minHeight: 44, borderRadius: 7, border: "none", background: "transparent", color: colors.text, cursor: "pointer", fontSize: 13, width: "100%", transition: "background 0.15s" }}
+            onMouseEnter={e => e.currentTarget.style.background = colors.card}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+          >
+            <Globe size={16} style={{ flexShrink: 0 }} />
+            {sidebarOpen && <span style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Español" : "English"}</span>}
+          </button>
+
+          {/* Logout button */}
+          <button
+            onClick={logout}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", minHeight: 44, borderRadius: 7, border: "none", background: "transparent", color: colors.red, cursor: "pointer", fontSize: 13, fontWeight: 600, width: "100%", transition: "background 0.15s" }}
+            onMouseEnter={e => e.currentTarget.style.background = colors.red + "18"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+          >
+            <LogIn size={16} style={{ flexShrink: 0 }} />
+            {sidebarOpen && <span style={{ whiteSpace: "nowrap" }}>{t.logout}</span>}
+          </button>
         </div>
       </div>
 
