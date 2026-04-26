@@ -275,17 +275,6 @@ export default function App() {
           {/* Divider above action buttons */}
           <div style={{ height: 1, background: colors.border, margin: "2px 4px 4px", opacity: 0.7 }} />
 
-          {/* Language toggle button */}
-          <button
-            onClick={() => setLang(lang === "en" ? "es" : "en")}
-            style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", minHeight: 44, borderRadius: 7, border: "none", background: "transparent", color: colors.text, cursor: "pointer", fontSize: 13, width: "100%", transition: "background 0.15s" }}
-            onMouseEnter={e => e.currentTarget.style.background = colors.card}
-            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-          >
-            <Globe size={16} style={{ flexShrink: 0 }} />
-            {sidebarOpen && <span style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Español" : "English"}</span>}
-          </button>
-
           {/* Logout button */}
           <button
             onClick={logout}
@@ -295,6 +284,17 @@ export default function App() {
           >
             <LogIn size={16} style={{ flexShrink: 0 }} />
             {sidebarOpen && <span style={{ whiteSpace: "nowrap" }}>{t.logout}</span>}
+          </button>
+
+          {/* Language toggle button */}
+          <button
+            onClick={() => setLang(lang === "en" ? "es" : "en")}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", minHeight: 44, borderRadius: 7, border: "none", background: "transparent", color: colors.text, cursor: "pointer", fontSize: 13, width: "100%", transition: "background 0.15s" }}
+            onMouseEnter={e => e.currentTarget.style.background = colors.card}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+          >
+            <Globe size={16} style={{ flexShrink: 0 }} />
+            {sidebarOpen && <span style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Español" : "English"}</span>}
           </button>
         </div>
       </div>
