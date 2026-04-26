@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Plus, X, Pencil, Trash2, Landmark, ChevronDown, ChevronRight, Receipt, Clock, CheckCircle2, Truck } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, expenseTruckId } from "../utils/helpers.js";
@@ -8,13 +8,7 @@ import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../com
 // Categories where a direct truck link makes sense
 const TRUCK_CATEGORIES = ["fuel", "repair", "maintenance", "insurance", "tire", "loan", "other", "toll", "salary"];
 
-export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers, fixedTemplates, setFixedTemplates }) {
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
+export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers, fixedTemplates, setFixedTemplates, isMobile }) {
 
   const [filterCat, setFilterCat] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");

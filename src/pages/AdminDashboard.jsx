@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote, FileText, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, monthStr, getPeriodInfo, expenseTruckId } from "../utils/helpers.js";
@@ -39,15 +39,9 @@ function SectionTitle({ label, color }) {
   );
 }
 
-export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage }) {
+export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, isMobile }) {
   const cm = monthStr();
   const today = new Date().toISOString().slice(0, 10);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
   const [dateFrom, setDateFrom] = useState(`${cm}-01`);
   const [dateTo,   setDateTo]   = useState(() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(new Date(n.getFullYear(),n.getMonth()+1,0).getDate()).padStart(2,"0")}`; });
 
@@ -71,116 +65,127 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
     } else if (preset === "year") { setDateFrom(`${y}-01-01`); setDateTo(`${y}-12-31`); }
   };
 
-  // ── Period trips ─────────────────────────────────────────────────────────
-  const mt = trips.filter(tr => tr.date >= dateFrom && tr.date <= dateTo && tr.status !== "cancelled");
-  const revenue = mt.reduce((s, tr) => s + (tr.revenue || 0), 0);
+  // ── Period trips + revenue ────────────────────────────────────────────────
+  const { mt, revenue } = useMemo(() => {
+    const mt = trips.filter(tr => tr.date >= dateFrom && tr.date <= dateTo && tr.status !== "cancelled");
+    return { mt, revenue: mt.reduce((s, tr) => s + (tr.revenue || 0), 0) };
+  }, [trips, dateFrom, dateTo]);
 
-  // ── Expenses in period (trip-linked by trip date, non-trip by expense date) ──
-  const periodTripIds = new Set(mt.map(tr => tr.id));
-  const periodExpenses = expenses.filter(e =>
-    (e.tripId && periodTripIds.has(e.tripId)) ||
-    (!e.tripId && e.date >= dateFrom && e.date <= dateTo)
-  );
+  // ── Expenses in period ────────────────────────────────────────────────────
+  const { periodExpenses, nomina, brokerFees, operExp, totalExp, grossProfit, margin } = useMemo(() => {
+    const periodTripIds = new Set(mt.map(tr => tr.id));
+    const periodExpenses = expenses.filter(e =>
+      (e.tripId && periodTripIds.has(e.tripId)) ||
+      (!e.tripId && e.date >= dateFrom && e.date <= dateTo)
+    );
+    const nomina     = periodExpenses.filter(e => e.category === "driverPay").reduce((s,e) => s + e.amount, 0);
+    const brokerFees = periodExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s + e.amount, 0);
+    const operExp    = periodExpenses.filter(e => !["driverPay","broker_commission"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
+    const totalExp   = nomina + brokerFees + operExp;
+    return { periodExpenses, nomina, brokerFees, operExp, totalExp, grossProfit: revenue - totalExp, margin: revenue > 0 ? (revenue - totalExp) / revenue * 100 : 0 };
+  }, [expenses, mt, dateFrom, dateTo, revenue]);
 
-  const nomina       = periodExpenses.filter(e => e.category === "driverPay").reduce((s,e) => s + e.amount, 0);
-  const brokerFees   = periodExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s + e.amount, 0);
-  const operExp      = periodExpenses.filter(e => !["driverPay","broker_commission"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
-  const totalExp     = nomina + brokerFees + operExp;
-  const grossProfit  = revenue - totalExp;
-  const margin       = revenue > 0 ? (grossProfit / revenue * 100) : 0;
-
-  // ── CxC (accounts receivable) ───────────────────────────────────────────
-  const cxcGrouped = {};
-  trips.forEach(tr => {
-    if (!tr.clientId || !(tr.revenue > 0)) return;
-    const client = clients.find(c => c.id === tr.clientId);
-    if (!client) return;
-    const { key, expectedDate } = getPeriodInfo(tr.date, client);
-    const gKey = `${tr.clientId}::${key}`;
-    if (!cxcGrouped[gKey]) cxcGrouped[gKey] = { clientId: tr.clientId, periodKey: key, expectedDate, revenue: 0 };
-    cxcGrouped[gKey].revenue += tr.revenue || 0;
-  });
-  const cobroMap     = new Map(cobros.map(c => [`${c.clientId}::${c.periodKey}`, c]));
-  const getCobro     = (cid, pk) => cobroMap.get(`${cid}::${pk}`);
-  const cxcPeriods   = Object.values(cxcGrouped);
-  const cxcCollected = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status === "collected");
-  const cxcPending   = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status !== "collected");
-  const cxcOverdue   = cxcPending.filter(p => p.expectedDate < today);
-  const cxcUpcoming  = cxcPending.filter(p => p.expectedDate >= today).sort((a,b) => a.expectedDate.localeCompare(b.expectedDate));
-  const totalCxC     = cxcPending.reduce((s, p) => s + p.revenue, 0);
-  const totalOverdue = cxcOverdue.reduce((s, p) => s + p.revenue, 0);
-  const totalCollected = cxcCollected.reduce((s, p) => s + p.revenue, 0);
-  const nextDue      = cxcUpcoming[0];
+  // ── CxC (accounts receivable — all trips, not period-filtered) ───────────
+  const { cxcPending, cxcOverdue, cxcUpcoming, totalCxC, totalOverdue, totalCollected, nextDue, cobroMap, getCobro } = useMemo(() => {
+    const cxcGrouped = {};
+    trips.forEach(tr => {
+      if (!tr.clientId || !(tr.revenue > 0)) return;
+      const client = clients.find(c => c.id === tr.clientId);
+      if (!client) return;
+      const { key, expectedDate } = getPeriodInfo(tr.date, client);
+      const gKey = `${tr.clientId}::${key}`;
+      if (!cxcGrouped[gKey]) cxcGrouped[gKey] = { clientId: tr.clientId, periodKey: key, expectedDate, revenue: 0 };
+      cxcGrouped[gKey].revenue += tr.revenue || 0;
+    });
+    const cobroMap   = new Map(cobros.map(c => [`${c.clientId}::${c.periodKey}`, c]));
+    const getCobro   = (cid, pk) => cobroMap.get(`${cid}::${pk}`);
+    const cxcPeriods = Object.values(cxcGrouped);
+    const cxcCollected = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status === "collected");
+    const cxcPending   = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status !== "collected");
+    const cxcOverdue   = cxcPending.filter(p => p.expectedDate < today);
+    const cxcUpcoming  = cxcPending.filter(p => p.expectedDate >= today).sort((a,b) => a.expectedDate.localeCompare(b.expectedDate));
+    return {
+      cxcPending, cxcOverdue, cxcUpcoming, cobroMap, getCobro,
+      totalCxC:       cxcPending.reduce((s, p) => s + p.revenue, 0),
+      totalOverdue:   cxcOverdue.reduce((s, p) => s + p.revenue, 0),
+      totalCollected: cxcCollected.reduce((s, p) => s + p.revenue, 0),
+      nextDue:        cxcUpcoming[0],
+    };
+  }, [trips, clients, cobros, today]);
 
   // ── CxP (accounts payable — all pending expenses) ──────────────────────
-  const allPending   = expenses.filter(e => !e.status || e.status === "pending");
-  const cxpNomina    = allPending.filter(e => e.category === "driverPay").reduce((s,e) => s + e.amount, 0);
-  const cxpSupplier  = allPending.filter(e => ["fuel","repair","maintenance","tire","helper","other","toll"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
-  const cxpFijos     = allPending.filter(e => ["loan","insurance"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
-  const totalCxP     = cxpNomina + cxpSupplier + cxpFijos;
+  const { cxpNomina, cxpSupplier, cxpFijos, totalCxP } = useMemo(() => {
+    const allPending  = expenses.filter(e => !e.status || e.status === "pending");
+    const cxpNomina   = allPending.filter(e => e.category === "driverPay").reduce((s,e) => s + e.amount, 0);
+    const cxpSupplier = allPending.filter(e => ["fuel","repair","maintenance","tire","helper","other","toll"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
+    const cxpFijos    = allPending.filter(e => ["loan","insurance"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
+    return { cxpNomina, cxpSupplier, cxpFijos, totalCxP: cxpNomina + cxpSupplier + cxpFijos };
+  }, [expenses]);
 
-  // ── Net cash position ───────────────────────────────────────────────────
   const cashPosition = totalCxC - totalCxP;
 
-  // ── CFO Billing Pipeline ─────────────────────────────────────────────────
-  const invAmt = (inv) => (inv.tripIds || []).reduce((s, tid) => s + (trips.find(t => t.id === tid)?.revenue || 0), 0);
-  // Invoices whose date falls in the period
-  const periodInv = (invoices || []).filter(inv => inv.date >= dateFrom && inv.date <= dateTo && inv.status !== "cancelled");
-  const invoicedAmt   = periodInv.reduce((s, inv) => s + invAmt(inv), 0);
-  const outstandingAmt = periodInv.filter(i => i.status === "sent").reduce((s, i) => s + invAmt(i), 0);
-  const collectedAmt   = periodInv.filter(i => i.status === "paid").reduce((s, i) => s + invAmt(i), 0);
-  const draftAmt       = periodInv.filter(i => i.status === "draft").reduce((s, i) => s + invAmt(i), 0);
-  // All invoiced trip ids (across all invoices, not just the period — to correctly exclude from "sin facturar")
-  const allInvoicedIds = new Set();
-  (invoices || []).forEach(inv => { if (inv.status !== "cancelled") (inv.tripIds || []).forEach(id => allInvoicedIds.add(id)); });
-  // Trips in period with docs OK but no invoice yet → ready to invoice
-  const readyToInvoice    = mt.filter(tr => tr.docStatus === "delivered" && (tr.revenue || 0) > 0 && !allInvoicedIds.has(tr.id));
-  const readyToInvoiceAmt = readyToInvoice.reduce((s, tr) => s + (tr.revenue || 0), 0);
-  // Trips in period with docs still pending → not yet invoiceable
-  const pendingDocsAmt = mt.filter(tr => (tr.revenue || 0) > 0 && tr.docStatus !== "delivered" && !allInvoicedIds.has(tr.id))
-    .reduce((s, tr) => s + (tr.revenue || 0), 0);
+  // ── CFO Billing Pipeline ──────────────────────────────────────────────────
+  const { invoicedAmt, outstandingAmt, collectedAmt, draftAmt, readyToInvoiceAmt, pendingDocsAmt } = useMemo(() => {
+    const tripRevMap = new Map(trips.map(t => [t.id, t.revenue || 0]));
+    const invAmt = (inv) => (inv.tripIds || []).reduce((s, tid) => s + (tripRevMap.get(tid) || 0), 0);
+    const periodInv = (invoices || []).filter(inv => inv.date >= dateFrom && inv.date <= dateTo && inv.status !== "cancelled");
+    const allInvoicedIds = new Set();
+    (invoices || []).forEach(inv => { if (inv.status !== "cancelled") (inv.tripIds || []).forEach(id => allInvoicedIds.add(id)); });
+    const readyToInvoice = mt.filter(tr => tr.docStatus === "delivered" && (tr.revenue || 0) > 0 && !allInvoicedIds.has(tr.id));
+    return {
+      invoicedAmt:      periodInv.reduce((s, inv) => s + invAmt(inv), 0),
+      outstandingAmt:   periodInv.filter(i => i.status === "sent").reduce((s, i) => s + invAmt(i), 0),
+      collectedAmt:     periodInv.filter(i => i.status === "paid").reduce((s, i) => s + invAmt(i), 0),
+      draftAmt:         periodInv.filter(i => i.status === "draft").reduce((s, i) => s + invAmt(i), 0),
+      readyToInvoiceAmt: readyToInvoice.reduce((s, tr) => s + (tr.revenue || 0), 0),
+      pendingDocsAmt:   mt.filter(tr => (tr.revenue || 0) > 0 && tr.docStatus !== "delivered" && !allInvoicedIds.has(tr.id))
+                          .reduce((s, tr) => s + (tr.revenue || 0), 0),
+    };
+  }, [invoices, mt, trips, dateFrom, dateTo]);
 
   // ── Broker commissions in period ────────────────────────────────────────
-  const brokerBreakdown = brokers.map(br => {
-    const brTrips = mt.filter(tr => tr.brokerId === br.id);
-    const brRev   = brTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
-    const brFee   = periodExpenses.filter(e => e.category === "broker_commission" && brTrips.some(tr => tr.id === e.tripId)).reduce((s,e) => s + e.amount, 0);
-    return { broker: br, trips: brTrips.length, revenue: brRev, fee: brFee };
-  }).filter(b => b.trips > 0 || b.fee > 0).sort((a,b) => b.fee - a.fee);
+  const brokerBreakdown = useMemo(() => {
+    const tripIdSet = new Set(mt.map(tr => tr.id));
+    return brokers.map(br => {
+      const brTrips = mt.filter(tr => tr.brokerId === br.id);
+      const brRev   = brTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
+      const brTripSet = new Set(brTrips.map(tr => tr.id));
+      const brFee   = periodExpenses.filter(e => e.category === "broker_commission" && brTripSet.has(e.tripId)).reduce((s,e) => s + e.amount, 0);
+      return { broker: br, trips: brTrips.length, revenue: brRev, fee: brFee };
+    }).filter(b => b.trips > 0 || b.fee > 0).sort((a,b) => b.fee - a.fee);
+  }, [brokers, mt, periodExpenses]);
 
   // ── Rentabilidad por camion (period) ────────────────────────────────────
-  const _tripMap = new Map(trips.map(tr => [tr.id, tr]));
-  const truckStats = trucks.map(tk => {
-    const tkTrips   = mt.filter(tr => tr.truckId === tk.id);
-    const tkRev     = tkTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
-    const tkExp     = periodExpenses.filter(e => expenseTruckId(e, _tripMap) === tk.id).reduce((s,e) => s + e.amount, 0);
-    const tkNet     = tkRev - tkExp;
-    const tkMargin  = tkRev > 0 ? tkNet / tkRev * 100 : 0;
-    const partner     = tk.owner === "partner" ? partners.find(p => p.id === tk.partnerId) : null;
-    const partnerComm = partner ? Math.max(0, tkNet) * ((partner.commissionPct || 0) / 100) : 0;
-    const adminNet    = tkNet - partnerComm;
-    const adminMargin = tkRev > 0 ? adminNet / tkRev * 100 : 0;
-    return { truck: tk, trips: tkTrips.length, revenue: tkRev, expenses: tkExp, net: tkNet, margin: tkMargin, partner, partnerComm, adminNet, adminMargin };
-  }).filter(t => t.trips > 0).sort((a,b) => b.revenue - a.revenue);
-
-  const totalPartnerComm = truckStats.reduce((s, ts) => s + ts.partnerComm, 0);
-  const realProfit  = grossProfit - totalPartnerComm;
-  const realMargin  = revenue > 0 ? realProfit / revenue * 100 : 0;
-  const maxTruckRev = truckStats[0]?.revenue || 1;
+  const { truckStats, totalPartnerComm, realProfit, realMargin, maxTruckRev } = useMemo(() => {
+    const tripMap = new Map(trips.map(tr => [tr.id, tr]));
+    const stats = trucks.map(tk => {
+      const tkTrips   = mt.filter(tr => tr.truckId === tk.id);
+      const tkRev     = tkTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
+      const tkExp     = periodExpenses.filter(e => expenseTruckId(e, tripMap) === tk.id).reduce((s,e) => s + e.amount, 0);
+      const tkNet     = tkRev - tkExp;
+      const partner     = tk.owner === "partner" ? partners.find(p => p.id === tk.partnerId) : null;
+      const partnerComm = partner ? Math.max(0, tkNet) * ((partner.commissionPct || 0) / 100) : 0;
+      const adminNet    = tkNet - partnerComm;
+      return { truck: tk, trips: tkTrips.length, revenue: tkRev, expenses: tkExp, net: tkNet, margin: tkRev > 0 ? tkNet / tkRev * 100 : 0, partner, partnerComm, adminNet, adminMargin: tkRev > 0 ? adminNet / tkRev * 100 : 0 };
+    }).filter(t => t.trips > 0).sort((a,b) => b.revenue - a.revenue);
+    const totalPartnerComm = stats.reduce((s, ts) => s + ts.partnerComm, 0);
+    return { truckStats: stats, totalPartnerComm, maxTruckRev: stats[0]?.revenue || 1, realProfit: grossProfit - totalPartnerComm, realMargin: revenue > 0 ? (grossProfit - totalPartnerComm) / revenue * 100 : 0 };
+  }, [trucks, mt, periodExpenses, partners, trips, grossProfit, revenue]);
 
   // ── Top clientes (period) ───────────────────────────────────────────────
-  const clientStats = clients.map(cl => {
-    const clTrips = mt.filter(tr => tr.clientId === cl.id);
-    const clRev   = clTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
-    return { client: cl, trips: clTrips.length, revenue: clRev };
-  }).filter(c => c.trips > 0).sort((a,b) => b.revenue - a.revenue);
-  const maxClientRev = clientStats[0]?.revenue || 1;
+  const { clientStats, maxClientRev } = useMemo(() => {
+    const stats = clients.map(cl => {
+      const clTrips = mt.filter(tr => tr.clientId === cl.id);
+      return { client: cl, trips: clTrips.length, revenue: clTrips.reduce((s, tr) => s + (tr.revenue || 0), 0) };
+    }).filter(c => c.trips > 0).sort((a,b) => b.revenue - a.revenue);
+    return { clientStats: stats, maxClientRev: stats[0]?.revenue || 1 };
+  }, [clients, mt]);
 
   // ── Trip pipeline ───────────────────────────────────────────────────────
-  const allActive = trips.filter(tr => tr.status !== "cancelled");
-  const pending_trips   = allActive.filter(tr => tr.status === "pending").length;
-  const transit_trips   = allActive.filter(tr => tr.status === "in_transit").length;
-  const delivered_trips = allActive.filter(tr => tr.status === "delivered").length;
+  const { allActive, pending_trips, transit_trips, delivered_trips } = useMemo(() => {
+    const allActive = trips.filter(tr => tr.status !== "cancelled");
+    return { allActive, pending_trips: allActive.filter(tr => tr.status === "pending").length, transit_trips: allActive.filter(tr => tr.status === "in_transit").length, delivered_trips: allActive.filter(tr => tr.status === "delivered").length };
+  }, [trips]);
 
   // ── Alerts ──────────────────────────────────────────────────────────────
   const errCount  = alerts.filter(a => a.severity === "error").length;

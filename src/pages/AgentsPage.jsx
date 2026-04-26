@@ -1,16 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { AlertCircle, AlertTriangle, Bell, CheckCircle2 } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { Card, PageHeader } from "../components/ui/index.jsx";
 
-export default function AgentsPage({ t, alerts }) {
+export default function AgentsPage({ t, alerts, isMobile }) {
   const [filter, setFilter] = useState("all");
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
   const severityColor  = { error: colors.red, warning: colors.orange, info: colors.accent };
   const severityIcon   = { error: AlertCircle, warning: AlertTriangle, info: Bell };
   const severityBg     = { error: colors.red + "10", warning: colors.orange + "10", info: colors.accent + "10" };

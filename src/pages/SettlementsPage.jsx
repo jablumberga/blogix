@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, pad, MONTHS_ES, genPeriods } from "../utils/helpers.js";
@@ -10,12 +10,6 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, t, isPart
   const { pTrips, pExpenses, retenciones, otrosGastos, rev, net, adminComm, toTransfer, status } = card;
   const isPaid = status === "paid";
   const [showDetail, setShowDetail] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
 
   return <Card style={{ marginBottom: 16 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, paddingBottom: 14, borderBottom: `1px solid ${colors.border}` }}>
@@ -112,7 +106,7 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, t, isPart
   </Card>;
 }
 
-export default function SettlementsPage({ t, trips, trucks, expenses, clients, partners, settlementStatus, setSettlementStatus, user, partner, partnerTruckIds }) {
+export default function SettlementsPage({ t, trips, trucks, expenses, clients, partners, settlementStatus, setSettlementStatus, user, partner, partnerTruckIds, isMobile }) {
   const isPartnerView = user?.role === "partner";
 
   const toggleStatus = (key) => setSettlementStatus(prev => ({ ...prev, [key]: prev[key] === "paid" ? "unpaid" : "paid" }));

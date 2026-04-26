@@ -107,11 +107,11 @@ export function AppProvider({ children }) {
   }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices]);
 
   // ── Dynamic user list ─────────────────────────────────────────────────────
-  const allUsers = [
+  const allUsers = useMemo(() => [
     ...USERS.filter(u => u.role === "admin"),
     ...partners.map(p => ({ id: `p-${p.id}`, username: p.username, role: "partner", name: p.name, refId: p.id })),
     ...drivers.map(d => ({ id: `d-${d.id}`, username: d.username, role: "driver", name: d.name, refId: d.id })),
-  ];
+  ], [partners, drivers]);
 
   // ── Computed helpers ──────────────────────────────────────────────────────
   const isAdmin = user?.role === "admin";
@@ -218,12 +218,8 @@ export function AppProvider({ children }) {
 
     if (toAdd.length > 0) {
       setExpenses(prev => {
-        let next = [...prev];
-        toAdd.forEach(exp => {
-          const newId = Math.max(0, ...next.map(e => e.id)) + 1;
-          next = [...next, { id: newId, ...exp }];
-        });
-        return next;
+        let maxId = prev.reduce((m, e) => e.id > m ? e.id : m, 0);
+        return [...prev, ...toAdd.map(exp => ({ id: ++maxId, ...exp }))];
       });
     }
     return toAdd.length;

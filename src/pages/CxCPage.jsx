@@ -1,17 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { ChevronDown, ChevronRight, FileText } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, getPeriodInfo } from "../utils/helpers.js";
 import { Card, PageHeader } from "../components/ui/index.jsx";
 
-export default function CxCPage({ clients, trips, cobros, setCobros, trucks, invoices, setInvoices, setPage }) {
+export default function CxCPage({ clients, trips, cobros, setCobros, trucks, invoices, setInvoices, setPage, isMobile }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
 
   const [expandedInv,     setExpandedInv]     = useState({});
   const [expandedSinFact, setExpandedSinFact] = useState({});

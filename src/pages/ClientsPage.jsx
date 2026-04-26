@@ -1,17 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Plus, X, Pencil, Trash2, Building2, DollarSign, ClipboardList } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId } from "../utils/helpers.js";
 import { DR_PROVINCES } from "../constants/destinations.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Chk, Th, Td } from "../components/ui/index.jsx";
 
-export default function ClientsPage({ t, clients, setClients, brokers }) {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
+export default function ClientsPage({ t, clients, setClients, brokers, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const emptyRules = { paymentTerms: 30, billingCycle: "net", period1PayDay: 30, period2PayDay: 15, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null };

@@ -1,16 +1,10 @@
-import { useState, useEffect } from "react";
+import {  } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt } from "../utils/helpers.js";
 import { Card, PageHeader, Badge, Th, Td } from "../components/ui/index.jsx";
 
-export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, suppliers, trips }) {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
+export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, suppliers, trips, isMobile }) {
   const pending = expenses.filter(e => !e.status || e.status === "pending");
 
   const groups = [

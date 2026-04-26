@@ -1,19 +1,13 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, Fragment } from "react";
 import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Inp, Sel, Btn, Th, Td, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, driverObj, setTrips, setExpenses, brokers }) {
+export default function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, driverObj, setTrips, setExpenses, brokers, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [rateMsg, setRateMsg] = useState("");
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
 
   const emptyForm = { date: today(), province: "", municipality: "", truckId: driverObj?.truckId || trucks[0]?.id || "", driverId: driverObj?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [] };
 

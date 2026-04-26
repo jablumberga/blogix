@@ -1,16 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { nxId } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
-export default function BrokersPage({ t, brokers, setBrokers }) {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
+export default function BrokersPage({ t, brokers, setBrokers, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: "", contactPerson: "", phone: "", email: "", commissionPct: "", notes: "" });

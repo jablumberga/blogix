@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2, Calendar, FileCheck, FileText, Handshake, Hash, Zap } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today } from "../utils/helpers.js";
@@ -6,7 +6,7 @@ import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js"
 import { generateConduce } from "../utils/generateConduce.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td, StatusBadge, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers }) {
+export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({});
@@ -18,12 +18,6 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const [filterDriver, setFilterDriver] = useState("all");
   const [filterTruck, setFilterTruck] = useState("all");
   const [rateMsg, setRateMsg] = useState("");
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
 
   const emptyForm = { date: today(), province: "", municipality: "", truckId: "", driverId: "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [], tarifaOverride: null };
 

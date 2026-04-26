@@ -1,16 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Truck, Route, TrendingUp, TrendingDown, CircleDollarSign } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, pad, MONTHS_ES } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Sel, Badge, Th, Td, StatusBadge } from "../components/ui/index.jsx";
 
-export default function PartnerDashboard({ t, trips, trucks, expenses, partner, partnerTruckIds, clients, settlementStatus, setSettlementStatus }) {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
+export default function PartnerDashboard({ t, trips, trucks, expenses, partner, partnerTruckIds, clients, settlementStatus, setSettlementStatus, isMobile }) {
   const [truckFilter, setTruckFilter] = useState("all");
   const now = new Date();
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();

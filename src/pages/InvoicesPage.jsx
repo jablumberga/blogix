@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Plus, X, Pencil, Trash2, FileText, CheckCircle2, Clock, Send, Ban, AlertCircle, Lock } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, getPeriodInfo } from "../utils/helpers.js";
@@ -91,13 +91,7 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, drivers, trucks, cobros, setCobros }) {
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
+export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, drivers, trucks, cobros, setCobros, isMobile }) {
 
   const today = new Date().toISOString().slice(0, 10);
 

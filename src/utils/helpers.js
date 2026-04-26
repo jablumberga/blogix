@@ -4,7 +4,7 @@ export const fmt = (n) =>
 
 export const pct = (n) => (n * 100).toFixed(1) + "%";
 
-export const nxId = (arr) => (arr.length ? Math.max(...arr.map((x) => x.id)) + 1 : 1);
+export const nxId = (arr) => (arr.length ? arr.reduce((max, x) => x.id > max ? x.id : max, 0) + 1 : 1);
 
 // Returns the resolved truck id for an expense: direct truckId first, then trip-indirect
 export function expenseTruckId(expense, tripMap) {
