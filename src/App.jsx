@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { getToken } from "./api.js";
 import { colors } from "./constants/theme.js";
@@ -220,8 +220,8 @@ export default function App() {
           <span style={{ fontWeight: 600, fontSize: 15, color: colors.text, flex: 1, textAlign: "center" }}>
             {pageTitles[page] ?? "B-Logix"}
           </span>
-          <button onClick={logout} title="Cerrar sesión" style={{ background: "transparent", border: "none", color: colors.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8, flexShrink: 0 }}>
-            <LogIn size={18} />
+          <button onClick={logout} title="Cerrar sesión" style={{ background: "transparent", border: "none", color: colors.red, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8, flexShrink: 0 }}>
+            <LogOut size={18} />
           </button>
         </div>
       )}
@@ -234,7 +234,7 @@ export default function App() {
           {sidebarOpen && <span style={{ fontWeight: 700, fontSize: 16 }}>B-Logix</span>}
         </div>
 
-        <nav style={{ flex: 1, padding: "10px 6px", display: "flex", flexDirection: "column", gap: 1 }}>
+        <nav style={{ flex: 1, padding: "10px 6px", display: "flex", flexDirection: "column", gap: 1, overflowY: "auto", overflowX: "hidden" }}>
           {navItems.map((item, idx) => {
             if (item.divider) {
               return <div key={`div-${idx}`} style={{ height: 1, background: colors.border, margin: "4px 6px", opacity: 0.6 }} />;
@@ -278,18 +278,20 @@ export default function App() {
           {/* Logout button */}
           <button
             onClick={logout}
+            title="Cerrar sesión"
             style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", minHeight: 44, borderRadius: 7, border: "none", background: "transparent", color: colors.red, cursor: "pointer", fontSize: 13, fontWeight: 600, width: "100%", transition: "background 0.15s" }}
             onMouseEnter={e => e.currentTarget.style.background = colors.red + "18"}
             onMouseLeave={e => e.currentTarget.style.background = "transparent"}
           >
-            <LogIn size={16} style={{ flexShrink: 0 }} />
+            <LogOut size={16} style={{ flexShrink: 0 }} />
             {sidebarOpen && <span style={{ whiteSpace: "nowrap" }}>{t.logout}</span>}
           </button>
 
           {/* Language toggle button */}
           <button
             onClick={() => setLang(lang === "en" ? "es" : "en")}
-            style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", minHeight: 44, borderRadius: 7, border: "none", background: "transparent", color: colors.text, cursor: "pointer", fontSize: 13, width: "100%", transition: "background 0.15s" }}
+            title={lang === "en" ? "Cambiar a Español" : "Switch to English"}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", minHeight: 44, borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 13, width: "100%", transition: "background 0.15s" }}
             onMouseEnter={e => e.currentTarget.style.background = colors.card}
             onMouseLeave={e => e.currentTarget.style.background = "transparent"}
           >
