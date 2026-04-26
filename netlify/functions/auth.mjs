@@ -18,6 +18,26 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// ── In-memory rate limiter (per IP, resets on cold start) ────────────────────
+// Max 10 attempts per 15-minute window per IP before lockout.
+const loginAttempts = new Map(); // ip → { count, windowStart }
+const RATE_WINDOW_MS = 15 * 60 * 1000;
+const RATE_MAX       = 10;
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now - entry.windowStart > RATE_WINDOW_MS) {
+    loginAttempts.set(ip, { count: 1, windowStart: now });
+    return false; // not limited
+  }
+  entry.count++;
+  return entry.count > RATE_MAX;
+}
+
+function resetRateLimit(ip) {
+  loginAttempts.delete(ip);
+}
 
 export default async (request) => {
   if (request.method === "OPTIONS") {
@@ -43,6 +63,14 @@ export default async (request) => {
   }
 
   if (action === "login") {
+    // ── Rate limiting ───────────────────────────────────────────────────────
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+               request.headers.get("x-real-ip") || "unknown";
+    if (checkRateLimit(ip)) {
+      return Response.json({ error: "Too many attempts — try again in 15 minutes" }, { status: 429, headers: corsHeaders });
+    }
+
+    // ── Input validation ────────────────────────────────────────────────────
     let body;
     try { body = await request.json(); }
     catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
@@ -51,15 +79,19 @@ export default async (request) => {
     if (!username || !password) {
       return Response.json({ error: "Username and password required" }, { status: 400, headers: corsHeaders });
     }
+    if (typeof username !== "string" || typeof password !== "string" ||
+        username.length > 64 || password.length > 256) {
+      return Response.json({ error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
+    }
 
-    // Admin user list (hardcoded + env override for password hash)
+    // ── Build user list ─────────────────────────────────────────────────────
     const adminUsers = [
       { id: 1, username: "admin", password: ADMIN_PASSWORD_HASH, role: "admin", name: "Alexander", refId: null },
       ...(DEMO_PASSWORD_HASH ? [{ id: 99, username: "demo", password: DEMO_PASSWORD_HASH, role: "admin", name: "Demo", refId: null }] : []),
     ];
 
-    // Fetch dynamic partners/drivers from Supabase
     let dynamicUsers = [];
+    let supabaseData = null;
     if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/appdata?id=eq.1&select=data`, {
@@ -71,14 +103,14 @@ export default async (request) => {
         });
         if (res.ok) {
           const rows = await res.json();
-          const data = rows[0]?.data;
-          if (data) {
-            const partners = (data.partners || [])
+          supabaseData = rows[0]?.data;
+          if (supabaseData) {
+            const partners = (supabaseData.partners || [])
               .filter(p => p.username && p.password)
-              .map(p => ({ id: `p-${p.id}`, username: p.username, password: p.password, role: "partner", name: p.name, refId: p.id }));
-            const drivers = (data.drivers || [])
+              .map(p => ({ id: `p-${p.id}`, _dbId: p.id, _role: "partner", username: p.username, password: p.password, role: "partner", name: p.name, refId: p.id }));
+            const drivers = (supabaseData.drivers || [])
               .filter(d => d.username && d.password)
-              .map(d => ({ id: `d-${d.id}`, username: d.username, password: d.password, role: "driver", name: d.name, refId: d.id }));
+              .map(d => ({ id: `d-${d.id}`, _dbId: d.id, _role: "driver", username: d.username, password: d.password, role: "driver", name: d.name, refId: d.id }));
             dynamicUsers = [...partners, ...drivers];
           }
         }
@@ -94,8 +126,8 @@ export default async (request) => {
       return Response.json({ ok: false, error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
     }
 
+    // ── Verify password ─────────────────────────────────────────────────────
     const isHashed = typeof candidate.password === "string" && candidate.password.startsWith("$2");
-    if (!isHashed) console.warn(`[auth] WARNING: plaintext password for user ${candidate.username} — migrate to bcrypt`);
     const match = isHashed
       ? await bcrypt.compare(password, candidate.password)
       : candidate.password === password;
@@ -104,7 +136,36 @@ export default async (request) => {
       return Response.json({ ok: false, error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
     }
 
-    const { password: _pw, ...safeUser } = candidate;
+    // ── Lazy bcrypt upgrade for plaintext partner/driver passwords ───────────
+    if (!isHashed && candidate._dbId && candidate._role && SUPABASE_URL && SUPABASE_SERVICE_KEY && supabaseData) {
+      try {
+        const newHash = await bcrypt.hash(password, 10);
+        const section = candidate._role === "partner" ? "partners" : "drivers";
+        const updated = (supabaseData[section] || []).map(u =>
+          u.id === candidate._dbId ? { ...u, password: newHash } : u
+        );
+        supabaseData = { ...supabaseData, [section]: updated };
+        await fetch(`${SUPABASE_URL}/rest/v1/appdata`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
+            "Prefer": "resolution=merge-duplicates",
+          },
+          body: JSON.stringify({ id: 1, data: supabaseData, updated_at: new Date().toISOString() }),
+        });
+        console.log(`[auth] Upgraded plaintext password to bcrypt for ${candidate._role} ${candidate.username}`);
+      } catch (err) {
+        console.warn("[auth] Failed to upgrade password hash:", err.message);
+      }
+    } else if (!isHashed) {
+      console.warn(`[auth] WARNING: plaintext password for user ${candidate.username} — will upgrade on next login once Supabase is reachable`);
+    }
+
+    // ── Issue JWT ───────────────────────────────────────────────────────────
+    resetRateLimit(ip); // successful login resets the counter
+    const { password: _pw, _dbId: _d, _role: _r, ...safeUser } = candidate;
     const token = await signToken(
       { id: safeUser.id, role: safeUser.role, name: safeUser.name, refId: safeUser.refId ?? null },
       BLOGIX_SECRET
