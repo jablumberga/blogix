@@ -123,7 +123,7 @@ export function AppProvider({ children }) {
     () => partner ? trucks.filter(tk => tk.partnerId === partner.id).map(tk => tk.id) : [],
     [partner, trucks]
   );
-  const driverObj = isDriver ? drivers.find(d => d.name === user?.name) : null;
+  const driverObj = isDriver ? drivers.find(d => d.id === user?.refId) : null;
 
   const alerts = useMemo(
     () => isAdmin ? computeAlerts({ trips, expenses, clients, drivers, trucks, partners, brokers, settlementStatus }) : [],
@@ -162,12 +162,38 @@ export function AppProvider({ children }) {
   };
 
   const syncAll = () => {
-    const toAdd = [];
+    // ── Build lookup maps for O(1) access ─────────────────────────────────────
+    const clientMap  = new Map(clients.map(c => [c.id, c]));
+    const brokerMap  = new Map(brokers.map(b => [b.id, b]));
+    const driverMap  = new Map(drivers.map(d => [d.id, d]));
+    const truckMap   = new Map(trucks.map(t => [t.id, t]));
 
+    // ── Step 1: Remove broker_commission expenses that belong to pass-through clients ──
+    // These are stale: the broker deducts before paying, so there was never an outgoing expense.
+    // This makes the cleanup retroactive — toggling brokerPassThrough on an existing client
+    // immediately removes the rogue expenses on the next syncAll run.
+    const staleExpIds = new Set(
+      expenses
+        .filter(e => e.category === "broker_commission" && e.tripId != null)
+        .filter(e => {
+          const tr = trips.find(t => t.id === e.tripId);
+          const cl = tr ? clientMap.get(tr.clientId) : null;
+          return cl?.rules?.brokerPassThrough === true;
+        })
+        .map(e => e.id)
+    );
+    if (staleExpIds.size > 0) {
+      setExpenses(prev => prev.filter(e => !staleExpIds.has(e.id)));
+    }
+
+    // ── Step 2: Generate missing driver pay and broker commissions ─────────────
+    // Note: expenses state hasn't updated yet (Step 1 is batched), so we check
+    // against the live `expenses` array minus the stale ones we're removing.
+    const toAdd = [];
     trips.forEach(tr => {
-      // ── Driver pay ──────────────────────────────────────────────────────────
+      // ── Driver pay ────────────────────────────────────────────────────────
       if (tr.driverId) {
-        const driver = drivers.find(d => d.id === tr.driverId);
+        const driver = driverMap.get(tr.driverId);
         const hasDriverPay = expenses.some(e => e.category === "driverPay" && e.tripId === tr.id);
         if (driver && driver.salaryType !== "fixed" && !hasDriverPay) {
           let pay = 0;
@@ -176,11 +202,10 @@ export function AppProvider({ children }) {
           } else if (driver.salaryType === "perTrip") {
             const rate = (driver.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality);
             if (rate) {
-              const tk = trucks.find(t2 => t2.id === tr.truckId);
+              const tk = truckMap.get(tr.truckId);
               const size = tr.tarifaOverride || tk?.size || "T1";
               pay = size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
             } else {
-              // No rate configured for this route → fall back to 20%
               pay = Math.round((tr.revenue || 0) * 0.20);
             }
           } else {
@@ -199,13 +224,13 @@ export function AppProvider({ children }) {
         }
       }
 
-      // ── Broker commission ────────────────────────────────────────────────────
+      // ── Broker commission (non-pass-through only) ──────────────────────────
       if (tr.brokerId && tr.revenue > 0) {
-        const broker = brokers.find(b => b.id === tr.brokerId);
-        const client = clients.find(c => c.id === tr.clientId);
+        const broker = brokerMap.get(tr.brokerId);
+        const client = clientMap.get(tr.clientId);
         const isPassThrough = client?.rules?.brokerPassThrough === true;
-        const hasBrokerPay = expenses.some(e => e.category === "broker_commission" && e.tripId === tr.id);
-        // Pass-through: broker already deducted before paying — no separate expense needed
+        const isStale = expenses.some(e => e.category === "broker_commission" && e.tripId === tr.id && staleExpIds.has(e.id));
+        const hasBrokerPay = !isStale && expenses.some(e => e.category === "broker_commission" && e.tripId === tr.id);
         if (broker && !hasBrokerPay && !isPassThrough) {
           const commission = Math.round((tr.revenue || 0) * (broker.commissionPct || 10) / 100);
           if (commission > 0) {
@@ -225,7 +250,35 @@ export function AppProvider({ children }) {
         return [...prev, ...toAdd.map(exp => ({ id: ++maxId, ...exp }))];
       });
     }
-    return toAdd.length;
+
+    // ── Step 3: Backfill invoice amounts for pass-through clients ──────────────
+    // Old invoices lack a stored `amount`. For pass-through clients, recompute
+    // the net amount (gross − broker deduction) and store it so the CFO pipeline
+    // shows the correct collectible amount retroactively.
+    const invoicesToPatch = invoices.filter(inv => {
+      if (inv.amount != null) return false;
+      const cl = clientMap.get(inv.clientId);
+      return cl?.rules?.brokerPassThrough === true;
+    });
+    if (invoicesToPatch.length > 0) {
+      const patchIds = new Set(invoicesToPatch.map(i => i.id));
+      setInvoices(prev => prev.map(inv => {
+        if (!patchIds.has(inv.id)) return inv;
+        let gross = 0, deduction = 0;
+        (inv.tripIds || []).forEach(tid => {
+          const tr = trips.find(t => t.id === tid);
+          if (!tr) return;
+          gross += tr.revenue || 0;
+          if (tr.brokerId) {
+            const br = brokerMap.get(tr.brokerId);
+            if (br) deduction += Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
+          }
+        });
+        return { ...inv, amount: gross - deduction, ...(deduction > 0 ? { brokerDeduction: deduction } : {}) };
+      }));
+    }
+
+    return { added: toAdd.length, removed: staleExpIds.size, invoicesPatched: invoicesToPatch.length };
   };
 
   const forceSync = async () => {

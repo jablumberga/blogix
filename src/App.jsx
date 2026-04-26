@@ -220,8 +220,9 @@ export default function App() {
           <span style={{ fontWeight: 600, fontSize: 15, color: colors.text, flex: 1, textAlign: "center" }}>
             {pageTitles[page] ?? "B-Logix"}
           </span>
-          {/* Spacer to balance the hamburger and keep title visually centred */}
-          <div style={{ width: 44, flexShrink: 0 }} />
+          <button onClick={logout} title="Cerrar sesión" style={{ background: "transparent", border: "none", color: colors.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8, flexShrink: 0 }}>
+            <LogIn size={18} />
+          </button>
         </div>
       )}
 

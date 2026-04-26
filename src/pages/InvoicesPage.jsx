@@ -251,19 +251,25 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     });
   };
 
+  // Prefer stored net amount (broker pass-through deducted at save time).
+  // Fall back to gross recompute for invoices created before this field existed.
+  const tripRevMap = useMemo(() => new Map(trips.map(t => [t.id, t.revenue || 0])), [trips]);
+  const invAmt = (inv) => inv.amount != null
+    ? inv.amount
+    : (inv.tripIds || []).reduce((s, tid) => s + (tripRevMap.get(tid) || 0), 0);
+
   // ── Summary stats ────────────────────────────────────────────────────────
   const stats = useMemo(() => {
     const active = invoices.filter(inv => inv.status !== "cancelled");
-    const totalInvoiced = active.reduce((s, inv) =>
-      s + (inv.tripIds||[]).reduce((ss, tid) => ss + (trips.find(t => t.id === tid)?.revenue || 0), 0), 0);
     const pending = active.filter(inv => inv.status !== "paid");
-    const totalPending = pending.reduce((s, inv) =>
-      s + (inv.tripIds||[]).reduce((ss, tid) => ss + (trips.find(t => t.id === tid)?.revenue || 0), 0), 0);
     const overdue = pending.filter(inv => inv.dueDate && inv.dueDate < today);
-    const totalOverdue = overdue.reduce((s, inv) =>
-      s + (inv.tripIds||[]).reduce((ss, tid) => ss + (trips.find(t => t.id === tid)?.revenue || 0), 0), 0);
-    return { totalInvoiced, totalPending, totalOverdue, count: active.length };
-  }, [invoices, trips, today]);
+    return {
+      totalInvoiced: active.reduce((s, inv) => s + invAmt(inv), 0),
+      totalPending:  pending.reduce((s, inv) => s + invAmt(inv), 0),
+      totalOverdue:  overdue.reduce((s, inv) => s + invAmt(inv), 0),
+      count: active.length,
+    };
+  }, [invoices, tripRevMap, today]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Filtered list ────────────────────────────────────────────────────────
   let filtered = [...invoices].sort((a, b) => (b.date||"").localeCompare(a.date||""));
@@ -314,7 +320,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
           <tbody>
             {filtered.map(inv => {
               const cl = clients.find(c => c.id === inv.clientId);
-              const amount = (inv.tripIds||[]).reduce((s, tid) => s + (trips.find(t => t.id === tid)?.revenue || 0), 0);
+              const amount = invAmt(inv);
               const cfg = STATUS_CONFIG[inv.status] || STATUS_CONFIG.draft;
               const isOverdue = inv.status !== "paid" && inv.status !== "cancelled" && inv.dueDate && inv.dueDate < today;
               const daysLeft = inv.dueDate ? Math.ceil((new Date(inv.dueDate) - new Date(today)) / 86400000) : null;

@@ -10,6 +10,7 @@
  */
 
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { signToken } from "./api.mjs";
 
 const corsHeaders = {
@@ -130,7 +131,7 @@ export default async (request) => {
     const isHashed = typeof candidate.password === "string" && candidate.password.startsWith("$2");
     const match = isHashed
       ? await bcrypt.compare(password, candidate.password)
-      : candidate.password === password;
+      : crypto.timingSafeEqual(Buffer.from(password), Buffer.from(candidate.password));
 
     if (!match) {
       return Response.json({ ok: false, error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
@@ -164,7 +165,9 @@ export default async (request) => {
     }
 
     // ── Issue JWT ───────────────────────────────────────────────────────────
-    resetRateLimit(ip); // successful login resets the counter
+    // Note: intentionally NOT resetting the rate limit on success — doing so
+    // would allow an attacker to reset the counter by guessing one account and
+    // immediately begin brute-forcing another.
     const { password: _pw, _dbId: _d, _role: _r, ...safeUser } = candidate;
     const token = await signToken(
       { id: safeUser.id, role: safeUser.role, name: safeUser.name, refId: safeUser.refId ?? null },

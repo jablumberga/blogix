@@ -72,14 +72,16 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   // passThruDeduction = broker commissions for pass-through clients (deducted
   //   before payment arrives — contra-revenue, not a separate expense).
   const { mt, revenue, pipelineAmt, pipelineCount, passThruDeduction, netRevenue } = useMemo(() => {
+    const clientMap = new Map(clients.map(c => [c.id, c]));
+    const brokerMap = new Map(brokers.map(b => [b.id, b]));
     const mt = trips.filter(tr => tr.date >= dateFrom && tr.date <= dateTo && tr.status !== "cancelled");
     const delivered = mt.filter(tr => tr.status === "delivered");
     const pipeline  = mt.filter(tr => tr.status !== "delivered");
     const grossRevenue = delivered.reduce((s, tr) => s + (tr.revenue || 0), 0);
     const passThru = delivered.reduce((s, tr) => {
-      const cl = clients.find(c => c.id === tr.clientId);
+      const cl = clientMap.get(tr.clientId);
       if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return s;
-      const br = brokers.find(b => b.id === tr.brokerId);
+      const br = brokerMap.get(tr.brokerId);
       return s + (br ? Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100) : 0);
     }, 0);
     return {
@@ -157,11 +159,13 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
     const allInvoicedIds = new Set();
     (invoices || []).forEach(inv => { if (inv.status !== "cancelled") (inv.tripIds || []).forEach(id => allInvoicedIds.add(id)); });
     // readyToInvoice = delivered trips with docs, not yet invoiced, net of pass-through broker
+    const cMap = new Map(clients.map(c => [c.id, c]));
+    const bMap = new Map(brokers.map(b => [b.id, b]));
     const readyToInvoice = mt.filter(tr => tr.status === "delivered" && tr.docStatus === "delivered" && (tr.revenue || 0) > 0 && !allInvoicedIds.has(tr.id));
     const readyAmt = readyToInvoice.reduce((s, tr) => {
-      const cl = clients.find(c => c.id === tr.clientId);
+      const cl = cMap.get(tr.clientId);
       if (cl?.rules?.brokerPassThrough && tr.brokerId) {
-        const br = brokers.find(b => b.id === tr.brokerId);
+        const br = bMap.get(tr.brokerId);
         const ded = br ? Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100) : 0;
         return s + (tr.revenue || 0) - ded;
       }
@@ -180,15 +184,21 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
   // ── Broker commissions in period ────────────────────────────────────────
   const brokerBreakdown = useMemo(() => {
-    const tripIdSet = new Set(mt.map(tr => tr.id));
+    const clientMap = new Map(clients.map(c => [c.id, c]));
     return brokers.map(br => {
-      const brTrips = mt.filter(tr => tr.brokerId === br.id);
-      const brRev   = brTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
+      const brTrips   = mt.filter(tr => tr.brokerId === br.id);
+      const brRev     = brTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
       const brTripSet = new Set(brTrips.map(tr => tr.id));
-      const brFee   = periodExpenses.filter(e => e.category === "broker_commission" && brTripSet.has(e.tripId)).reduce((s,e) => s + e.amount, 0);
-      return { broker: br, trips: brTrips.length, revenue: brRev, fee: brFee };
-    }).filter(b => b.trips > 0 || b.fee > 0).sort((a,b) => b.fee - a.fee);
-  }, [brokers, mt, periodExpenses]);
+      const brFee     = periodExpenses.filter(e => e.category === "broker_commission" && brTripSet.has(e.tripId)).reduce((s,e) => s + e.amount, 0);
+      // Pass-through: no expense exists, but broker kept this amount as contra-revenue
+      const brPassThru = brTrips.reduce((s, tr) => {
+        const cl = clientMap.get(tr.clientId);
+        if (!cl?.rules?.brokerPassThrough) return s;
+        return s + Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
+      }, 0);
+      return { broker: br, trips: brTrips.length, revenue: brRev, fee: brFee, passThru: brPassThru };
+    }).filter(b => b.trips > 0 || b.fee > 0 || b.passThru > 0).sort((a,b) => (b.fee + b.passThru) - (a.fee + a.passThru));
+  }, [brokers, clients, mt, periodExpenses]);
 
   // ── Rentabilidad por camion (period) ────────────────────────────────────
   const { truckStats, totalPartnerComm, realProfit, realMargin, maxTruckRev } = useMemo(() => {
@@ -416,14 +426,15 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
             ? <div style={{ fontSize: 12, color: colors.textMuted, padding: "10px 0" }}>Sin viajes con broker en el periodo</div>
             : brokerBreakdown.map(b => (
                 <MiniRow key={b.broker.id}
-                  label={`${b.broker.name} (${b.broker.commissionPct}%) · ${b.trips} v.`}
-                  value={fmt(b.fee)} color={colors.yellow} />
+                  label={`${b.broker.name} (${b.broker.commissionPct}%) · ${b.trips} v.${b.passThru > 0 ? " · pass-through" : ""}`}
+                  value={b.passThru > 0 ? fmt(b.passThru) : fmt(b.fee)}
+                  color={b.passThru > 0 ? colors.orange : colors.yellow} />
               ))
           }
-          {brokerFees > 0 && (
+          {(brokerFees > 0 || passThruDeduction > 0) && (
             <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${colors.border}`, display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted }}>TOTAL COMISIONES</span>
-              <span style={{ fontSize: 13, fontWeight: 800, color: colors.yellow }}>{fmt(brokerFees)}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: colors.yellow }}>{fmt(brokerFees + passThruDeduction)}</span>
             </div>
           )}
         </Card>

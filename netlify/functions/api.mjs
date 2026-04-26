@@ -210,19 +210,20 @@ export default async (request) => {
       return Response.json({ error: "Invalid data structure" }, { status: 400, headers: corsHeaders });
     }
 
-    // Safety guard: reject a save where ALL core arrays are empty when DB already has data.
-    // This prevents accidental data wipes (e.g. save firing before state loads).
-    const coreKeys = ["trips", "clients", "trucks", "drivers", "expenses"];
-    const incomingTotal = coreKeys.reduce((s, k) => s + (Array.isArray(body[k]) ? body[k].length : 0), 0);
-    if (incomingTotal === 0) {
-      // Check what's currently in the DB before allowing a full wipe
+    // Safety guard: reject a save that would wipe any core array that has existing data.
+    // Checks each array independently — prevents partial wipes (e.g. zeroing trips while
+    // keeping one driver record would pass a sum-based check).
+    const coreKeys = ["trips", "clients", "trucks", "drivers", "expenses", "partners", "invoices", "cobros"];
+    const anyEmpty = coreKeys.some(k => Array.isArray(body[k]) && body[k].length === 0);
+    if (anyEmpty) {
       const chkRes = await fetch(`${tableUrl}?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
       if (chkRes.ok) {
         const rows = await chkRes.json();
         const existing = rows[0]?.data;
-        const existingTotal = coreKeys.reduce((s, k) => s + (Array.isArray(existing?.[k]) ? existing[k].length : 0), 0);
-        if (existingTotal > 0) {
-          return Response.json({ error: "Rejected: incoming data has no records but DB already has data. Possible accidental wipe." }, { status: 409, headers: corsHeaders });
+        for (const k of coreKeys) {
+          if (Array.isArray(body[k]) && body[k].length === 0 && Array.isArray(existing?.[k]) && existing[k].length > 0) {
+            return Response.json({ error: `Rejected: incoming "${k}" is empty but DB has ${existing[k].length} records. Possible accidental wipe.` }, { status: 409, headers: corsHeaders });
+          }
         }
       }
     }
