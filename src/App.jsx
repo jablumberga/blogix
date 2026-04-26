@@ -254,11 +254,11 @@ export default function App() {
         <div style={{ padding: "8px 6px", borderTop: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", gap: 4 }}>
           {isAdmin && <CfoChat data={{ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, settlementStatus }} t={t} sidebarOpen={sidebarOpen} isMobile={isMobile} />}
           {isAdmin && <SyncAllButton syncAll={syncAll} sidebarOpen={sidebarOpen} />}
-          <button onClick={() => setLang(lang === "en" ? "es" : "en")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
-            <Globe size={14} />{sidebarOpen && <span>{lang === "en" ? "Español" : "English"}</span>}
-          </button>
           <button onClick={logout} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
             <LogIn size={14} />{sidebarOpen && <span>{t.logout}</span>}
+          </button>
+          <button onClick={() => setLang(lang === "en" ? "es" : "en")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
+            <Globe size={14} />{sidebarOpen && <span>{lang === "en" ? "Español" : "English"}</span>}
           </button>
           {sidebarOpen && <div style={{ padding: "6px 10px", fontSize: 11, color: colors.textMuted, display: "flex", alignItems: "center", gap: 6 }}><UserCheck size={12} /> {user.name} <Badge label={user.role} color={user.role === "admin" ? colors.green : user.role === "partner" ? colors.orange : colors.accent} /></div>}
           {sidebarOpen && (
