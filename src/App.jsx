@@ -59,7 +59,7 @@ async function initPushNotifications(userRole) {
         await fetch("/api/push/token", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${getToken()}` },
-          body: JSON.stringify({ token: token.value, platform: "ios" }),
+          body: JSON.stringify({ token: token.value, platform: Capacitor.getPlatform() }),
         });
       } catch { /* non-critical — token will be retried on next login */ }
     });
