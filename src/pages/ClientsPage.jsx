@@ -8,7 +8,7 @@ import { Card, PageHeader, Inp, Sel, Btn, Badge, Chk, Th, Td } from "../componen
 export default function ClientsPage({ t, clients, setClients, brokers, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
-  const emptyRules = { paymentTerms: 30, billingCycle: "net", period1PayDay: 30, period2PayDay: 15, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null };
+  const emptyRules = { paymentTerms: 30, billingCycle: "net", period1PayDay: 30, period2PayDay: 15, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null, brokerPassThrough: false };
   const [form, setForm] = useState({ companyName: "", contactPerson: "", phone: "", email: "", notes: "", status: "active", rules: emptyRules, rates: [] });
   const [rForm, setRForm] = useState({ province: "", municipality: "", priceT1: "", priceT2: "" });
 
@@ -39,11 +39,25 @@ export default function ClientsPage({ t, clients, setClients, brokers, isMobile 
             <option value="net">Días netos desde el viaje</option>
             <option value="bimonthly_delayed">Quincenal con fondo (1–15 / 16–31)</option>
           </Sel>
-          <Sel label={t.defaultBroker} value={form.rules.defaultBrokerId || ""} onChange={e => setForm({ ...form, rules: { ...form.rules, defaultBrokerId: e.target.value ? Number(e.target.value) : null } })}>
+          <Sel label={t.defaultBroker} value={form.rules.defaultBrokerId || ""} onChange={e => setForm({ ...form, rules: { ...form.rules, defaultBrokerId: e.target.value ? Number(e.target.value) : null, brokerPassThrough: e.target.value ? form.rules.brokerPassThrough : false } })}>
             <option value="">{t.noBroker}</option>
             {brokers.map(b => <option key={b.id} value={b.id}>{b.name} ({b.commissionPct}%)</option>)}
           </Sel>
         </div>
+        {form.rules.defaultBrokerId && (
+          <div style={{ marginBottom: 8 }}>
+            <Chk
+              label="El broker descuenta su comisión antes de pagarme (factura por monto neto)"
+              checked={!!form.rules.brokerPassThrough}
+              onChange={() => setForm({ ...form, rules: { ...form.rules, brokerPassThrough: !form.rules.brokerPassThrough } })}
+            />
+            <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 3, marginLeft: 22 }}>
+              {form.rules.brokerPassThrough
+                ? "Las facturas mostrarán el monto neto (menos comisión). No se genera gasto de broker separado."
+                : "Tú pagas la comisión del broker. Las facturas son por tarifa completa y se genera un gasto de broker."}
+            </div>
+          </div>
+        )}
         {(form.rules.billingCycle || "net") === "net"
           ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 8 }}>
               <Inp label="Días de crédito" type="number" value={form.rules.paymentTerms} onChange={e => setForm({ ...form, rules: { ...form.rules, paymentTerms: Number(e.target.value) } })} />

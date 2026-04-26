@@ -40,6 +40,7 @@ function SectionTitle({ label, color }) {
 }
 
 export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, isMobile }) {
+  // brokers is used in the revenue useMemo for pass-through deduction
   const cm = monthStr();
   const today = new Date().toISOString().slice(0, 10);
   const [dateFrom, setDateFrom] = useState(`${cm}-01`);
@@ -65,11 +66,31 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
     } else if (preset === "year") { setDateFrom(`${y}-01-01`); setDateTo(`${y}-12-31`); }
   };
 
-  // ── Period trips + revenue ────────────────────────────────────────────────
-  const { mt, revenue } = useMemo(() => {
+  // ── Period trips + earned revenue ────────────────────────────────────────
+  // revenue = only DELIVERED trips (service performed = earned).
+  // pipelineAmt = pending+in_transit (expected but not yet earned).
+  // passThruDeduction = broker commissions for pass-through clients (deducted
+  //   before payment arrives — contra-revenue, not a separate expense).
+  const { mt, revenue, pipelineAmt, pipelineCount, passThruDeduction, netRevenue } = useMemo(() => {
     const mt = trips.filter(tr => tr.date >= dateFrom && tr.date <= dateTo && tr.status !== "cancelled");
-    return { mt, revenue: mt.reduce((s, tr) => s + (tr.revenue || 0), 0) };
-  }, [trips, dateFrom, dateTo]);
+    const delivered = mt.filter(tr => tr.status === "delivered");
+    const pipeline  = mt.filter(tr => tr.status !== "delivered");
+    const grossRevenue = delivered.reduce((s, tr) => s + (tr.revenue || 0), 0);
+    const passThru = delivered.reduce((s, tr) => {
+      const cl = clients.find(c => c.id === tr.clientId);
+      if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return s;
+      const br = brokers.find(b => b.id === tr.brokerId);
+      return s + (br ? Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100) : 0);
+    }, 0);
+    return {
+      mt,
+      revenue:            grossRevenue,
+      pipelineAmt:        pipeline.reduce((s, tr) => s + (tr.revenue || 0), 0),
+      pipelineCount:      pipeline.length,
+      passThruDeduction:  passThru,
+      netRevenue:         grossRevenue - passThru,
+    };
+  }, [trips, clients, brokers, dateFrom, dateTo]);
 
   // ── Expenses in period ────────────────────────────────────────────────────
   const { periodExpenses, nomina, brokerFees, operExp, totalExp, grossProfit, margin } = useMemo(() => {
@@ -82,14 +103,17 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
     const brokerFees = periodExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s + e.amount, 0);
     const operExp    = periodExpenses.filter(e => !["driverPay","broker_commission"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
     const totalExp   = nomina + brokerFees + operExp;
-    return { periodExpenses, nomina, brokerFees, operExp, totalExp, grossProfit: revenue - totalExp, margin: revenue > 0 ? (revenue - totalExp) / revenue * 100 : 0 };
-  }, [expenses, mt, dateFrom, dateTo, revenue]);
+    // grossProfit uses netRevenue: broker pass-through deductions are contra-revenue,
+    // and since syncAll doesn't generate broker_commission expenses for pass-through clients,
+    // totalExp already excludes those commissions — using netRevenue keeps the P&L correct.
+    return { periodExpenses, nomina, brokerFees, operExp, totalExp, grossProfit: netRevenue - totalExp, margin: netRevenue > 0 ? (netRevenue - totalExp) / netRevenue * 100 : 0 };
+  }, [expenses, mt, dateFrom, dateTo, netRevenue]);
 
-  // ── CxC (accounts receivable — all trips, not period-filtered) ───────────
+  // ── CxC (accounts receivable — delivered trips only, all-time) ────────────
   const { cxcPending, cxcOverdue, cxcUpcoming, totalCxC, totalOverdue, totalCollected, nextDue, cobroMap, getCobro } = useMemo(() => {
     const cxcGrouped = {};
     trips.forEach(tr => {
-      if (!tr.clientId || !(tr.revenue > 0)) return;
+      if (!tr.clientId || !(tr.revenue > 0) || tr.status !== "delivered") return;
       const client = clients.find(c => c.id === tr.clientId);
       if (!client) return;
       const { key, expectedDate } = getPeriodInfo(tr.date, client);
@@ -127,21 +151,32 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   // ── CFO Billing Pipeline ──────────────────────────────────────────────────
   const { invoicedAmt, outstandingAmt, collectedAmt, draftAmt, readyToInvoiceAmt, pendingDocsAmt } = useMemo(() => {
     const tripRevMap = new Map(trips.map(t => [t.id, t.revenue || 0]));
-    const invAmt = (inv) => (inv.tripIds || []).reduce((s, tid) => s + (tripRevMap.get(tid) || 0), 0);
+    // Prefer stored inv.amount (net after broker deduction) — fall back to gross recompute for old invoices
+    const invAmt = (inv) => inv.amount != null ? inv.amount : (inv.tripIds || []).reduce((s, tid) => s + (tripRevMap.get(tid) || 0), 0);
     const periodInv = (invoices || []).filter(inv => inv.date >= dateFrom && inv.date <= dateTo && inv.status !== "cancelled");
     const allInvoicedIds = new Set();
     (invoices || []).forEach(inv => { if (inv.status !== "cancelled") (inv.tripIds || []).forEach(id => allInvoicedIds.add(id)); });
-    const readyToInvoice = mt.filter(tr => tr.docStatus === "delivered" && (tr.revenue || 0) > 0 && !allInvoicedIds.has(tr.id));
+    // readyToInvoice = delivered trips with docs, not yet invoiced, net of pass-through broker
+    const readyToInvoice = mt.filter(tr => tr.status === "delivered" && tr.docStatus === "delivered" && (tr.revenue || 0) > 0 && !allInvoicedIds.has(tr.id));
+    const readyAmt = readyToInvoice.reduce((s, tr) => {
+      const cl = clients.find(c => c.id === tr.clientId);
+      if (cl?.rules?.brokerPassThrough && tr.brokerId) {
+        const br = brokers.find(b => b.id === tr.brokerId);
+        const ded = br ? Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100) : 0;
+        return s + (tr.revenue || 0) - ded;
+      }
+      return s + (tr.revenue || 0);
+    }, 0);
     return {
       invoicedAmt:      periodInv.reduce((s, inv) => s + invAmt(inv), 0),
       outstandingAmt:   periodInv.filter(i => i.status === "sent").reduce((s, i) => s + invAmt(i), 0),
       collectedAmt:     periodInv.filter(i => i.status === "paid").reduce((s, i) => s + invAmt(i), 0),
       draftAmt:         periodInv.filter(i => i.status === "draft").reduce((s, i) => s + invAmt(i), 0),
-      readyToInvoiceAmt: readyToInvoice.reduce((s, tr) => s + (tr.revenue || 0), 0),
-      pendingDocsAmt:   mt.filter(tr => (tr.revenue || 0) > 0 && tr.docStatus !== "delivered" && !allInvoicedIds.has(tr.id))
+      readyToInvoiceAmt: readyAmt,
+      pendingDocsAmt:   mt.filter(tr => tr.status === "delivered" && (tr.revenue || 0) > 0 && tr.docStatus !== "delivered" && !allInvoicedIds.has(tr.id))
                           .reduce((s, tr) => s + (tr.revenue || 0), 0),
     };
-  }, [invoices, mt, trips, dateFrom, dateTo]);
+  }, [invoices, mt, trips, clients, brokers, dateFrom, dateTo]);
 
   // ── Broker commissions in period ────────────────────────────────────────
   const brokerBreakdown = useMemo(() => {
@@ -169,8 +204,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       return { truck: tk, trips: tkTrips.length, revenue: tkRev, expenses: tkExp, net: tkNet, margin: tkRev > 0 ? tkNet / tkRev * 100 : 0, partner, partnerComm, adminNet, adminMargin: tkRev > 0 ? adminNet / tkRev * 100 : 0 };
     }).filter(t => t.trips > 0).sort((a,b) => b.revenue - a.revenue);
     const totalPartnerComm = stats.reduce((s, ts) => s + ts.partnerComm, 0);
-    return { truckStats: stats, totalPartnerComm, maxTruckRev: stats[0]?.revenue || 1, realProfit: grossProfit - totalPartnerComm, realMargin: revenue > 0 ? (grossProfit - totalPartnerComm) / revenue * 100 : 0 };
-  }, [trucks, mt, periodExpenses, partners, trips, grossProfit, revenue]);
+    return { truckStats: stats, totalPartnerComm, maxTruckRev: stats[0]?.revenue || 1, realProfit: grossProfit - totalPartnerComm, realMargin: netRevenue > 0 ? (grossProfit - totalPartnerComm) / netRevenue * 100 : 0 };
+  }, [trucks, mt, periodExpenses, partners, trips, grossProfit, netRevenue]);
 
   // ── Top clientes (period) ───────────────────────────────────────────────
   const { clientStats, maxClientRev } = useMemo(() => {
@@ -225,12 +260,27 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>Beneficio Real del Periodo</div>
           <div style={{ fontSize: 36, fontWeight: 800, color: realProfit >= 0 ? colors.green : colors.red, lineHeight: 1 }}>{fmt(realProfit)}</div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>{realMargin.toFixed(1)}% margen · {mt.length} viaje{mt.length !== 1 ? "s" : ""} · tras liquidaciones de socios</div>
+          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
+            {realMargin.toFixed(1)}% margen · {mt.filter(tr => tr.status === "delivered").length} entregado{mt.filter(tr => tr.status === "delivered").length !== 1 ? "s" : ""}
+            {pipelineCount > 0 && <span style={{ color: colors.yellow }}> · {pipelineCount} en proceso ({fmt(pipelineAmt)})</span>}
+            {" · tras liquidaciones de socios"}
+          </div>
         </div>
         <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Ingresos</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: colors.green }}>{fmt(revenue)}</div>
+            {passThruDeduction > 0 ? (
+              <>
+                <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 1 }}>Ingresos Brutos</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: colors.textMuted }}>{fmt(revenue)}</div>
+                <div style={{ fontSize: 10, color: colors.red }}>−{fmt(passThruDeduction)} broker</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: colors.green }}>{fmt(netRevenue)} <span style={{ fontSize: 9, fontWeight: 400 }}>neto</span></div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Ingresos Devengados</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: colors.green }}>{fmt(revenue)}</div>
+              </>
+            )}
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Gastos Totales</div>
@@ -279,8 +329,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
           ))}
         </div>
 
-        {/* Stacked progress bar */}
-        {revenue > 0 && (
+        {/* Stacked progress bar — denominator is netRevenue (what you'll actually collect) */}
+        {netRevenue > 0 && (
           <>
             <div style={{ display: "flex", height: 7, borderRadius: 4, overflow: "hidden", gap: 1 }}>
               {[
@@ -290,7 +340,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
                 { value: readyToInvoiceAmt, color: colors.orange + "88" },
                 { value: pendingDocsAmt,    color: colors.yellow + "55" },
               ].map(({ value, color }, i) => value > 0
-                ? <div key={i} style={{ width: `${value / revenue * 100}%`, background: color, minWidth: 2 }} />
+                ? <div key={i} style={{ width: `${value / netRevenue * 100}%`, background: color, minWidth: 2 }} />
                 : null
               )}
             </div>
@@ -308,7 +358,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
                 </span>
               ))}
               <span style={{ fontSize: 9, color: colors.textMuted, marginLeft: "auto" }}>
-                {revenue > 0 ? ((invoicedAmt / revenue) * 100).toFixed(0) : 0}% del periodo facturado
+                {netRevenue > 0 ? ((invoicedAmt / netRevenue) * 100).toFixed(0) : 0}% del periodo facturado
               </span>
             </div>
           </>

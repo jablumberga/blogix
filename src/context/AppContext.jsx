@@ -202,8 +202,11 @@ export function AppProvider({ children }) {
       // ── Broker commission ────────────────────────────────────────────────────
       if (tr.brokerId && tr.revenue > 0) {
         const broker = brokers.find(b => b.id === tr.brokerId);
+        const client = clients.find(c => c.id === tr.clientId);
+        const isPassThrough = client?.rules?.brokerPassThrough === true;
         const hasBrokerPay = expenses.some(e => e.category === "broker_commission" && e.tripId === tr.id);
-        if (broker && !hasBrokerPay) {
+        // Pass-through: broker already deducted before paying — no separate expense needed
+        if (broker && !hasBrokerPay && !isPassThrough) {
           const commission = Math.round((tr.revenue || 0) * (broker.commissionPct || 10) / 100);
           if (commission > 0) {
             toAdd.push({

@@ -91,7 +91,7 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, drivers, trucks, cobros, setCobros, isMobile }) {
+export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, isMobile }) {
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -166,12 +166,21 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     });
   };
 
-  const invoiceTotal = useMemo(() => {
-    return form.tripIds.reduce((s, tid) => {
+  const { invoiceGross, invoiceBrokerDeduction, invoiceTotal } = useMemo(() => {
+    const isPassThrough = selectedClient?.rules?.brokerPassThrough === true;
+    let gross = 0;
+    let deduction = 0;
+    form.tripIds.forEach(tid => {
       const tr = trips.find(t => t.id === tid);
-      return s + (tr?.revenue || 0);
-    }, 0);
-  }, [form.tripIds, trips]);
+      if (!tr) return;
+      gross += tr.revenue || 0;
+      if (isPassThrough && tr.brokerId) {
+        const broker = brokers.find(b => b.id === tr.brokerId);
+        if (broker) deduction += Math.round((tr.revenue || 0) * (broker.commissionPct || 10) / 100);
+      }
+    });
+    return { invoiceGross: gross, invoiceBrokerDeduction: deduction, invoiceTotal: gross - deduction };
+  }, [form.tripIds, trips, selectedClient, brokers]);
 
   const save = () => {
     if (!form.clientId || form.tripIds.length === 0) {
@@ -183,6 +192,8 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
       ...form,
       clientId: Number(form.clientId),
       dueDate: form.dueDate || calcDueDate(form.date, cl),
+      amount: invoiceTotal,
+      brokerDeduction: invoiceBrokerDeduction > 0 ? invoiceBrokerDeduction : undefined,
     };
     if (editId !== null) {
       setInvoices(prev => prev.map(inv => inv.id === editId ? { ...inv, ...data } : inv));
@@ -402,8 +413,15 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                     Viajes del cliente ({form.tripIds.length} seleccionados)
                   </div>
                   {form.tripIds.length > 0 && (
-                    <div style={{ fontSize: 13, fontWeight: 700, color: colors.green }}>
-                      Total: {fmt(invoiceTotal)}
+                    <div style={{ textAlign: "right" }}>
+                      {invoiceBrokerDeduction > 0 && (
+                        <div style={{ fontSize: 10, color: colors.textMuted }}>
+                          Bruto: {fmt(invoiceGross)} — Deducción broker: −{fmt(invoiceBrokerDeduction)}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 13, fontWeight: 700, color: colors.green }}>
+                        Total{invoiceBrokerDeduction > 0 ? " neto" : ""}: {fmt(invoiceTotal)}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -455,7 +473,13 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
           {/* Modal footer */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderTop: `1px solid ${colors.border}` }}>
             <div style={{ fontSize: 12, color: colors.textMuted }}>
-              {form.tripIds.length > 0 ? <span style={{ color: colors.green, fontWeight: 600 }}>Total factura: {fmt(invoiceTotal)}</span> : "Selecciona viajes para facturar"}
+              {form.tripIds.length > 0 ? (
+                <span style={{ color: colors.green, fontWeight: 600 }}>
+                  {invoiceBrokerDeduction > 0
+                    ? `${fmt(invoiceGross)} − ${fmt(invoiceBrokerDeduction)} broker = ${fmt(invoiceTotal)}`
+                    : `Total: ${fmt(invoiceTotal)}`}
+                </span>
+              ) : "Selecciona viajes para facturar"}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <Btn variant="ghost" onClick={() => { setShowModal(false); setEditId(null); }}>Cancelar</Btn>
