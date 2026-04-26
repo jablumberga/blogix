@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote } from "lucide-react";
+import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote, FileText, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, monthStr, getPeriodInfo, expenseTruckId } from "../utils/helpers.js";
 import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
@@ -39,7 +39,7 @@ function SectionTitle({ label, color }) {
   );
 }
 
-export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, alerts, setPage }) {
+export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage }) {
   const cm = monthStr();
   const today = new Date().toISOString().slice(0, 10);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -121,6 +121,24 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
   // ── Net cash position ───────────────────────────────────────────────────
   const cashPosition = totalCxC - totalCxP;
+
+  // ── CFO Billing Pipeline ─────────────────────────────────────────────────
+  const invAmt = (inv) => (inv.tripIds || []).reduce((s, tid) => s + (trips.find(t => t.id === tid)?.revenue || 0), 0);
+  // Invoices whose date falls in the period
+  const periodInv = (invoices || []).filter(inv => inv.date >= dateFrom && inv.date <= dateTo && inv.status !== "cancelled");
+  const invoicedAmt   = periodInv.reduce((s, inv) => s + invAmt(inv), 0);
+  const outstandingAmt = periodInv.filter(i => i.status === "sent").reduce((s, i) => s + invAmt(i), 0);
+  const collectedAmt   = periodInv.filter(i => i.status === "paid").reduce((s, i) => s + invAmt(i), 0);
+  const draftAmt       = periodInv.filter(i => i.status === "draft").reduce((s, i) => s + invAmt(i), 0);
+  // All invoiced trip ids (across all invoices, not just the period — to correctly exclude from "sin facturar")
+  const allInvoicedIds = new Set();
+  (invoices || []).forEach(inv => { if (inv.status !== "cancelled") (inv.tripIds || []).forEach(id => allInvoicedIds.add(id)); });
+  // Trips in period with docs OK but no invoice yet → ready to invoice
+  const readyToInvoice    = mt.filter(tr => tr.docStatus === "delivered" && (tr.revenue || 0) > 0 && !allInvoicedIds.has(tr.id));
+  const readyToInvoiceAmt = readyToInvoice.reduce((s, tr) => s + (tr.revenue || 0), 0);
+  // Trips in period with docs still pending → not yet invoiceable
+  const pendingDocsAmt = mt.filter(tr => (tr.revenue || 0) > 0 && tr.docStatus !== "delivered" && !allInvoicedIds.has(tr.id))
+    .reduce((s, tr) => s + (tr.revenue || 0), 0);
 
   // ── Broker commissions in period ────────────────────────────────────────
   const brokerBreakdown = brokers.map(br => {
@@ -221,6 +239,76 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
           )}
         </div>
       </div>
+
+      {/* ── CFO: Pipeline de Facturación ── */}
+      <Card style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => setPage("invoices")}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <FileText size={14} color={colors.accent} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: colors.accent, letterSpacing: "0.06em", textTransform: "uppercase" }}>Pipeline de Facturación</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            {readyToInvoiceAmt > 0 && (
+              <div style={{ background: colors.orange+"18", border: `1px solid ${colors.orange}40`, borderRadius: 8, padding: "4px 10px", fontSize: 11, color: colors.orange, fontWeight: 700 }}>
+                {fmt(readyToInvoiceAmt)} listo p/facturar
+              </div>
+            )}
+            <ChevronRight size={14} color={colors.textMuted} />
+          </div>
+        </div>
+
+        {/* 5-metric grid */}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: 8, marginBottom: 10 }}>
+          {[
+            { label: "Cobrado",        value: collectedAmt,     color: colors.green,    sub: "pagado" },
+            { label: "Por Cobrar",     value: outstandingAmt,   color: colors.cyan,     sub: "enviado" },
+            { label: "Borrador",       value: draftAmt,         color: colors.textMuted, sub: "sin enviar" },
+            { label: "Listo Facturar", value: readyToInvoiceAmt, color: colors.orange,  sub: "docs OK" },
+            { label: "Docs Pendientes",value: pendingDocsAmt,   color: colors.yellow,   sub: "sin docs" },
+          ].map(({ label, value, color, sub }) => (
+            <div key={label} style={{ background: colors.inputBg, borderRadius: 8, padding: "9px 11px", border: `1px solid ${colors.border}` }}>
+              <div style={{ fontSize: 9, color, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color }}>{fmt(value)}</div>
+              <div style={{ fontSize: 9, color: colors.textMuted, marginTop: 2 }}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Stacked progress bar */}
+        {revenue > 0 && (
+          <>
+            <div style={{ display: "flex", height: 7, borderRadius: 4, overflow: "hidden", gap: 1 }}>
+              {[
+                { value: collectedAmt,      color: colors.green },
+                { value: outstandingAmt,    color: colors.cyan },
+                { value: draftAmt,          color: colors.textMuted + "88" },
+                { value: readyToInvoiceAmt, color: colors.orange + "88" },
+                { value: pendingDocsAmt,    color: colors.yellow + "55" },
+              ].map(({ value, color }, i) => value > 0
+                ? <div key={i} style={{ width: `${value / revenue * 100}%`, background: color, minWidth: 2 }} />
+                : null
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 5, flexWrap: "wrap" }}>
+              {[
+                { label: "Cobrado",      color: colors.green },
+                { label: "Por Cobrar",   color: colors.cyan },
+                { label: "Borrador",     color: colors.textMuted },
+                { label: "Listo",        color: colors.orange },
+                { label: "Docs Pend.",   color: colors.yellow },
+              ].map(({ label, color }) => (
+                <span key={label} style={{ fontSize: 9, color: colors.textMuted, display: "flex", alignItems: "center", gap: 3 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 2, background: color, display: "inline-block", flexShrink: 0 }} />
+                  {label}
+                </span>
+              ))}
+              <span style={{ fontSize: 9, color: colors.textMuted, marginLeft: "auto" }}>
+                {revenue > 0 ? ((invoicedAmt / revenue) * 100).toFixed(0) : 0}% del periodo facturado
+              </span>
+            </div>
+          </>
+        )}
+      </Card>
 
       {/* ── Row 1: KPIs financieros ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 16 }}>

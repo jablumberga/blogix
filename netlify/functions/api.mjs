@@ -95,6 +95,7 @@ function applyRLS(data, user) {
       suppliers:        [],
       fixedTemplates:   [],
       cobros:           [],
+      invoices:         [],
     };
   }
 
@@ -117,7 +118,7 @@ function applyRLS(data, user) {
       trucks:           myTruck,
       clients:          [],
       partners:         [], brokers: [], suppliers: [],
-      settlementStatus: {}, fixedTemplates: [], cobros: [],
+      settlementStatus: {}, fixedTemplates: [], cobros: [], invoices: [],
     };
   }
 
@@ -136,7 +137,7 @@ function supabaseHeaders(key) {
 const defaultData = {
   trips: [], drivers: [], trucks: [], clients: [], partners: [],
   brokers: [], suppliers: [], expenses: [], settlementStatus: {},
-  cobros: [], fixedTemplates: [],
+  cobros: [], fixedTemplates: [], invoices: [],
 };
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -204,7 +205,7 @@ export default async (request) => {
     try { body = await request.json(); }
     catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
 
-    const knownKeys = ["trips", "drivers", "trucks", "clients", "expenses"];
+    const knownKeys = ["trips", "drivers", "trucks", "clients", "expenses", "invoices"];
     if (!knownKeys.some(k => k in body)) {
       return Response.json({ error: "Invalid data structure" }, { status: 400, headers: corsHeaders });
     }

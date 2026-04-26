@@ -9,7 +9,7 @@ const AppContext = createContext(null);
 function applyData(data, setters) {
   const { setClients, setPartners, setTrucks, setDrivers, setTrips,
           setExpenses, setBrokers, setSuppliers, setFixedTemplates,
-          setSettlementStatus, setCobros } = setters;
+          setSettlementStatus, setCobros, setInvoices } = setters;
   if (!data || Object.keys(data).length === 0) return;
   if (Array.isArray(data.clients))        setClients(data.clients);
   if (Array.isArray(data.partners))       setPartners(data.partners);
@@ -22,6 +22,7 @@ function applyData(data, setters) {
   if (Array.isArray(data.fixedTemplates)) setFixedTemplates(data.fixedTemplates);
   if (data.settlementStatus)              setSettlementStatus(data.settlementStatus);
   if (Array.isArray(data.cobros))         setCobros(data.cobros);
+  if (Array.isArray(data.invoices))       setInvoices(data.invoices);
 }
 
 export function AppProvider({ children }) {
@@ -60,6 +61,7 @@ export function AppProvider({ children }) {
   const [fixedTemplates, setFixedTemplates] = useState([]);
   const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
   const [cobros, setCobros] = useState([]);
+  const [invoices, setInvoices] = useState([]);
   const [syncStatus, setSyncStatus] = useState("idle");
 
   const saveTimerRef = useRef(null);
@@ -69,7 +71,7 @@ export function AppProvider({ children }) {
   const setters = {
     setClients, setPartners, setTrucks, setDrivers, setTrips,
     setExpenses, setBrokers, setSuppliers, setFixedTemplates,
-    setSettlementStatus, setCobros,
+    setSettlementStatus, setCobros, setInvoices,
   };
 
   // ── Load on mount ─────────────────────────────────────────────────────────
@@ -96,13 +98,13 @@ export function AppProvider({ children }) {
       setSyncStatus("saving");
       const result = await saveData({
         clients, partners, trucks, drivers, trips, expenses,
-        brokers, suppliers, fixedTemplates, settlementStatus, cobros,
+        brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
       });
       if (result.saved === "unauthorized") { setUser(null); return; }
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices]);
 
   // ── Dynamic user list ─────────────────────────────────────────────────────
   const allUsers = [
@@ -231,7 +233,7 @@ export function AppProvider({ children }) {
     setSyncStatus("saving");
     const result = await saveData({
       clients, partners, trucks, drivers, trips, expenses,
-      brokers, suppliers, fixedTemplates, settlementStatus, cobros,
+      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
     });
     if (result.saved === "unauthorized") { setUser(null); return; }
     setSyncStatus(result.saved === "api" ? "saved" : "offline");
@@ -256,6 +258,7 @@ export function AppProvider({ children }) {
     fixedTemplates, setFixedTemplates,
     settlementStatus, setSettlementStatus,
     cobros, setCobros,
+    invoices, setInvoices,
     // Computed
     partner, partnerTruckIds, driverObj, alerts,
   };

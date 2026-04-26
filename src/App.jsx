@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { getToken } from "./api.js";
 import { colors } from "./constants/theme.js";
@@ -22,6 +22,7 @@ import NominaPage from "./pages/NominaPage.jsx";
 import SuppliersPage from "./pages/SuppliersPage.jsx";
 import SettlementsPage from "./pages/SettlementsPage.jsx";
 import CxCPage from "./pages/CxCPage.jsx";
+import InvoicesPage from "./pages/InvoicesPage.jsx";
 
 function SyncAllButton({ syncAll, sidebarOpen }) {
   const [msg, setMsg] = useState(null);
@@ -80,7 +81,7 @@ export default function App() {
     drivers, setDrivers, trips, setTrips, expenses, setExpenses,
     brokers, setBrokers, suppliers, setSuppliers,
     fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus,
-    cobros, setCobros, syncStatus,
+    cobros, setCobros, invoices, setInvoices, syncStatus,
     partner, partnerTruckIds, driverObj, alerts,
   } = useApp();
 
@@ -152,6 +153,7 @@ export default function App() {
     { id: "dashboard",   icon: LayoutDashboard, label: t.dashboard },
     { divider: true },
     { id: "clients",     icon: Building2,        label: t.clients },
+    { id: "invoices",    icon: FileText,         label: "Facturas" },
     { id: "cxc",         icon: TrendingUp,       label: "Cuentas x Cobrar" },
     { id: "trips",       icon: Route,            label: t.trips },
     { id: "fleet",       icon: Truck,            label: t.fleet },
@@ -176,13 +178,14 @@ export default function App() {
   ];
   const navItems = isAdmin ? adminNav : isPartner ? partnerNav : driverNav;
 
-  const ctx = { t, user, isMobile, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, partner, partnerTruckIds, driverObj, alerts };
+  const ctx = { t, user, isMobile, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, partner, partnerTruckIds, driverObj, alerts };
 
   const pageTitles = {
     dashboard:   t.dashboard,
     partnerDash: t.partnerDashboard,
     driverDash:  t.dashboard,
     clients:     t.clients,
+    invoices:    "Facturas",
     cxc:         "Cuentas x Cobrar",
     trips:       t.trips,
     fleet:       t.fleet,
@@ -297,7 +300,8 @@ export default function App() {
         {page === "partnerDash" && isPartner  && <PartnerDashboard {...ctx} />}
         {page === "driverDash"  && isDriver   && <DriverDashboard  {...ctx} />}
         {page === "clients"     && isAdmin    && <ClientsPage      {...ctx} />}
-        {page === "cxc"         && isAdmin    && <CxCPage          {...ctx} />}
+        {page === "invoices"    && isAdmin    && <InvoicesPage      {...ctx} />}
+        {page === "cxc"         && isAdmin    && <CxCPage          {...ctx} setPage={setPage} />}
         {page === "trips"       && isAdmin    && <TripsPage        {...ctx} />}
         {page === "fleet"       && isAdmin    && <FleetPage        {...ctx} />}
         {page === "drivers"     && isAdmin    && <DriversPage      {...ctx} />}
