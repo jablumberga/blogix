@@ -4,15 +4,20 @@
  * Falls back to localStorage when API is unavailable.
  */
 
-const API_URL = "/api/data";
-const LS_KEY  = "blogix_data";
-const TK_KEY  = "blogix_token";
+const API_URL   = "/api/data";
+const LS_KEY    = "blogix_data";
+const TK_KEY    = "blogix_token";
+const DIRTY_KEY = "blogix_dirty"; // set when localStorage is ahead of Supabase
 
 let _apiAvailable = null;
 let _apiCheckedAt = 0;
 const API_CACHE_TTL = 8_000; // retry offline after 8s
 
 export function resetApiCache() { _apiAvailable = null; _apiCheckedAt = 0; }
+
+function markDirty()  { try { localStorage.setItem(DIRTY_KEY, "1"); } catch {} }
+function clearDirty() { try { localStorage.removeItem(DIRTY_KEY); } catch {} }
+function isDirty()    { try { return localStorage.getItem(DIRTY_KEY) === "1"; } catch { return false; } }
 
 export function getToken() {
   try { return localStorage.getItem(TK_KEY); } catch { return null; }
@@ -59,7 +64,7 @@ export async function loadData() {
   }
 
   try {
-    const res = await fetch(API_URL, { headers: authHeaders() });
+    const res = await fetch(API_URL, { headers: authHeaders(), cache: "no-store" });
     _apiCheckedAt = Date.now();
 
     if (res.status === 401) {
@@ -73,6 +78,14 @@ export async function loadData() {
       _apiAvailable = true;
       const apiData = await res.json();
       if (apiData && Object.keys(apiData).length > 0) {
+        // If localStorage has uncommitted changes (dirty), don't overwrite — let
+        // the auto-save push them to Supabase instead of losing them.
+        if (isDirty()) {
+          const raw = localStorage.getItem(LS_KEY);
+          if (raw) {
+            try { return { source: "localStorage", data: JSON.parse(raw) }; } catch {}
+          }
+        }
         localStorage.setItem(LS_KEY, JSON.stringify(apiData));
         return { source: "api", data: apiData };
       }
@@ -96,6 +109,7 @@ export async function loadData() {
 
 export async function saveData(data) {
   localStorage.setItem(LS_KEY, JSON.stringify(data));
+  markDirty(); // localStorage is now ahead of Supabase until confirmed
 
   const token = getToken();
   if (!token) return { saved: "localStorage" };
@@ -112,7 +126,7 @@ export async function saveData(data) {
       headers: authHeaders(),
       body: JSON.stringify(data),
     });
-    if (res.ok) { _apiAvailable = true; return { saved: "api" }; }
+    if (res.ok) { _apiAvailable = true; clearDirty(); return { saved: "api" }; }
     if (res.status === 401) {
       // Token expired or invalid — force re-login, don't show "offline"
       clearToken();

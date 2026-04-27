@@ -62,9 +62,11 @@ export function AppProvider({ children }) {
   const [cobros, setCobros] = useState([]);
   const [syncStatus, setSyncStatus] = useState("idle");
 
-  const saveTimerRef = useRef(null);
-  const dataLoadedRef = useRef(false);
-  const isReloadingRef = useRef(false); // blocks auto-save during post-login reload
+  const saveTimerRef    = useRef(null);
+  const dataLoadedRef   = useRef(false);
+  const isReloadingRef  = useRef(false); // blocks auto-save during post-login reload
+  const currentDataRef  = useRef(null);  // always holds latest state snapshot for pagehide flush
+  const userRef         = useRef(user);  // tracks current user role for pagehide (avoids stale closure)
 
   const setters = {
     setClients, setPartners, setTrucks, setDrivers, setTrips,
@@ -85,6 +87,28 @@ export function AppProvider({ children }) {
       setSyncStatus(source === "api" ? "saved" : "offline");
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Keep latest data snapshot and user ref for pagehide flush ────────────
+  useEffect(() => { userRef.current = user; }, [user]);
+
+  useEffect(() => {
+    if (!dataLoadedRef.current) return;
+    currentDataRef.current = {
+      clients, partners, trucks, drivers, trips, expenses,
+      brokers, suppliers, fixedTemplates, settlementStatus, cobros,
+    };
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros]);
+
+  // ── Flush to localStorage on tab close / Android OS kill (admin only) ────
+  useEffect(() => {
+    const flush = () => {
+      if (dataLoadedRef.current && currentDataRef.current && userRef.current?.role === "admin") {
+        saveData(currentDataRef.current); // localStorage write is synchronous; API is best-effort
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
 
   // ── Auto-save (debounced 1.5s, admin only) ───────────────────────────────
   useEffect(() => {

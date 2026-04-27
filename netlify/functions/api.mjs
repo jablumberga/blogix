@@ -18,6 +18,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Cache-Control": "no-store",
 };
 
 // ── JWT helpers (no external deps — Web Crypto API) ──────────────────────────
