@@ -258,6 +258,26 @@ async function syncAllTables(url, key, body) {
   ]);
 }
 
+// Re-injects passwords that GET strips for security.
+// When admin saves a partner/driver without changing the password, the incoming
+// record has no password field (GET never returns them). We fetch the existing
+// password from Supabase and restore it so the sync doesn't wipe it.
+async function restorePasswords(url, key, records, table) {
+  if (!Array.isArray(records) || records.length === 0) return records;
+  if (records.every(r => r.password)) return records; // all have new passwords — skip fetch
+  const res = await fetch(`${url}/rest/v1/${table}?select=id,rec`, {
+    headers: supabaseHeaders(key),
+  });
+  if (!res.ok) return records;
+  const rows = await res.json();
+  const pwMap = new Map(rows.filter(r => r.rec?.password).map(r => [r.id, r.rec.password]));
+  return records.map(r => {
+    if (r.password) return r;                           // admin set a new password — use it
+    const existing = pwMap.get(r.id);
+    return existing ? { ...r, password: existing } : r; // restore existing or leave bare
+  });
+}
+
 // Safety guard for relational mode — checks that an incoming empty array is not
 // wiping a table that still has records.
 async function relationalSafetyCheck(url, key, body, coreKeys) {
@@ -447,14 +467,6 @@ export default async (request) => {
       return Response.json({ error: "Invalid data structure" }, { status: 400, headers: corsHeaders });
     }
 
-    // Strip password fields — they belong only in auth, never in the data payload
-    if (Array.isArray(body.partners)) {
-      body.partners = body.partners.map(({ password: _pw, ...p }) => p);
-    }
-    if (Array.isArray(body.drivers)) {
-      body.drivers = body.drivers.map(({ password: _pw, ...d }) => d);
-    }
-
     // ── Optimistic locking ───────────────────────────────────────────────────
     // clientVersion === 0 means "loaded from localStorage while offline — skip check"
     const { _version: clientVersion = 0, ...bodyData } = body;
@@ -496,6 +508,10 @@ export default async (request) => {
         }
       }
 
+      // Restore passwords that GET strips — prevents every admin save from wiping login credentials
+      if (body.partners) body.partners = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.partners, "bl_partners");
+      if (body.drivers)  body.drivers  = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.drivers,  "bl_drivers");
+
       try {
         await syncAllTables(SUPABASE_URL, SUPABASE_SERVICE_KEY, body);
         // Stamp the new version so the next writer can detect a concurrent edit
@@ -508,15 +524,29 @@ export default async (request) => {
     }
 
     // ── Legacy JSON blob path ─────────────────────────────────────────────
-    if (anyEmpty) {
+    // Read existing data for wipe-guard AND password restoration
+    {
       const chkRes = await fetch(`${legacyTableUrl}?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
       if (chkRes.ok) {
         const rows = await chkRes.json();
         const existing = rows[0]?.data;
-        for (const k of coreKeys) {
-          if (Array.isArray(body[k]) && body[k].length === 0 && Array.isArray(existing?.[k]) && existing[k].length > 0) {
-            return Response.json({ error: `Rejected: incoming "${k}" is empty but DB has ${existing[k].length} records. Possible accidental wipe.` }, { status: 409, headers: corsHeaders });
+        if (existing) {
+          // Wipe guard
+          if (anyEmpty) {
+            for (const k of coreKeys) {
+              if (Array.isArray(body[k]) && body[k].length === 0 && Array.isArray(existing[k]) && existing[k].length > 0) {
+                return Response.json({ error: `Rejected: incoming "${k}" is empty but DB has ${existing[k].length} records. Possible accidental wipe.` }, { status: 409, headers: corsHeaders });
+              }
+            }
           }
+          // Restore passwords that GET strips
+          const mergePw = (incoming, saved) => {
+            if (!Array.isArray(incoming) || !Array.isArray(saved)) return incoming;
+            const pwMap = new Map(saved.filter(r => r.password).map(r => [r.id, r.password]));
+            return incoming.map(r => r.password ? r : (pwMap.get(r.id) ? { ...r, password: pwMap.get(r.id) } : r));
+          };
+          if (body.partners) body.partners = mergePw(body.partners, existing.partners);
+          if (body.drivers)  body.drivers  = mergePw(body.drivers,  existing.drivers);
         }
       }
     }
