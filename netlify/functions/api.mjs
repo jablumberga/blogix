@@ -180,7 +180,10 @@ async function readSettlementStatus(url, key) {
   const res = await fetch(`${url}/rest/v1/bl_settlement_status?id=eq.1&select=data`, {
     headers: supabaseHeaders(key),
   });
-  if (!res.ok) return {};
+  if (!res.ok) {
+    if (res.status === 406) throw new Error("Table 'bl_settlement_status' not found — run DB migration");
+    return {};
+  }
   const rows = await res.json();
   return rows[0]?.data || {};
 }
@@ -257,20 +260,26 @@ async function syncSettlementStatus(url, key, data) {
 }
 
 async function syncAllTables(url, key, body) {
-  await Promise.all([
-    syncTable(url, key, "bl_trips",           body.trips),
-    syncTable(url, key, "bl_expenses",        body.expenses),
-    syncTable(url, key, "bl_trucks",          body.trucks),
-    syncTable(url, key, "bl_drivers",         body.drivers),
-    syncTable(url, key, "bl_clients",         body.clients),
-    syncTable(url, key, "bl_partners",        body.partners),
-    syncTable(url, key, "bl_brokers",         body.brokers),
-    syncTable(url, key, "bl_suppliers",       body.suppliers),
-    syncTable(url, key, "bl_invoices",        body.invoices),
-    syncTable(url, key, "bl_cobros",          body.cobros),
-    syncTable(url, key, "bl_fixed_templates", body.fixedTemplates),
-    syncSettlementStatus(url, key,            body.settlementStatus),
-  ]);
+  const errors = [];
+  const run = async (label, fn) => {
+    try { await fn(); } catch (e) { errors.push(`${label}: ${e.message}`); }
+  };
+  await run("bl_trips",            () => syncTable(url, key, "bl_trips",           body.trips));
+  await run("bl_expenses",         () => syncTable(url, key, "bl_expenses",        body.expenses));
+  await run("bl_trucks",           () => syncTable(url, key, "bl_trucks",          body.trucks));
+  await run("bl_drivers",          () => syncTable(url, key, "bl_drivers",         body.drivers));
+  await run("bl_clients",          () => syncTable(url, key, "bl_clients",         body.clients));
+  await run("bl_partners",         () => syncTable(url, key, "bl_partners",        body.partners));
+  await run("bl_brokers",          () => syncTable(url, key, "bl_brokers",         body.brokers));
+  await run("bl_suppliers",        () => syncTable(url, key, "bl_suppliers",       body.suppliers));
+  await run("bl_invoices",         () => syncTable(url, key, "bl_invoices",        body.invoices));
+  await run("bl_cobros",           () => syncTable(url, key, "bl_cobros",          body.cobros));
+  await run("bl_fixed_templates",  () => syncTable(url, key, "bl_fixed_templates", body.fixedTemplates));
+  // Only stamp the version if all tables synced successfully — a partial write must not advance the version
+  if (errors.length === 0) {
+    await run("bl_settlement_status", () => syncSettlementStatus(url, key, body.settlementStatus));
+  }
+  if (errors.length > 0) throw new Error(errors.join("; "));
 }
 
 // Re-injects passwords that GET strips for security.
@@ -309,11 +318,18 @@ async function relationalSafetyCheck(url, key, body, coreKeys) {
     const chkRes = await fetch(`${url}/rest/v1/${tbl}?select=id&limit=1`, {
       headers: supabaseHeaders(key),
     });
-    if (chkRes.ok) {
-      const rows = await chkRes.json();
-      if (rows.length > 0) {
-        return `Rejected: incoming "${k}" is empty but DB has records. Possible accidental wipe.`;
+    if (!chkRes.ok) {
+      // 404/406 = table doesn't exist — hard block to prevent wiping missing tables
+      if (chkRes.status === 404 || chkRes.status === 406) {
+        return `Rejected: cannot verify "${k}" — table not found (HTTP ${chkRes.status}). Run DB migration first.`;
       }
+      // Transient error (503, 429, 504…) — allow the write rather than permanently blocking saves
+      console.warn(`[safetyCheck] ${tbl} probe returned ${chkRes.status} — allowing write`);
+      continue;
+    }
+    const rows = await chkRes.json();
+    if (rows.length > 0) {
+      return `Rejected: incoming "${k}" is empty but DB has records. Possible accidental wipe.`;
     }
   }
   return null; // no problem
