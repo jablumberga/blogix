@@ -14,14 +14,16 @@ import crypto from "crypto";
 import { signToken } from "./api.mjs";
 
 const ALLOWED_ORIGINS = new Set([
+  "https://blogix.do",
   "https://blogix-logistica-dr.netlify.app",
   "http://localhost:5173",
   "http://localhost:8888",
+  "capacitor://localhost",
 ]);
 
 function corsFor(request) {
   const origin = request?.headers?.get?.("origin") || "";
-  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://blogix-logistica-dr.netlify.app";
+  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://blogix.do";
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Headers": "Content-Type",
@@ -78,16 +80,17 @@ async function _supabaseHit(supabaseUrl, supabaseKey, scope, key, max) {
 async function checkRateLimit(ip, username, supabaseUrl, supabaseKey) {
   const hasSupa = !!(supabaseUrl && supabaseKey);
 
+  const usernameKey = username.toLowerCase().trim();
   let ipCount, userCount;
   if (hasSupa) {
     [ipCount, userCount] = await Promise.all([
-      _supabaseHit(supabaseUrl, supabaseKey, "ip",   ip,       IP_MAX),
-      _supabaseHit(supabaseUrl, supabaseKey, "user", username, USER_MAX),
+      _supabaseHit(supabaseUrl, supabaseKey, "ip",   ip,          IP_MAX),
+      _supabaseHit(supabaseUrl, supabaseKey, "user", usernameKey, USER_MAX),
     ]);
   }
   // Fall back to in-memory if Supabase returned null (timeout/error)
-  if (ipCount   === null) ipCount   = _fallbackHit("ip",   ip,       IP_MAX);
-  if (userCount === null) userCount = _fallbackHit("user", username, USER_MAX);
+  if (ipCount   === null) ipCount   = _fallbackHit("ip",   ip,          IP_MAX);
+  if (userCount === null) userCount = _fallbackHit("user", usernameKey, USER_MAX);
 
   return ipCount > IP_MAX || userCount > USER_MAX;
 }

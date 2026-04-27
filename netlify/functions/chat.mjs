@@ -7,15 +7,17 @@
 import { verifyToken } from "./api.mjs";
 
 const ALLOWED_ORIGINS = new Set([
+  "https://blogix.do",
   "https://blogix-logistica-dr.netlify.app",
   "http://localhost:5173",
   "http://localhost:8888",
+  "capacitor://localhost",
 ]);
 
 export default async (req) => {
   const origin = req?.headers?.get?.("origin") || "";
   const corsHeaders = {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin) ? origin : "https://blogix-logistica-dr.netlify.app",
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin) ? origin : "https://blogix.do",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
@@ -127,7 +129,7 @@ ${JSON.stringify(expByCategory, null, 2)}
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: CLAUDE_MODEL || "claude-sonnet-4-7",
+        model: CLAUDE_MODEL || "claude-sonnet-4-5",
         max_tokens: 1500,
         system: systemPrompt,
         messages: claudeMessages,

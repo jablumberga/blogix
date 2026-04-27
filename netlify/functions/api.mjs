@@ -18,14 +18,16 @@
  */
 
 const ALLOWED_ORIGINS = new Set([
+  "https://blogix.do",
   "https://blogix-logistica-dr.netlify.app",
   "http://localhost:5173",
   "http://localhost:8888",
+  "capacitor://localhost",
 ]);
 
 function corsFor(request) {
   const origin = request?.headers?.get?.("origin") || "";
-  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://blogix-logistica-dr.netlify.app";
+  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://blogix.do";
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
@@ -164,7 +166,12 @@ async function readTable(url, key, table) {
   const res = await fetch(`${url}/rest/v1/${table}?select=rec&order=id`, {
     headers: supabaseHeaders(key),
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    // 406 = table doesn't exist in PostgREST. Throw so the caller can fall back to legacy blob
+    // rather than returning empty arrays that would overwrite good local data.
+    if (res.status === 406) throw new Error(`Table '${table}' not found — run DB migration`);
+    return [];
+  }
   const rows = await res.json();
   return rows.map(r => r.rec);
 }
@@ -220,16 +227,24 @@ async function syncTable(url, key, table, records) {
   // Delete records that no longer exist in the incoming set — validate IDs to prevent filter injection
   const incomingIds = rows.map(r => Number(r.id)).filter(n => Number.isInteger(n) && n > 0);
   if (incomingIds.length > 0) {
-    await fetch(`${url}/rest/v1/${table}?id=not.in.(${incomingIds.join(",")})`, {
+    const delRes = await fetch(`${url}/rest/v1/${table}?id=not.in.(${incomingIds.join(",")})`, {
       method: "DELETE",
       headers: supabaseHeaders(key),
     });
+    if (!delRes.ok) {
+      const err = await delRes.text();
+      console.warn(`[syncTable] DELETE stale rows from ${table} failed (non-fatal): ${err}`);
+    }
   } else {
     // Empty array → clear the table (safety guard already confirmed it's intentional)
-    await fetch(`${url}/rest/v1/${table}`, {
+    const delRes = await fetch(`${url}/rest/v1/${table}`, {
       method: "DELETE",
       headers: supabaseHeaders(key),
     });
+    if (!delRes.ok) {
+      const err = await delRes.text();
+      console.warn(`[syncTable] Clear ${table} failed (non-fatal): ${err}`);
+    }
   }
 }
 
@@ -342,8 +357,27 @@ export default async (request) => {
     let serverVersion = 0;
 
     if (useRelational) {
-      data = await readAllTables(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-      serverVersion = data.settlementStatus?._version || 0;
+      try {
+        data = await readAllTables(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+        serverVersion = data.settlementStatus?._version || 0;
+      } catch (relErr) {
+        // bl_* tables don't exist yet — fall back to legacy blob so client data isn't wiped.
+        // This happens when BLOGIX_RELATIONAL=true is set before running the migration SQL.
+        const blobRes = await fetch(`${legacyTableUrl}?id=eq.1&select=data,updated_at`, {
+          headers: supabaseHeaders(SUPABASE_SERVICE_KEY),
+        });
+        if (blobRes.ok) {
+          const rows = await blobRes.json();
+          if (rows[0]?.data) {
+            data = rows[0].data;
+            serverVersion = rows[0].updated_at ? new Date(rows[0].updated_at).getTime() : 0;
+          } else {
+            return Response.json({ error: `Relational tables unavailable: ${relErr.message}` }, { status: 500, headers: corsHeaders });
+          }
+        } else {
+          return Response.json({ error: `Relational tables unavailable: ${relErr.message}` }, { status: 500, headers: corsHeaders });
+        }
+      }
     } else {
       const res = await fetch(`${legacyTableUrl}?id=eq.1&select=data,updated_at`, {
         headers: supabaseHeaders(SUPABASE_SERVICE_KEY),
@@ -426,9 +460,10 @@ export default async (request) => {
           });
         }
         const expIds = driverExps.map(e => e.id);
+        // Exclude nominaTotalOverride — those are admin-created and must not be wiped by driver saves
         const expDeleteUrl = expIds.length > 0
-          ? `${SUPABASE_URL}/rest/v1/bl_expenses?rec->>driverId=eq.${driverId}&id=not.in.(${expIds.join(",")})`
-          : `${SUPABASE_URL}/rest/v1/bl_expenses?rec->>driverId=eq.${driverId}`;
+          ? `${SUPABASE_URL}/rest/v1/bl_expenses?rec->>driverId=eq.${driverId}&rec->>category=neq.nominaTotalOverride&id=not.in.(${expIds.join(",")})`
+          : `${SUPABASE_URL}/rest/v1/bl_expenses?rec->>driverId=eq.${driverId}&rec->>category=neq.nominaTotalOverride`;
         await fetch(expDeleteUrl, { method: "DELETE", headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
       } else {
         // Legacy JSON blob: read-modify-write for driver's records only
@@ -441,7 +476,10 @@ export default async (request) => {
             ...driverTrips,
           ];
           const mergedExps = [
-            ...(existing.expenses || []).filter(e => e.driverId !== driverId && !driverTripIds.has(e.tripId)),
+            ...(existing.expenses || []).filter(e =>
+              (e.driverId !== driverId && !driverTripIds.has(e.tripId)) ||
+              e.category === "nominaTotalOverride"
+            ),
             ...driverExps,
           ];
           await fetch(legacyTableUrl, {

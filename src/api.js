@@ -91,7 +91,14 @@ export async function loadData() {
       const apiData = await res.json();
       if (apiData && Object.keys(apiData).length > 0) {
         const { _version, ...dataOnly } = apiData;
-        localStorage.setItem(key, JSON.stringify(dataOnly));
+        // Only cache API data locally if it contains actual records.
+        // An all-empty response while we have local data means the server-side
+        // migration hasn't run yet — don't wipe good local data.
+        const apiHasData = Object.values(dataOnly).some(v => Array.isArray(v) ? v.length > 0 : Boolean(v));
+        const localRaw = localStorage.getItem(key);
+        if (apiHasData || !localRaw) {
+          localStorage.setItem(key, JSON.stringify(dataOnly));
+        }
         return { source: "api", data: dataOnly, version: _version || 0 };
       }
     }
