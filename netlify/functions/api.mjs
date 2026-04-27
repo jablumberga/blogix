@@ -182,7 +182,9 @@ async function readSettlementStatus(url, key) {
   });
   if (!res.ok) {
     if (res.status === 406) throw new Error("Table 'bl_settlement_status' not found — run DB migration");
-    return {};
+    // Throw on any other error too — silently returning {} would zero _version, letting the
+    // next POST bypass the optimistic-lock check via the clientVersion === 0 shortcut.
+    throw new Error(`bl_settlement_status read failed (HTTP ${res.status})`);
   }
   const rows = await res.json();
   return rows[0]?.data || {};
