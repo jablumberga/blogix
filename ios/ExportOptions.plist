@@ -8,7 +8,16 @@
     <string>38AK677F4R</string>
     <key>uploadSymbols</key>
     <true/>
+    <key>stripSwiftSymbols</key>
+    <true/>
     <key>signingStyle</key>
     <string>manual</string>
+    <key>destination</key>
+    <string>upload</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.blogix.app</key>
+        <string>BLogix Appstore</string>
+    </dict>
 </dict>
 </plist>

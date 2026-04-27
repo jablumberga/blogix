@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Plus, X, Pencil, Trash2, Landmark, ChevronDown, ChevronRight, Receipt, Clock, CheckCircle2, Truck } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, nxId, expenseTruckId } from "../utils/helpers.js";
+import { fmt, nxId, expenseTruckId, getSupplierDueDate } from "../utils/helpers.js";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../components/ui/index.jsx";
 
@@ -16,7 +16,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [showTemplates, setShowTemplates] = useState(false);
-  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "", truckId: null, status: "pending", driverId: null });
+  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "", truckId: null, supplierId: null, status: "pending", driverId: null });
   const [tplForm, setTplForm] = useState({ name: "", category: "loan", amount: "", paymentMethod: "transfer", truckId: null });
 
   const tripMap = useMemo(() => new Map((trips||[]).map(tr => [tr.id, tr])), [trips]);
@@ -30,15 +30,18 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   if (filterStatus !== "all") filtered = filtered.filter(e => filterStatus === "pending" ? (!e.status || e.status === "pending") : e.status === filterStatus);
   if (filterTruck !== "all") filtered = filtered.filter(e => expenseTruckId(e, tripMap) === Number(filterTruck));
 
-  const openNew = () => { setForm({ date: new Date().toISOString().slice(0,10), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "", truckId: null, status: "pending", driverId: null }); setEditId(null); setShowForm(true); };
-  const openEdit = (e) => { setForm({ ...e, amount: String(e.amount), tripId: e.tripId ? String(e.tripId) : "", truckId: e.truckId || null }); setEditId(e.id); setShowForm(true); };
+  const openNew = () => { setForm({ date: new Date().toISOString().slice(0,10), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "", truckId: null, supplierId: null, status: "pending", driverId: null }); setEditId(null); setShowForm(true); };
+  const openEdit = (e) => { setForm({ ...e, amount: String(e.amount), tripId: e.tripId ? String(e.tripId) : "", truckId: e.truckId || null, supplierId: e.supplierId || null }); setEditId(e.id); setShowForm(true); };
   const deleteExpense = (id) => { if (!window.confirm("¿Eliminar este gasto?")) return; setExpenses(prev => prev.filter(e => e.id !== id)); };
 
   const save = () => {
     if (!form.amount || !form.date) return;
     if (form.category === "adelanto_conductor" && !form.driverId) { alert("Selecciona el conductor para el adelanto."); return; }
     const status = form.category === "adelanto_conductor" ? "paid" : form.status;
-    const data = { ...form, amount: Number(form.amount), tripId: form.tripId ? Number(form.tripId) : null, truckId: form.truckId ? Number(form.truckId) : null, driverId: form.driverId || null, status };
+    const supplierId = form.supplierId ? Number(form.supplierId) : null;
+    const sup = supplierId ? (suppliers || []).find(s => s.id === supplierId) : null;
+    const dueDate = getSupplierDueDate(form.date, sup);
+    const data = { ...form, amount: Number(form.amount), tripId: form.tripId ? Number(form.tripId) : null, truckId: form.truckId ? Number(form.truckId) : null, driverId: form.driverId || null, supplierId, dueDate, status };
     if (editId !== null) {
       setExpenses(prev => prev.map(e => e.id === editId ? { ...e, ...data } : e));
     } else {
@@ -119,6 +122,43 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
         )}
         <Inp label={t.expenseDesc} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder={form.category === "adelanto_conductor" ? "Ej: Dieta + ayudantes Dajabón" : ""} />
       </div>
+
+      {/* Supplier row — always visible, full width */}
+      {form.category !== "adelanto_conductor" && (() => {
+        const selSup = (suppliers||[]).find(s => s.id === Number(form.supplierId));
+        const dueDate = getSupplierDueDate(form.date, selSup);
+        const isCutoff = selSup?.billingCycle === "cutoff_period";
+        const isCredit = selSup?.paymentCondition === "credit" && selSup?.creditDays > 0;
+        return (
+          <div style={{ marginBottom: 10 }}>
+            <Sel label="Suplidor" value={form.supplierId || ""} onChange={e => setForm({ ...form, supplierId: Number(e.target.value) || null })}>
+              <option value="">— Sin suplidor —</option>
+              {(suppliers||[]).map(s => {
+                const tag = s.paymentCondition === "credit"
+                  ? (s.billingCycle === "cutoff_period" ? ` · Corte ${s.period1CutDay||15}d · ${s.creditDays}d` : ` · ${s.creditDays}d crédito`)
+                  : " · Contado";
+                return <option key={s.id} value={s.id}>{s.name}{tag}</option>;
+              })}
+            </Sel>
+            {isCredit && dueDate && (
+              <div style={{ marginTop: 6, padding: "8px 12px", borderRadius: 8, background: isCutoff ? colors.accent + "14" : colors.green + "12", border: `1px solid ${isCutoff ? colors.accent : colors.green}30`, fontSize: 11, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontWeight: 700, color: isCutoff ? colors.accent : colors.green }}>
+                  {isCutoff ? "Corte quincenal" : `Crédito ${selSup.creditDays}d`}
+                </span>
+                <span style={{ color: colors.textMuted }}>·</span>
+                <span style={{ color: colors.textMuted }}>
+                  {isCutoff
+                    ? `Q1: días 1–${selSup.period1CutDay||15}, Q2: días ${(selSup.period1CutDay||15)+1}–fin de mes`
+                    : `Fecha de factura + ${selSup.creditDays} días`}
+                </span>
+                <span style={{ color: colors.textMuted }}>·</span>
+                <span style={{ fontWeight: 700, color: colors.orange }}>Vence: {dueDate}</span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {form.truckId && form.tripId && (() => {
         const tr = (trips||[]).find(t => t.id === Number(form.tripId));
         return tr?.truckId !== form.truckId ? (

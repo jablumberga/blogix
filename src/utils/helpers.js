@@ -102,6 +102,7 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
 
   // AGENT 8: Broker sin comisión
   trips.filter(tr => tr.brokerId && tr.status !== "cancelled" && tr.revenue > 0).forEach(tr => {
+    if (clients.find(c => c.id === tr.clientId)?.rules?.brokerPassThrough === true) return;
     if (!brokerFeeTripIds.has(tr.id)) {
       const br = brokerMap.get(tr.brokerId);
       alerts.push({ id: `brk-${tr.id}`, severity: "warning", category: "broker", tripId: tr.id,
@@ -177,8 +178,8 @@ export function genPeriods(dates = []) {
       const prevM = pm === 1 ? 12 : pm - 1, prevY = pm === 1 ? py - 1 : py;
       const startDay = Math.min(30, lastDayOf(prevY, prevM));
       return { year: py, month: pm, half: ph, mStr,
-        dateFrom: `${prevY}-${pad(prevM)}-${pad(startDay)}`, dateTo: `${mStr}-14`,
-        label: `${MONTHS_ES[prevM-1]} ${startDay} – ${MONTHS_ES[pm-1]} 14, ${py}` };
+        dateFrom: `${prevY}-${pad(prevM)}-${pad(startDay)}`, dateTo: `${mStr}-15`,
+        label: `${MONTHS_ES[prevM-1]} ${startDay} – ${MONTHS_ES[pm-1]} 15, ${py}` };
     }
     return { year: py, month: pm, half: ph, mStr,
       dateFrom: `${mStr}-15`, dateTo: `${mStr}-29`,
@@ -191,6 +192,29 @@ export function genPeriods(dates = []) {
     if (h === 2) { h = 1; } else { h = 2; if (m === 1) { m = 12; y--; } else { m--; } }
   }
   return periods;
+}
+
+// Computes due date for a supplier expense.
+// "invoice_date" cycle: dueDate = expenseDate + creditDays
+// "cutoff_period" cycle: dueDate = end_of_cut_period + creditDays
+//   period 1: days 1–period1CutDay → cutoff at period1CutDay
+//   period 2: days (period1CutDay+1)–end_of_month → cutoff at end_of_month
+export function getSupplierDueDate(expenseDate, supplier) {
+  if (!expenseDate) return expenseDate;
+  if (!supplier || supplier.paymentCondition !== "credit" || !supplier.creditDays) return expenseDate;
+  const [y, m, d] = expenseDate.split("-").map(Number);
+  const cycle = supplier.billingCycle || "invoice_date";
+  if (cycle === "cutoff_period") {
+    const period1Cut = Number(supplier.period1CutDay) || 15;
+    const lastDay = new Date(y, m, 0).getDate();
+    const cutDay = d <= period1Cut ? period1Cut : lastDay;
+    const cutEnd = new Date(y, m - 1, cutDay);
+    cutEnd.setDate(cutEnd.getDate() + Number(supplier.creditDays));
+    return cutEnd.toISOString().slice(0, 10);
+  }
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + Number(supplier.creditDays));
+  return dt.toISOString().slice(0, 10);
 }
 
 export function getPeriodInfo(date, client) {

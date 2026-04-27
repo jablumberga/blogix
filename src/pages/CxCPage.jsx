@@ -4,7 +4,7 @@ import { colors } from "../constants/theme.js";
 import { fmt, getPeriodInfo } from "../utils/helpers.js";
 import { Card, PageHeader } from "../components/ui/index.jsx";
 
-export default function CxCPage({ clients, trips, cobros, setCobros, trucks, invoices, setInvoices, setPage, isMobile }) {
+export default function CxCPage({ clients, trips, cobros, setCobros, trucks, invoices, setInvoices, setPage, isMobile, brokers }) {
   const today = new Date().toISOString().slice(0, 10);
 
   const [expandedInv,     setExpandedInv]     = useState({});
@@ -13,20 +13,39 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
   const [filterClient,    setFilterClient]    = useState("all");
   const [showSinFacturar, setShowSinFacturar] = useState(true);
 
-  // ── Compute invoice list with enriched fields ────────────────────────────
-  const invAmt = (inv) =>
-    (inv.tripIds || []).reduce((s, tid) => s + (trips.find(t => t.id === tid)?.revenue || 0), 0);
+  // ── Lookup maps ───────────────────────────────────────────────────────────
+  const clientMap  = useMemo(() => new Map(clients.map(c => [c.id, c])), [clients]);
+  const brokerMap  = useMemo(() => new Map((brokers || []).map(b => [b.id, b])), [brokers]);
+  const tripRevMap = useMemo(() => new Map(trips.map(t => [t.id, t.revenue || 0])), [trips]);
 
+  // Prefer stored net amount on invoice (set at save time for pass-through clients);
+  // fall back to gross sum for legacy invoices.
+  const invAmt = (inv) => inv.amount != null
+    ? inv.amount
+    : (inv.tripIds || []).reduce((s, tid) => s + (tripRevMap.get(tid) || 0), 0);
+
+  // Net amount for a single trip: gross minus broker commission for pass-through clients.
+  const tripNetAmt = (tr) => {
+    const cl = clientMap.get(tr.clientId);
+    if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return tr.revenue || 0;
+    const br = brokerMap.get(tr.brokerId);
+    if (!br) return tr.revenue || 0;
+    return (tr.revenue || 0) - Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
+  };
+
+  // ── Compute invoice list with enriched fields ────────────────────────────
   const activeInvoices = useMemo(() =>
     (invoices || [])
       .filter(inv => inv.status !== "cancelled")
       .map(inv => {
-        const cl = clients.find(c => c.id === inv.clientId);
+        const cl = clientMap.get(inv.clientId);
         const amount = invAmt(inv);
+        const isPassThrough = cl?.rules?.brokerPassThrough === true;
         const isOverdue = inv.status !== "paid" && inv.dueDate && inv.dueDate < today;
         const daysLeft = inv.dueDate ? Math.ceil((new Date(inv.dueDate) - new Date(today)) / 86400000) : null;
         const invTrips = (inv.tripIds || []).map(tid => trips.find(t => t.id === tid)).filter(Boolean);
-        return { ...inv, client: cl, amount, isOverdue, daysLeft, invTrips };
+        const grossAmt = invTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
+        return { ...inv, client: cl, amount, grossAmt, isPassThrough, isOverdue, daysLeft, invTrips };
       })
       .sort((a, b) => {
         if (a.isOverdue && !b.isOverdue) return -1;
@@ -60,20 +79,21 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
   const sinFacturarByClient = useMemo(() => {
     const map = {};
     sinFacturarTrips.forEach(tr => {
-      const cl = clients.find(c => c.id === tr.clientId);
+      const cl = clientMap.get(tr.clientId);
       if (!cl) return;
-      if (!map[tr.clientId]) map[tr.clientId] = { client: cl, trips: [], amount: 0 };
+      if (!map[tr.clientId]) map[tr.clientId] = { client: cl, trips: [], amount: 0, grossAmount: 0 };
       map[tr.clientId].trips.push(tr);
-      map[tr.clientId].amount += tr.revenue || 0;
+      map[tr.clientId].amount += tripNetAmt(tr);
+      map[tr.clientId].grossAmount += tr.revenue || 0;
     });
     return Object.values(map).sort((a, b) => b.amount - a.amount);
-  }, [sinFacturarTrips, clients]);
+  }, [sinFacturarTrips, clientMap, brokerMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
   const kpiPending  = activeInvoices.filter(i => i.status !== "paid").reduce((s, i) => s + i.amount, 0);
   const kpiOverdue  = activeInvoices.filter(i => i.isOverdue).reduce((s, i) => s + i.amount, 0);
   const kpiCobrado  = activeInvoices.filter(i => i.status === "paid").reduce((s, i) => s + i.amount, 0);
-  const kpiSinFact  = sinFacturarTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
+  const kpiSinFact  = sinFacturarTrips.reduce((s, tr) => s + tripNetAmt(tr), 0);
   const nextDueInv  = activeInvoices.filter(i => i.status !== "paid" && !i.isOverdue && i.dueDate)[0];
 
   // ── Cobro helpers ─────────────────────────────────────────────────────────
@@ -96,9 +116,8 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
 
   // Mark all trips in invoice as cobrado + set invoice status = paid
   const cobrarInvoice = (inv) => {
-    const cl = clients.find(c => c.id === inv.clientId);
+    const cl = clientMap.get(inv.clientId);
     if (!cl) return;
-    // Group trip ids by period
     const byPeriod = new Map();
     (inv.tripIds || []).forEach(tid => {
       const tr = trips.find(t => t.id === tid);
@@ -107,7 +126,6 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
       if (!byPeriod.has(key)) byPeriod.set(key, []);
       byPeriod.get(key).push(tid);
     });
-    // Batch-update cobros
     let newCobros = [...cobros];
     byPeriod.forEach((tripIds, periodKey) => {
       const idx = newCobros.findIndex(c => c.clientId === inv.clientId && c.periodKey === periodKey);
@@ -118,7 +136,11 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
       });
       const merged = [...new Set([...(idx >= 0 ? newCobros[idx].collectedTripIds || [] : []), ...tripIds])];
       const allDone = periodTrips.every(tr => merged.includes(tr.id));
-      const amt = merged.reduce((s, tid) => s + (trips.find(t => t.id === tid)?.revenue || 0), 0);
+      // Use net amounts (what was actually received for pass-through clients)
+      const amt = merged.reduce((s, tid) => {
+        const t = trips.find(tr => tr.id === tid);
+        return s + (t ? tripNetAmt(t) : 0);
+      }, 0);
       const patch = { collectedTripIds: merged, status: allDone ? "collected" : "partial", collectedDate: allDone ? today : null, amount: amt };
       if (idx >= 0) newCobros[idx] = { ...newCobros[idx], ...patch };
       else newCobros.push({ id: newCobros.length > 0 ? Math.max(...newCobros.map(c => c.id)) + 1 : 1, clientId: inv.clientId, periodKey, ...patch });
@@ -128,7 +150,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
   };
 
   const isTripCobrado = (tripId, clientId, tripDate) => {
-    const cl = clients.find(c => c.id === clientId);
+    const cl = clientMap.get(clientId);
     if (!cl) return false;
     const { key: periodKey } = getPeriodInfo(tripDate, cl);
     const cobro = cobroMap.get(`${clientId}::${periodKey}`);
@@ -138,13 +160,11 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
   };
 
   const toggleTripCobro = (tr) => {
-    const cl = clients.find(c => c.id === tr.clientId);
+    const cl = clientMap.get(tr.clientId);
     if (!cl) return;
     const { key: periodKey } = getPeriodInfo(tr.date, cl);
     const existing = cobroMap.get(`${tr.clientId}::${periodKey}`);
-    const currentIds = new Set(
-      existing ? (existing.collectedTripIds || (existing.status === "collected" ? [] : [])) : []
-    );
+    const currentIds = new Set(existing ? (existing.collectedTripIds || []) : []);
     if (currentIds.has(tr.id)) currentIds.delete(tr.id);
     else currentIds.add(tr.id);
     const collected = [...currentIds];
@@ -154,10 +174,15 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
       return k === periodKey;
     });
     const allDone = periodTrips.every(t => currentIds.has(t.id));
+    const amt = collected.reduce((s, tid) => {
+      const t = trips.find(x => x.id === tid);
+      return s + (t ? tripNetAmt(t) : 0);
+    }, 0);
     upsertCobro(tr.clientId, periodKey, {
       collectedTripIds: collected,
       status: allDone ? "collected" : collected.length > 0 ? "partial" : "pending",
       collectedDate: allDone ? today : null,
+      amount: amt,
     });
   };
 
@@ -183,6 +208,8 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
       inv.daysLeft !== null && inv.daysLeft <= 7 ? colors.orange :
       inv.status === "draft"  ? colors.border  : colors.accent;
 
+    const brokerDed = inv.brokerDeduction || (inv.isPassThrough ? inv.grossAmt - inv.amount : 0);
+
     return (
       <Card key={inv.id} style={{ marginBottom: 8, borderLeft: `4px solid ${borderColor}`, opacity: inv.status === "paid" ? 0.8 : 1 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
@@ -198,6 +225,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
               {inv.isOverdue           && <span style={{ fontSize: 10, color: colors.red,    background: colors.red+"18",    padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>⚠ Vencida</span>}
               {inv.status === "sent" && !inv.isOverdue && inv.daysLeft !== null && inv.daysLeft <= 7
                 && <span style={{ fontSize: 10, color: colors.orange, background: colors.orange+"18", padding: "2px 8px", borderRadius: 10 }}>Vence pronto</span>}
+              {brokerDed > 0 && <span style={{ fontSize: 10, color: colors.orange, background: colors.orange+"14", padding: "2px 8px", borderRadius: 10 }}>broker deducido</span>}
             </div>
             <div style={{ fontSize: 11, color: colors.textMuted }}>
               {inv.date && <span>Emitida: {inv.date}</span>}
@@ -215,9 +243,15 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <div style={{ textAlign: "right" }}>
+              {brokerDed > 0 && (
+                <div style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(inv.grossAmt)}</div>
+              )}
               <div style={{ fontSize: 20, fontWeight: 800, color: inv.status === "paid" ? colors.green : inv.isOverdue ? colors.red : colors.text }}>
                 {fmt(inv.amount)}
               </div>
+              {brokerDed > 0 && (
+                <div style={{ fontSize: 10, color: colors.orange }}>−{fmt(brokerDed)} broker</div>
+              )}
               <button onClick={() => setExpandedInv(e => ({ ...e, [inv.id]: !e[inv.id] }))}
                 style={{ fontSize: 10, color: colors.textMuted, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>
                 {isExp ? <ChevronDown size={10}/> : <ChevronRight size={10}/>} ver viajes
@@ -239,7 +273,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
                     <th style={{ width: 36, padding: "3px 8px" }} />
-                    {["Fecha", "Destino", "Camión", "Ingreso"].map((h, i) => (
+                    {["Fecha", "Destino", "Camión", "Tarifa"].map((h, i) => (
                       <th key={h} style={{ textAlign: i === 3 ? "right" : "left", padding: "3px 8px", color: colors.textMuted, fontWeight: 600, fontSize: 11 }}>{h}</th>
                     ))}
                   </tr>
@@ -266,14 +300,43 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
                   })}
                 </tbody>
                 <tfoot>
-                  <tr style={{ borderTop: `1px solid ${colors.border}44` }}>
-                    <td colSpan={4} style={{ padding: "6px 8px", fontWeight: 600, fontSize: 11, color: colors.textMuted }}>
-                      Total — {inv.invTrips.length} viaje{inv.invTrips.length !== 1 ? "s" : ""}
-                    </td>
-                    <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 800, fontSize: 13, color: inv.status === "paid" ? colors.green : colors.text }}>
-                      {fmt(inv.amount)}
-                    </td>
-                  </tr>
+                  {brokerDed > 0 ? (
+                    <>
+                      <tr style={{ borderTop: `1px solid ${colors.border}44` }}>
+                        <td colSpan={4} style={{ padding: "5px 8px", fontWeight: 600, fontSize: 11, color: colors.textMuted }}>
+                          Subtotal bruto — {inv.invTrips.length} viaje{inv.invTrips.length !== 1 ? "s" : ""}
+                        </td>
+                        <td style={{ padding: "5px 8px", textAlign: "right", fontWeight: 700, fontSize: 12, color: colors.textMuted }}>
+                          {fmt(inv.grossAmt)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colSpan={4} style={{ padding: "3px 8px", fontSize: 11, color: colors.orange }}>
+                          Comisión broker (descontada)
+                        </td>
+                        <td style={{ padding: "3px 8px", textAlign: "right", fontWeight: 600, fontSize: 11, color: colors.orange }}>
+                          −{fmt(brokerDed)}
+                        </td>
+                      </tr>
+                      <tr style={{ background: colors.green + "0d" }}>
+                        <td colSpan={4} style={{ padding: "6px 8px", fontWeight: 700, fontSize: 12, color: inv.status === "paid" ? colors.green : colors.text }}>
+                          Neto a cobrar
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 800, fontSize: 14, color: inv.status === "paid" ? colors.green : colors.text }}>
+                          {fmt(inv.amount)}
+                        </td>
+                      </tr>
+                    </>
+                  ) : (
+                    <tr style={{ borderTop: `1px solid ${colors.border}44` }}>
+                      <td colSpan={4} style={{ padding: "6px 8px", fontWeight: 600, fontSize: 11, color: colors.textMuted }}>
+                        Total — {inv.invTrips.length} viaje{inv.invTrips.length !== 1 ? "s" : ""}
+                      </td>
+                      <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 800, fontSize: 13, color: inv.status === "paid" ? colors.green : colors.text }}>
+                        {fmt(inv.amount)}
+                      </td>
+                    </tr>
+                  )}
                 </tfoot>
               </table>
             </div>
@@ -398,63 +461,81 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
 
           {showSinFacturar && sinFacturarByClient
             .filter(g => filterClient === "all" || g.client.id === Number(filterClient))
-            .map(g => (
-              <Card key={g.client.id} style={{ marginBottom: 8, borderLeft: `4px solid ${colors.yellow}66`, opacity: 0.9 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 3 }}>{g.client.companyName}</div>
-                    <div style={{ fontSize: 11, color: colors.textMuted }}>
-                      {g.trips.length} viaje{g.trips.length !== 1 ? "s" : ""} con docs OK · pendiente de facturar
+            .map(g => {
+              const isPassThrough = g.client?.rules?.brokerPassThrough === true;
+              return (
+                <Card key={g.client.id} style={{ marginBottom: 8, borderLeft: `4px solid ${colors.yellow}66`, opacity: 0.9 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 3 }}>{g.client.companyName}</div>
+                      <div style={{ fontSize: 11, color: colors.textMuted }}>
+                        {g.trips.length} viaje{g.trips.length !== 1 ? "s" : ""} con docs OK · pendiente de facturar
+                        {isPassThrough && <span style={{ marginLeft: 6, color: colors.orange }}>(neto, broker deducido)</span>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ textAlign: "right" }}>
+                        {isPassThrough && g.grossAmount > g.amount && (
+                          <div style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(g.grossAmount)}</div>
+                        )}
+                        <div style={{ fontSize: 20, fontWeight: 800, color: colors.yellow }}>{fmt(g.amount)}</div>
+                      </div>
+                      <button onClick={() => setExpandedSinFact(e => ({ ...e, [g.client.id]: !e[g.client.id] }))}
+                        style={{ background: "none", border: `1px solid ${colors.border}`, borderRadius: 7, padding: "5px 10px", cursor: "pointer", color: colors.textMuted, fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
+                        {expandedSinFact[g.client.id] ? <ChevronDown size={10}/> : <ChevronRight size={10}/>} viajes
+                      </button>
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: colors.yellow }}>{fmt(g.amount)}</div>
-                    <button onClick={() => setExpandedSinFact(e => ({ ...e, [g.client.id]: !e[g.client.id] }))}
-                      style={{ background: "none", border: `1px solid ${colors.border}`, borderRadius: 7, padding: "5px 10px", cursor: "pointer", color: colors.textMuted, fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
-                      {expandedSinFact[g.client.id] ? <ChevronDown size={10}/> : <ChevronRight size={10}/>} viajes
-                    </button>
-                  </div>
-                </div>
 
-                {expandedSinFact[g.client.id] && (
-                  <div style={{ marginTop: 10, borderTop: `1px solid ${colors.border}33`, paddingTop: 8 }}>
-                    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                        <thead>
-                          <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-                            <th style={{ width: 36, padding: "3px 8px" }} />
-                            {["Fecha", "Destino", "Camión", "Ingreso"].map((h, i) => (
-                              <th key={h} style={{ textAlign: i === 3 ? "right" : "left", padding: "3px 8px", color: colors.textMuted, fontWeight: 600, fontSize: 11 }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {g.trips.slice().sort((a, b) => a.date.localeCompare(b.date)).map(tr => {
-                            const truck = trucks?.find(t => t.id === tr.truckId);
-                            const cobrado = isTripCobrado(tr.id, tr.clientId, tr.date);
-                            return (
-                              <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11`, opacity: cobrado ? 0.65 : 1 }}>
-                                <td style={{ padding: "5px 8px", textAlign: "center" }}>
-                                  <button onClick={() => toggleTripCobro(tr)}
-                                    title={cobrado ? "Desmarcar cobrado" : "Marcar cobrado"}
-                                    style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${cobrado ? colors.green : colors.border}`, background: cobrado ? colors.green : "transparent", color: "white", cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                                    {cobrado ? "✓" : ""}
-                                  </button>
-                                </td>
-                                <td style={{ padding: "5px 8px" }}>{tr.date}</td>
-                                <td style={{ padding: "5px 8px", color: colors.textMuted }}>{tr.municipality}{tr.province ? `, ${tr.province}` : ""}</td>
-                                <td style={{ padding: "5px 8px", color: colors.textMuted }}>{truck?.plate || "—"}</td>
-                                <td style={{ padding: "5px 8px", textAlign: "right", fontWeight: 700, color: cobrado ? colors.green : colors.text }}>{fmt(tr.revenue || 0)}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                  {expandedSinFact[g.client.id] && (
+                    <div style={{ marginTop: 10, borderTop: `1px solid ${colors.border}33`, paddingTop: 8 }}>
+                      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                          <thead>
+                            <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                              <th style={{ width: 36, padding: "3px 8px" }} />
+                              {["Fecha", "Destino", "Camión", isPassThrough ? "Neto" : "Ingreso"].map((h, i) => (
+                                <th key={h} style={{ textAlign: i === 3 ? "right" : "left", padding: "3px 8px", color: colors.textMuted, fontWeight: 600, fontSize: 11 }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.trips.slice().sort((a, b) => a.date.localeCompare(b.date)).map(tr => {
+                              const truck = trucks?.find(t => t.id === tr.truckId);
+                              const cobrado = isTripCobrado(tr.id, tr.clientId, tr.date);
+                              const net = tripNetAmt(tr);
+                              const hasDed = net < (tr.revenue || 0);
+                              return (
+                                <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11`, opacity: cobrado ? 0.65 : 1 }}>
+                                  <td style={{ padding: "5px 8px", textAlign: "center" }}>
+                                    <button onClick={() => toggleTripCobro(tr)}
+                                      title={cobrado ? "Desmarcar cobrado" : "Marcar cobrado"}
+                                      style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${cobrado ? colors.green : colors.border}`, background: cobrado ? colors.green : "transparent", color: "white", cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                                      {cobrado ? "✓" : ""}
+                                    </button>
+                                  </td>
+                                  <td style={{ padding: "5px 8px" }}>{tr.date}</td>
+                                  <td style={{ padding: "5px 8px", color: colors.textMuted }}>{tr.municipality}{tr.province ? `, ${tr.province}` : ""}</td>
+                                  <td style={{ padding: "5px 8px", color: colors.textMuted }}>{truck?.plate || "—"}</td>
+                                  <td style={{ padding: "5px 8px", textAlign: "right", fontWeight: 700, color: cobrado ? colors.green : colors.text }}>
+                                    {hasDed ? (
+                                      <>
+                                        <div>{fmt(net)}</div>
+                                        <div style={{ fontSize: 9, color: colors.orange }}>bruto {fmt(tr.revenue)}</div>
+                                      </>
+                                    ) : fmt(tr.revenue || 0)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </Card>
-            ))
+                  )}
+                </Card>
+              );
+            })
           }
         </div>
       )}

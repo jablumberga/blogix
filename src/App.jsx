@@ -24,11 +24,17 @@ import SettlementsPage from "./pages/SettlementsPage.jsx";
 import CxCPage from "./pages/CxCPage.jsx";
 import InvoicesPage from "./pages/InvoicesPage.jsx";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+
 function SyncAllButton({ syncAll, sidebarOpen }) {
   const [msg, setMsg] = useState(null);
   const handle = () => {
-    const added = syncAll();
-    const text = added > 0 ? `✅ +${added} entrada${added !== 1 ? "s" : ""} de nómina` : "✅ Todo sincronizado";
+    const { added, removed, invoicesPatched } = syncAll();
+    const parts = [];
+    if (added > 0) parts.push(`+${added} nómina`);
+    if (removed > 0) parts.push(`−${removed} gasto${removed !== 1 ? "s" : ""} broker`);
+    if (invoicesPatched > 0) parts.push(`${invoicesPatched} factura${invoicesPatched !== 1 ? "s" : ""} actualizadas`);
+    const text = parts.length > 0 ? `✅ ${parts.join(", ")}` : "✅ Todo sincronizado";
     setMsg(text);
     setTimeout(() => setMsg(null), 4000);
   };
@@ -56,7 +62,7 @@ async function initPushNotifications(userRole) {
     await PushNotifications.register();
     PushNotifications.addListener("registration", async (token) => {
       try {
-        await fetch("/api/push/token", {
+        await fetch(`${API_BASE}/api/push/token`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${getToken()}` },
           body: JSON.stringify({ token: token.value, platform: Capacitor.getPlatform() }),
@@ -266,9 +272,9 @@ export default function App() {
 
           {/* Sync status — visible only when sidebar is open */}
           {sidebarOpen && (
-            <div style={{ padding: "2px 10px 6px", fontSize: 10, color: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : colors.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : "#555", flexShrink: 0, display: "inline-block" }} />
-              {syncStatus === "saved" ? "Guardado ✓" : syncStatus === "saving" ? "Guardando..." : "Sin conexión (local)"}
+            <div style={{ padding: "2px 10px 6px", fontSize: 10, color: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : syncStatus === "conflict" ? colors.red : colors.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : syncStatus === "conflict" ? colors.red : "#555", flexShrink: 0, display: "inline-block" }} />
+              {syncStatus === "saved" ? "Guardado ✓" : syncStatus === "saving" ? "Guardando..." : syncStatus === "conflict" ? "Conflicto — recargando..." : "Sin conexión (local)"}
             </div>
           )}
 
@@ -301,7 +307,7 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", paddingTop: isMobile ? 52 : 20, paddingLeft: isMobile ? 14 : 20, paddingRight: isMobile ? 14 : 20, paddingBottom: isMobile && isAdmin ? `calc(56px + env(safe-area-inset-bottom))` : `calc(${isMobile ? "14px" : "20px"} + env(safe-area-inset-bottom))`, position: "relative" }}>
+      <div style={{ flex: 1, overflow: "auto", paddingTop: isMobile ? 52 : 20, paddingLeft: isMobile ? 14 : 20, paddingRight: isMobile ? 14 : 20, paddingBottom: isMobile ? `calc(56px + env(safe-area-inset-bottom))` : `calc(20px + env(safe-area-inset-bottom))`, position: "relative" }}>
         {showRecoveryBanner && (
           <div style={{ position: "sticky", top: 0, zIndex: 101, background: "#7c3aed", color: "#fff", padding: "10px 16px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderRadius: 8, marginBottom: 12 }}>
             <span>🔔 Tienes {localDataCount} registros locales que no están en el servidor. ¿Restaurar ahora?</span>
@@ -346,6 +352,36 @@ export default function App() {
         {page === "settlements" && (isAdmin || isPartner) && <SettlementsPage  {...ctx} />}
         {page === "agents"      && isAdmin    && <AgentsPage       {...ctx} />}
       </div>
+
+      {/* Mobile bottom navigation — partner */}
+      {isMobile && user.role === "partner" && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 56, zIndex: 200, background: colors.card, borderTop: `1px solid ${colors.border}`, display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)" }}>
+          {[
+            { id: "partnerDash", icon: LayoutDashboard, label: t.partnerDashboard || "Dashboard" },
+            { id: "settlements", icon: Handshake,       label: t.settlements || "Liquidaciones" },
+          ].map(tab => {
+            const Icon = tab.icon; const isActive = page === tab.id;
+            return <button key={tab.id} onClick={() => setPage(tab.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: isActive ? colors.accent : colors.textMuted, cursor: "pointer", fontSize: 10, fontWeight: isActive ? 600 : 400, padding: "6px 0", minWidth: 0 }}>
+              <Icon size={20} color={isActive ? colors.accent : colors.textMuted} />
+              <span style={{ lineHeight: 1 }}>{tab.label}</span>
+            </button>;
+          })}
+        </div>
+      )}
+
+      {/* Mobile bottom navigation — driver */}
+      {isMobile && user.role === "driver" && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 56, zIndex: 200, background: colors.card, borderTop: `1px solid ${colors.border}`, display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)" }}>
+          <button onClick={() => setPage("driverDash")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: colors.accent, cursor: "pointer", fontSize: 10, fontWeight: 600, padding: "6px 0", minWidth: 0 }}>
+            <LayoutDashboard size={20} color={colors.accent} />
+            <span style={{ lineHeight: 1 }}>{t.dashboard}</span>
+          </button>
+          <button onClick={logout} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 10, padding: "6px 0", minWidth: 0 }}>
+            <LogOut size={20} color={colors.textMuted} />
+            <span style={{ lineHeight: 1 }}>{t.logout || "Salir"}</span>
+          </button>
+        </div>
+      )}
 
       {/* Mobile bottom navigation — admin only */}
       {isMobile && user.role === "admin" && (

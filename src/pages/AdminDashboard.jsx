@@ -113,15 +113,24 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
   // ── CxC (accounts receivable — delivered trips only, all-time) ────────────
   const { cxcPending, cxcOverdue, cxcUpcoming, totalCxC, totalOverdue, totalCollected, nextDue, cobroMap, getCobro } = useMemo(() => {
+    const clientMap2 = new Map(clients.map(c => [c.id, c]));
+    const brokerMap2 = new Map((brokers || []).map(b => [b.id, b]));
+    const tripNet = (tr) => {
+      const cl = clientMap2.get(tr.clientId);
+      if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return tr.revenue || 0;
+      const br = brokerMap2.get(tr.brokerId);
+      if (!br) return tr.revenue || 0;
+      return (tr.revenue || 0) - Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
+    };
     const cxcGrouped = {};
     trips.forEach(tr => {
       if (!tr.clientId || !(tr.revenue > 0) || tr.status !== "delivered") return;
-      const client = clients.find(c => c.id === tr.clientId);
+      const client = clientMap2.get(tr.clientId);
       if (!client) return;
       const { key, expectedDate } = getPeriodInfo(tr.date, client);
       const gKey = `${tr.clientId}::${key}`;
       if (!cxcGrouped[gKey]) cxcGrouped[gKey] = { clientId: tr.clientId, periodKey: key, expectedDate, revenue: 0 };
-      cxcGrouped[gKey].revenue += tr.revenue || 0;
+      cxcGrouped[gKey].revenue += tripNet(tr);
     });
     const cobroMap   = new Map(cobros.map(c => [`${c.clientId}::${c.periodKey}`, c]));
     const getCobro   = (cid, pk) => cobroMap.get(`${cid}::${pk}`);
@@ -134,10 +143,10 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       cxcPending, cxcOverdue, cxcUpcoming, cobroMap, getCobro,
       totalCxC:       cxcPending.reduce((s, p) => s + p.revenue, 0),
       totalOverdue:   cxcOverdue.reduce((s, p) => s + p.revenue, 0),
-      totalCollected: cxcCollected.reduce((s, p) => s + p.revenue, 0),
+      totalCollected: cxcCollected.reduce((s, p) => s + (getCobro(p.clientId, p.periodKey)?.amount ?? p.revenue), 0),
       nextDue:        cxcUpcoming[0],
     };
-  }, [trips, clients, cobros, today]);
+  }, [trips, clients, cobros, brokers, today]);
 
   // ── CxP (accounts payable — all pending expenses) ──────────────────────
   const { cxpNomina, cxpSupplier, cxpFijos, totalCxP } = useMemo(() => {

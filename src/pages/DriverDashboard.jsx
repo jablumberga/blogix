@@ -8,16 +8,17 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [rateMsg, setRateMsg] = useState("");
+  const [formError, setFormError] = useState("");
 
   const emptyForm = { date: today(), province: "", municipality: "", truckId: driverObj?.truckId || trucks[0]?.id || "", driverId: driverObj?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [] };
 
-  const openNew = () => { setForm({ ...emptyForm, createdBy: user?.name || driverObj?.name || "" }); setShowForm(true); setRateMsg(""); };
+  const openNew = () => { setForm({ ...emptyForm, createdBy: user?.name || driverObj?.name || "" }); setShowForm(true); setRateMsg(""); setFormError(""); };
 
   const handleClientChange = (cid) => {
     const cl = clients.find(c => c.id === Number(cid));
     const f = { ...form, clientId: Number(cid) || "" };
     if (cl) {
-      if (cl.rules.defaultBrokerId) f.brokerId = cl.rules.defaultBrokerId;
+      if (cl.rules?.defaultBrokerId) f.brokerId = cl.rules.defaultBrokerId;
       tryApplyRate(f, cl);
     }
     setForm(f);
@@ -26,7 +27,7 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
   const tryApplyRate = (f, cl) => {
     if (!cl) cl = clients.find(c => c.id === Number(f.clientId));
     if (cl && f.province && f.municipality) {
-      const rate = cl.rates.find(r => r.province === f.province && r.municipality === f.municipality);
+      const rate = (cl.rates || []).find(r => r.province === f.province && r.municipality === f.municipality);
       if (rate) {
         const tk = trucks.find(t2 => t2.id === Number(f.truckId));
         const size = tk?.size || "T1";
@@ -45,17 +46,20 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
   };
 
   const saveTrip = () => {
-    if (!form.province || !form.municipality) return;
+    if (!form.province || !form.municipality) { setFormError(t.destinationRequired || "Destino requerido"); return; }
     const cl = clients.find(c => c.id === Number(form.clientId));
-    if (cl?.rules.requiresInvoiceRef && !form.invoiceRef) { alert(t.invoiceRefRequired); return; }
+    if (cl?.rules?.requiresInvoiceRef && !form.invoiceRef) { setFormError(t.invoiceRefRequired); return; }
+    setFormError("");
     const helpersPay = Number(form.helperPayEach) || 0;
     const helpersArr = Array.from({ length: Number(form.numHelpers) || 0 }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
     const data = { ...form, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr };
     const newId = nxId(trips);
     setTrips([...trips, { ...data, id: newId }]);
     const newExpenses = [];
+    const tripClient = clients.find(c => c.id === Number(data.clientId));
     const broker = data.brokerId ? brokers.find(b => b.id === data.brokerId) : null;
-    if (broker && data.revenue > 0) {
+    // For pass-through clients the broker deducts before paying — no outgoing expense to record
+    if (broker && data.revenue > 0 && !tripClient?.rules?.brokerPassThrough) {
       const fee = Math.round(data.revenue * broker.commissionPct / 100);
       newExpenses.push({ category: "broker_commission", amount: fee, description: `${t.brokerAutoDeducted}: ${broker.name} (${broker.commissionPct}%)`, paymentMethod: "transfer", brokerId: data.brokerId, status: "paid" });
     }
@@ -148,7 +152,7 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
           <h3 style={{ margin: 0, fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}><Route size={18} color={colors.accent} /> {t.newTrip}</h3>
           <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", color: colors.textMuted, cursor: "pointer", padding: 4 }}><X size={18} /></button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12, marginBottom: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr", gap: 12, marginBottom: 10 }}>
           <Inp label={t.date} type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
           <Sel label={t.client} value={form.clientId} onChange={e => handleClientChange(e.target.value)}>
             <option value="">{t.selectClient}</option>
@@ -161,7 +165,7 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
             {trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}
           </Sel>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginTop: 10 }}>
           <Sel label={t.status} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
             <option value="pending">{t.pending}</option>
             <option value="in_transit">{t.inTransit}</option>
@@ -169,11 +173,13 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
           </Sel>
           {selectedClient?.rules.requiresInvoiceRef && <Inp label={t.invoiceRef + " *"} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: !form.invoiceRef ? colors.red : colors.border }} />}
         </div>
-        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22` }}>
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22`, display: "grid", gridTemplateColumns: Number(form.numHelpers) > 0 ? "1fr 1fr" : "1fr", gap: 10 }}>
           <Sel label={t.numHelpers} value={form.numHelpers ?? 0} onChange={e => setForm({ ...form, numHelpers: Number(e.target.value) })}>
             {[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n === 0 ? "0 — " + t.none : `${n} ayudante${n > 1 ? "s" : ""}`}</option>)}
           </Sel>
+          {Number(form.numHelpers) > 0 && <Inp label="Pago por ayudante" type="number" value={form.helperPayEach} onChange={e => setForm({ ...form, helperPayEach: e.target.value })} placeholder="0.00" />}
         </div>
+        {formError && <div style={{ color: colors.red, fontSize: 12, marginTop: 8, padding: "6px 10px", background: colors.red + "12", borderRadius: 6, border: `1px solid ${colors.red}33` }}>{formError}</div>}
         <div style={{ display: "flex", gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${colors.border}33` }}>
           <Btn onClick={saveTrip} style={{ flex: 1, justifyContent: "center" }}>{t.save}</Btn>
           <Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn>

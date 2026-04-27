@@ -30,10 +30,13 @@ const STATUS_CONFIG = {
 };
 
 // ── Trip row inside the modal ─────────────────────────────────────────────────
-function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible, ineligibleReason, isInOtherInvoice, otherInvoiceNum, onToggle }) {
+function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible, ineligibleReason, isInOtherInvoice, otherInvoiceNum, onToggle, brokerDeduction }) {
   const driver = drivers.find(d => d.id === trip.driverId);
   const truck  = trucks.find(tk => tk.id === trip.truckId);
   const docsOk = trip.docStatus === "delivered";
+  const gross  = trip.revenue || 0;
+  const ded    = brokerDeduction || 0;
+  const net    = gross - ded;
 
   if (isInOtherInvoice) return null; // completely hidden
 
@@ -69,7 +72,10 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
           {driver && <span style={{ fontSize: 10, color: colors.textMuted }}>· {driver.name}</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: colors.green }}>{fmt(trip.revenue || 0)}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: colors.green }}>
+            {ded > 0 ? fmt(net) : fmt(gross)}
+          </span>
+          {ded > 0 && <span style={{ fontSize: 10, color: colors.orange }}>−{fmt(ded)} broker</span>}
           {trip.cargo && <span style={{ fontSize: 10, color: colors.textMuted }}>{trip.cargo}</span>}
           {/* Doc status */}
           <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, color: docsOk ? colors.green : colors.orange }}>
@@ -84,7 +90,14 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
         </div>
       </div>
       <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: isSelected ? colors.accent : colors.text }}>{fmt(trip.revenue || 0)}</span>
+        {ded > 0 ? (
+          <>
+            <div style={{ fontSize: 11, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(gross)}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: isSelected ? colors.accent : colors.green }}>{fmt(net)}</div>
+          </>
+        ) : (
+          <span style={{ fontSize: 13, fontWeight: 700, color: isSelected ? colors.accent : colors.text }}>{fmt(gross)}</span>
+        )}
       </div>
     </div>
   );
@@ -132,6 +145,19 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
       .filter(tr => tr.clientId === clientId && tr.status !== "cancelled" && (tr.revenue || 0) > 0)
       .sort((a, b) => (b.date||"").localeCompare(a.date||""));
   }, [clientId, trips]);
+
+  // Per-trip broker deductions for pass-through clients (shown in trip selector)
+  const tripBrokerDeductions = useMemo(() => {
+    const m = new Map();
+    if (!selectedClient?.rules?.brokerPassThrough) return m;
+    clientTrips.forEach(tr => {
+      if (!tr.brokerId) return;
+      const broker = brokers.find(b => b.id === tr.brokerId);
+      if (!broker) return;
+      m.set(tr.id, Math.round((tr.revenue || 0) * (broker.commissionPct || 10) / 100));
+    });
+    return m;
+  }, [clientTrips, selectedClient, brokers]);
 
   const openNew = () => {
     const num = nextInvoiceNumber(invoices);
@@ -207,6 +233,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   const deleteInvoice = (id) => {
     if (!window.confirm("¿Eliminar esta factura? Los viajes quedarán disponibles para facturar de nuevo.")) return;
     setInvoices(prev => prev.filter(inv => inv.id !== id));
+    setCobros(prev => prev.filter(c => c.invoiceId !== id));
   };
 
   const setStatus = (id, status) => {
@@ -335,7 +362,12 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                   <Td>{inv.date}</Td>
                   <Td>{cl?.companyName || "—"}</Td>
                   <Td style={{ display: isMobile ? "none" : undefined }}>{(inv.tripIds||[]).length} viajes</Td>
-                  <Td align="right" bold color={colors.green}>{fmt(amount)}</Td>
+                  <Td align="right" bold color={colors.green}>
+                    {fmt(amount)}
+                    {inv.brokerDeduction > 0 && (
+                      <div style={{ fontSize: 9, color: colors.orange, fontWeight: 400 }}>−{fmt(inv.brokerDeduction)} broker</div>
+                    )}
+                  </Td>
                   <Td style={{ display: isMobile ? "none" : undefined }}>
                     {inv.dueDate
                       ? <span style={{ fontSize: 11, color: isOverdue ? colors.red : daysLeft <= 7 ? colors.orange : colors.textMuted, fontWeight: isOverdue ? 700 : 400 }}>
@@ -456,6 +488,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                           isInOtherInvoice={isInOther}
                           otherInvoiceNum={isInOther ? invoicedTripMap.get(trip.id)?.invoiceNumber : null}
                           onToggle={toggleTrip}
+                          brokerDeduction={tripBrokerDeductions.get(trip.id) || 0}
                         />
                       );
                     })}

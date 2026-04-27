@@ -4,15 +4,20 @@ import { colors } from "../constants/theme.js";
 import { nxId } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
-export default function PartnersPage({ t, partners, setPartners, isMobile }) {
+export default function PartnersPage({ t, partners, setPartners, trucks, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", email: "", commissionPct: "", negotiationType: "Net Profit %", notes: "", username: "", password: "" });
+  const [error, setError] = useState("");
 
-  const openNew = () => { setForm({ name: "", phone: "", email: "", commissionPct: "", negotiationType: "Net Profit %", notes: "", username: "", password: "" }); setEditId(null); setShowForm(true); };
-  const openEdit = (p) => { setForm({ ...p }); setEditId(p.id); setShowForm(true); };
+  const openNew = () => { setForm({ name: "", phone: "", email: "", commissionPct: "", negotiationType: "Net Profit %", notes: "", username: "", password: "" }); setEditId(null); setError(""); setShowForm(true); };
+  const openEdit = (p) => { setForm({ ...p }); setEditId(p.id); setError(""); setShowForm(true); };
   const save = () => {
     if (!form.name) return;
+    if (form.username) {
+      const duplicate = partners.some(p => p.username === form.username && p.id !== (editId || -1));
+      if (duplicate) { setError("Este usuario ya existe"); return; }
+    }
     const d = { ...form, commissionPct: Number(form.commissionPct) || 0 };
     if (editId) setPartners(partners.map(p => p.id === editId ? { ...d, id: editId } : p));
     else setPartners([...partners, { ...d, id: nxId(partners) }]);
@@ -24,7 +29,7 @@ export default function PartnersPage({ t, partners, setPartners, isMobile }) {
     {showForm && <Card style={{ marginBottom: 16 }}>
       <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>{editId ? t.editPartner : t.addPartner}</h3>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
-        <Inp label={t.driverName.replace("Conductor","Socio").replace("Driver","Partner") || "Nombre"} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Nombre completo" />
+        <Inp label={t.partnerName || t.name || "Nombre"} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Nombre completo" />
         <Inp label={t.phone} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
         <Inp label={t.email} value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
       </div>
@@ -41,6 +46,7 @@ export default function PartnersPage({ t, partners, setPartners, isMobile }) {
         <Inp label={t.username} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="Usuario login" />
         <Inp label={t.password} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Contraseña login" />
       </div>
+      {error && <div style={{ color: "#ef4444", fontSize: 12, marginBottom: 8 }}>{error}</div>}
       <div style={{ display: "flex", gap: 8 }}><Btn onClick={save}>{t.save}</Btn><Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn></div>
     </Card>}
     <Card>
@@ -57,8 +63,12 @@ export default function PartnersPage({ t, partners, setPartners, isMobile }) {
           <Td align="center"><Badge label={p.negotiationType || "Net Profit %"} color={colors.accent} /></Td>
           <Td>{p.username}</Td>
           <Td align="right">
-            <button onClick={() => openEdit(p)} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
-            <button onClick={() => setPartners(partners.filter(x => x.id !== p.id))} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
+            <button onClick={() => openEdit(p)} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Pencil size={12} /></button>
+            <button onClick={() => {
+              const truckCount = (trucks || []).filter(tk => tk.partnerId === p.id).length;
+              if (!window.confirm(`Eliminar ${p.name}? Tiene ${truckCount} camión(es) registrado(s). Esta acción no se puede deshacer.`)) return;
+              setPartners(partners.filter(x => x.id !== p.id));
+            }} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.red, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={12} /></button>
           </Td>
         </tr>)}</tbody>
       </table>

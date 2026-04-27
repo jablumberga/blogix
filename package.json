@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
     "dev": "vite",
     "build": "vite build",
     "build:mobile": "cp capacitor.config.prod.json capacitor.config.json && (vite build && npx cap sync && cp capacitor.config.dev.json capacitor.config.json || (cp capacitor.config.dev.json capacitor.config.json; echo 'ERROR: build:mobile failed — dev config restored'; exit 1))",

@@ -4,9 +4,12 @@
  * Falls back to localStorage when API is unavailable.
  */
 
-const API_URL = "/api/data";
-const LS_KEY  = "blogix_data";
-const TK_KEY  = "blogix_token";
+// En web: VITE_API_BASE_URL está vacío → URLs relativas funcionan normalmente.
+// En Capacitor nativo: apunta a https://blogix-logistica-dr.netlify.app
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+const API_URL  = `${API_BASE}/api/data`;
+const LS_KEY   = "blogix_data";
+const TK_KEY   = "blogix_token";
 
 let _apiAvailable = null;
 let _apiCheckedAt = 0;
@@ -26,6 +29,18 @@ export function clearToken() {
   try { localStorage.removeItem(TK_KEY); } catch {}
 }
 
+function userIdFromToken(token) {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload.id ?? null;
+  } catch { return null; }
+}
+
+function lsKey(token) {
+  const uid = token ? userIdFromToken(token) : null;
+  return uid != null ? `${LS_KEY}_${uid}` : LS_KEY;
+}
+
 function authHeaders() {
   const token = getToken();
   return token
@@ -36,13 +51,14 @@ function authHeaders() {
 // Single fetch — no separate availability pre-check to avoid double requests and cache poisoning
 export async function loadData() {
   const token = getToken();
+  const key   = lsKey(token);
 
   // No token at all — skip API, go straight to localStorage
   if (!token) {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(key);
     if (raw) {
       try { return { source: "localStorage", data: JSON.parse(raw) }; } catch {
-        localStorage.removeItem(LS_KEY);
+        localStorage.removeItem(key);
       }
     }
     return { source: "default", data: null };
@@ -51,7 +67,7 @@ export async function loadData() {
   // Respect negative cache TTL so a momentary network blip doesn't lock us offline forever
   const now = Date.now();
   if (_apiAvailable === false && (now - _apiCheckedAt) < API_CACHE_TTL) {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(key);
     if (raw) {
       try { return { source: "localStorage", data: JSON.parse(raw) }; } catch {}
     }
@@ -64,6 +80,7 @@ export async function loadData() {
 
     if (res.status === 401) {
       _apiAvailable = true; // server reachable
+      localStorage.removeItem(key); // clear stale cache before token is gone
       clearToken();
       try { localStorage.removeItem("blogix_session"); } catch {}
       return { source: "unauthenticated", data: null };
@@ -73,8 +90,9 @@ export async function loadData() {
       _apiAvailable = true;
       const apiData = await res.json();
       if (apiData && Object.keys(apiData).length > 0) {
-        localStorage.setItem(LS_KEY, JSON.stringify(apiData));
-        return { source: "api", data: apiData };
+        const { _version, ...dataOnly } = apiData;
+        localStorage.setItem(key, JSON.stringify(dataOnly));
+        return { source: "api", data: dataOnly, version: _version || 0 };
       }
     }
 
@@ -85,19 +103,20 @@ export async function loadData() {
     _apiCheckedAt = Date.now();
   }
 
-  const raw = localStorage.getItem(LS_KEY);
+  const raw = localStorage.getItem(key);
   if (raw) {
     try { return { source: "localStorage", data: JSON.parse(raw) }; } catch {
-      localStorage.removeItem(LS_KEY);
+      localStorage.removeItem(key);
     }
   }
   return { source: "default", data: null };
 }
 
-export async function saveData(data) {
-  localStorage.setItem(LS_KEY, JSON.stringify(data));
-
+export async function saveData(data, version = 0) {
   const token = getToken();
+  const key   = lsKey(token);
+  localStorage.setItem(key, JSON.stringify(data));
+
   if (!token) return { saved: "localStorage" };
 
   // Respect negative cache TTL
@@ -110,11 +129,17 @@ export async function saveData(data) {
     const res = await fetch(API_URL, {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, _version: version }),
     });
-    if (res.ok) { _apiAvailable = true; return { saved: "api" }; }
+    if (res.ok) {
+      _apiAvailable = true;
+      const json = await res.json().catch(() => ({}));
+      return { saved: "api", version: json._version || 0 };
+    }
+    if (res.status === 409) { return { saved: "conflict" }; }
     if (res.status === 401) {
       // Token expired or invalid — force re-login, don't show "offline"
+      localStorage.removeItem(key);
       clearToken();
       try { localStorage.removeItem("blogix_session"); } catch {}
       return { saved: "unauthorized" };

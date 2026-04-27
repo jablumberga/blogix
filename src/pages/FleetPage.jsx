@@ -205,8 +205,8 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
               </div>
             )}
             <div style={{ display: "flex", flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-              <button onClick={() => openEdit(tk)} style={{ padding: "6px 7px", border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12}/></button>
-              <button onClick={() => setTrucks(trucks.filter(x => x.id !== tk.id))} style={{ padding: "6px 7px", border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12}/></button>
+              <button onClick={() => openEdit(tk)} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Pencil size={12}/></button>
+              <button onClick={() => setTrucks(trucks.filter(x => x.id !== tk.id))} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.red, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={12}/></button>
             </div>
             {isSelected && <ChevronRight size={14} color={colors.accent} style={{ flexShrink: 0 }}/>}
           </div>;

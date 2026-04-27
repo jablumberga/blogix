@@ -10,6 +10,7 @@ export const DR_PROVINCES = [
   { province: "La Altagracia", municipalities: ["Higüey", "Punta Cana", "San Rafael del Yuma"] },
   { province: "Espaillat", municipalities: ["Moca", "Gaspar Hernández", "Cayetano Germosén"] },
   { province: "Peravia", municipalities: ["Baní", "Nizao"] },
+  { province: "San José de Ocoa", municipalities: ["San José de Ocoa", "Rancho Arriba", "Sabana Larga"] },
   { province: "Azua", municipalities: ["Azua de Compostela", "Las Charcas", "Padre Las Casas", "Estebanía", "Sabana Yegua"] },
   { province: "Monseñor Nouel", municipalities: ["Bonao", "Maimón", "Piedra Blanca"] },
   { province: "Monte Plata", municipalities: ["Monte Plata", "Yamasá", "Bayaguana", "Sabana Grande de Boyá"] },

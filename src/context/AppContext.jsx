@@ -67,6 +67,7 @@ export function AppProvider({ children }) {
   const saveTimerRef = useRef(null);
   const dataLoadedRef = useRef(false);
   const isReloadingRef = useRef(false); // blocks auto-save during post-login reload
+  const versionRef = useRef(0); // optimistic lock — 0 means "unknown / loaded from cache"
 
   const setters = {
     setClients, setPartners, setTrucks, setDrivers, setTrips,
@@ -76,13 +77,14 @@ export function AppProvider({ children }) {
 
   // ── Load on mount ─────────────────────────────────────────────────────────
   useEffect(() => {
-    loadData().then(({ source, data }) => {
+    loadData().then(({ source, data, version = 0 }) => {
       if (source === "unauthenticated") {
         setUser(null);
         dataLoadedRef.current = true;
         return;
       }
       applyData(data, setters);
+      versionRef.current = version; // 0 if from localStorage (offline) — skips server check
       dataLoadedRef.current = true;
       setSyncStatus(source === "api" ? "saved" : "offline");
     });
@@ -92,15 +94,28 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (!dataLoadedRef.current) return;
     if (isReloadingRef.current) return;
-    if (user?.role !== "admin") return; // partners/drivers are read-only
+    if (user?.role !== "admin" && user?.role !== "driver") return; // partners read-only; drivers can save own trips
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSyncStatus("saving");
       const result = await saveData({
         clients, partners, trucks, drivers, trips, expenses,
         brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
-      });
+      }, versionRef.current);
       if (result.saved === "unauthorized") { setUser(null); return; }
+      if (result.saved === "conflict") {
+        setSyncStatus("conflict");
+        // Reload from server to get the winning version; user's unsaved changes are lost
+        isReloadingRef.current = true;
+        loadData().then(({ source, data, version = 0 }) => {
+          applyData(data, setters);
+          versionRef.current = version;
+          isReloadingRef.current = false;
+          setSyncStatus(source === "api" ? "saved" : "offline");
+        });
+        return;
+      }
+      if (result.saved === "api") versionRef.current = result.version || 0;
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
@@ -140,7 +155,7 @@ export function AppProvider({ children }) {
     // Reload data from API with new token
     isReloadingRef.current = true;
     dataLoadedRef.current = false;
-    loadData().then(({ source, data }) => {
+    loadData().then(({ source, data, version = 0 }) => {
       if (source === "unauthenticated") {
         clearToken();
         setUser(null);
@@ -149,6 +164,7 @@ export function AppProvider({ children }) {
         return;
       }
       applyData(data, setters);
+      versionRef.current = version;
       dataLoadedRef.current = true;
       isReloadingRef.current = false;
       setSyncStatus(source === "api" ? "saved" : "offline");
@@ -286,8 +302,10 @@ export function AppProvider({ children }) {
     const result = await saveData({
       clients, partners, trucks, drivers, trips, expenses,
       brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
-    });
+    }, versionRef.current);
     if (result.saved === "unauthorized") { setUser(null); return; }
+    if (result.saved === "conflict") { setSyncStatus("conflict"); return result; }
+    if (result.saved === "api") versionRef.current = result.version || 0;
     setSyncStatus(result.saved === "api" ? "saved" : "offline");
     return result;
   };

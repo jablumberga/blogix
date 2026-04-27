@@ -6,13 +6,21 @@
  */
 import { verifyToken } from "./api.mjs";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const ALLOWED_ORIGINS = new Set([
+  "https://blogix-logistica-dr.netlify.app",
+  "http://localhost:5173",
+  "http://localhost:8888",
+]);
 
 export default async (req) => {
+  const origin = req?.headers?.get?.("origin") || "";
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin) ? origin : "https://blogix-logistica-dr.netlify.app",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -22,7 +30,7 @@ export default async (req) => {
   }
 
   // Require valid session token — only admins have the CFO chat
-  const { CLAUDE_API_KEY: CLAUDE_KEY, BLOGIX_SECRET } = process.env;
+  const { CLAUDE_API_KEY: CLAUDE_KEY, BLOGIX_SECRET, CLAUDE_MODEL } = process.env;
   if (!BLOGIX_SECRET) {
     return Response.json({ error: "Missing env vars" }, { status: 500, headers: corsHeaders });
   }
@@ -102,8 +110,7 @@ ${JSON.stringify(driverStats, null, 2)}
 ═══ GASTOS POR CATEGORÍA ═══
 ${JSON.stringify(expByCategory, null, 2)}
 
-═══ DATOS COMPLETOS (RAW) ═══
-${JSON.stringify({ trips, expenses, drivers, clients, partners, trucks, brokers }, null, 2)}`;
+`;
 
   // Keep last 10 messages for context
   const claudeMessages = [
@@ -120,7 +127,7 @@ ${JSON.stringify({ trips, expenses, drivers, clients, partners, trucks, brokers 
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: CLAUDE_MODEL || "claude-sonnet-4-7",
         max_tokens: 1500,
         system: systemPrompt,
         messages: claudeMessages,

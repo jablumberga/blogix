@@ -3,6 +3,8 @@ import { LogIn, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { Inp, Btn } from "./ui/index.jsx";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+
 export default function LoginPage({ t, onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -16,7 +18,7 @@ export default function LoginPage({ t, onLogin }) {
     setError("");
     try {
       // Try server auth first (gets signed JWT for RLS)
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -60,7 +62,7 @@ export default function LoginPage({ t, onLogin }) {
             label={t.username}
             value={username}
             onChange={e => setUsername(e.target.value)}
-            placeholder="admin"
+            placeholder=""
             onKeyDown={e => e.key === "Enter" && handleLogin()}
           />
           <div style={{ position: "relative" }}>

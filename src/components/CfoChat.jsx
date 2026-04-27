@@ -3,6 +3,8 @@ import { MessageSquare, X, Send } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { getToken } from "../api.js";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+
 export default function CfoChat({ data, t, sidebarOpen, isMobile }) {
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState([
@@ -21,7 +23,7 @@ export default function CfoChat({ data, t, sidebarOpen, isMobile }) {
     setMsgs(next); setInput(""); setBusy(true);
     try {
       const token = getToken();
-      const res = await fetch("/api/chat", {
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

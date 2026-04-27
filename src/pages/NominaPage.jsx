@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 import { Clock, ChevronDown, ChevronRight, CheckCircle2, Users, FileText, Pencil, X, Check } from "lucide-react";
 import { colors } from "../constants/theme.js";
@@ -420,16 +420,23 @@ function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, 
 export default function NominaPage({ t, expenses, setExpenses, trips, drivers, trucks }) {
   const isPayEntry = (e, driver, pd) => {
     const inPeriod = e.date >= pd.dateFrom && e.date <= pd.dateTo;
-    const isThisDriver = e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name));
+    const isThisDriver = e.driverId === driver.id;
     return (e.category === "driverPay" || e.category === "nominaTotalOverride") && inPeriod && isThisDriver;
   };
 
   const markPaid = (driver, pd, effectiveTotal) => {
-    setExpenses(prev => prev.map(e => {
-      if (isPayEntry(e, driver, pd) && (!e.status || e.status === "pending"))
-        return { ...e, status: "paid", paidDate: new Date().toISOString().slice(0, 10) };
-      return e;
-    }));
+    setExpenses(prev => {
+      const hasOverride = prev.some(e =>
+        e.category === "nominaTotalOverride" && isPayEntry(e, driver, pd)
+      );
+      return prev.map(e => {
+        if (!isPayEntry(e, driver, pd)) return e;
+        if (hasOverride && e.category !== "nominaTotalOverride") return e;
+        if (!e.status || e.status === "pending")
+          return { ...e, status: "paid", paidDate: new Date().toISOString().slice(0, 10) };
+        return e;
+      });
+    });
   };
 
   const markUnpaid = (driver, pd) => {
@@ -440,14 +447,31 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
     }));
   };
 
-  const periods = genPeriods(expenses.filter(e => e.category === "driverPay").map(e => e.date));
+  const fixedDrivers = drivers.filter(d => d.salaryType === "fixed");
+  const periods = genPeriods([
+    ...expenses.filter(e => e.category === "driverPay").map(e => e.date),
+    ...expenses.filter(e => e.category === "nominaTotalOverride" && fixedDrivers.some(d => d.id === e.driverId)).map(e => e.date),
+  ]);
   const periodGroups = periods.map(pd => {
     const pdExps = expenses.filter(e => e.category === "driverPay" && e.date >= pd.dateFrom && e.date <= pd.dateTo);
-    if (pdExps.length === 0) return null;
     const driverCards = drivers.map(driver => {
-      const exps = pdExps.filter(e =>
-        e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name))
-      );
+      if (driver.salaryType === "fixed") {
+        // Fixed-salary driver: check for a nominaTotalOverride or show fixed amount card
+        const overrideExp = expenses.find(e =>
+          e.category === "nominaTotalOverride" && e.driverId === driver.id &&
+          e.date >= pd.dateFrom && e.date <= pd.dateTo
+        );
+        const fixedAmt = overrideExp ? overrideExp.amount : (driver.fixedAmount || 0);
+        if (fixedAmt === 0 && !overrideExp) return null;
+        const isPaid = overrideExp ? overrideExp.status === "paid" : false;
+        const syntheticExps = overrideExp ? [overrideExp] : [];
+        const pending = isPaid ? [] : syntheticExps.length > 0 ? syntheticExps : [{ id: `fixed-${driver.id}-${pd.mStr}-${pd.half}`, category: "driverPay", driverId: driver.id, amount: fixedAmt, date: pd.dateFrom, status: "pending", description: `Salario fijo: ${driver.name}` }];
+        const paid    = isPaid ? syntheticExps : [];
+        return { driver, exps: syntheticExps, pending, paid,
+          pendingTotal: isPaid ? 0 : fixedAmt,
+          paidTotal:    isPaid ? fixedAmt : 0 };
+      }
+      const exps = pdExps.filter(e => e.driverId === driver.id);
       if (exps.length === 0) return null;
       const pending = exps.filter(e => !e.status || e.status === "pending");
       const paid    = exps.filter(e => e.status === "paid");

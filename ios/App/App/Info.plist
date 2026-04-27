@@ -47,8 +47,6 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>NSUserNotificationsUsageDescription</key>
-	<string>B-Logix envía notificaciones para alertarte sobre viajes, liquidaciones y cobros pendientes.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>B-Logix usa la cámara para adjuntar fotos de recibos a los gastos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

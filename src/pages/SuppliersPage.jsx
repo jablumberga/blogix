@@ -5,15 +5,16 @@ import { nxId } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
 export default function SuppliersPage({ t, suppliers, setSuppliers, isMobile }) {
+  const EMPTY = { name: "", contactPerson: "", phone: "", email: "", paymentCondition: "cash", creditDays: 0, billingCycle: "invoice_date", period1CutDay: 15, notes: "" };
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ name: "", contactPerson: "", phone: "", email: "", paymentCondition: "cash", creditDays: 0, notes: "" });
+  const [form, setForm] = useState(EMPTY);
 
-  const openNew = () => { setForm({ name: "", contactPerson: "", phone: "", email: "", paymentCondition: "cash", creditDays: 0, notes: "" }); setEditId(null); setShowForm(true); };
-  const openEdit = (s) => { setForm({ ...s }); setEditId(s.id); setShowForm(true); };
+  const openNew = () => { setForm(EMPTY); setEditId(null); setShowForm(true); };
+  const openEdit = (s) => { setForm({ ...EMPTY, ...s }); setEditId(s.id); setShowForm(true); };
   const save = () => {
     if (!form.name) return;
-    const d = { ...form, creditDays: Number(form.creditDays) || 0 };
+    const d = { ...form, creditDays: Number(form.creditDays) || 0, period1CutDay: Number(form.period1CutDay) || 15 };
     if (editId) setSuppliers(suppliers.map(s => s.id === editId ? { ...d, id: editId } : s));
     else setSuppliers([...suppliers, { ...d, id: nxId(suppliers) }]);
     setShowForm(false);
@@ -35,6 +36,16 @@ export default function SuppliersPage({ t, suppliers, setSuppliers, isMobile }) 
         </Sel>
         {form.paymentCondition === "credit" && <Inp label={t.creditDays} type="number" value={form.creditDays} onChange={e => setForm({ ...form, creditDays: e.target.value })} />}
       </div>
+      {form.paymentCondition === "credit" && <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 2fr", gap: 12, marginBottom: 10 }}>
+        <Sel label={t.billingCycle || "Ciclo de Corte"} value={form.billingCycle} onChange={e => setForm({ ...form, billingCycle: e.target.value })}>
+          <option value="invoice_date">{t.billingCycleInvoice || "Fecha de Factura"}</option>
+          <option value="cutoff_period">{t.billingCycleCutoff || "Corte Quincenal"}</option>
+        </Sel>
+        {form.billingCycle === "cutoff_period" && <Inp label={t.cutDay1 || "Día de Corte Q1"} type="number" min="1" max="28" value={form.period1CutDay} onChange={e => setForm({ ...form, period1CutDay: e.target.value })} />}
+        {form.billingCycle === "cutoff_period" && <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 6, fontSize: 11, color: "#6b7280" }}>
+          Q1: días 1–{form.period1CutDay}, Q2: días {Number(form.period1CutDay)+1}–fin de mes — vence {form.creditDays}d después del corte
+        </div>}
+      </div>}
       <Inp label={t.notes} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={{ width: "100%", marginBottom: 10 }} />
       <div style={{ display: "flex", gap: 8 }}><Btn onClick={save}>{t.save}</Btn><Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn></div>
     </Card>}
