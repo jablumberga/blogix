@@ -8,13 +8,27 @@
 
 import { verifyToken } from "./api.mjs";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const ALLOWED_ORIGINS = new Set([
+  "https://blogix.do",
+  "https://blogix-logistica-dr.netlify.app",
+  "http://localhost:5173",
+  "http://localhost:8888",
+  "capacitor://localhost",
+]);
+
+function corsFor(request) {
+  const origin = request?.headers?.get?.("origin") || "";
+  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://blogix.do";
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
 
 export default async (request) => {
+  const corsHeaders = corsFor(request);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
 

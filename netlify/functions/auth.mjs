@@ -88,9 +88,19 @@ async function checkRateLimit(ip, username, supabaseUrl, supabaseKey) {
       _supabaseHit(supabaseUrl, supabaseKey, "user", usernameKey, USER_MAX),
     ]);
   }
-  // Fall back to in-memory if Supabase returned null (timeout/error)
-  if (ipCount   === null) ipCount   = _fallbackHit("ip",   ip,          IP_MAX);
-  if (userCount === null) userCount = _fallbackHit("user", usernameKey, USER_MAX);
+  // If Supabase is unreachable, use in-memory fallback only when no Supabase creds are
+  // configured (local dev). In production the RPC must work — allow the attempt through
+  // rather than silently bypassing limits with a per-instance counter that resets on cold starts.
+  if (ipCount === null || userCount === null) {
+    if (!hasSupa) {
+      if (ipCount   === null) ipCount   = _fallbackHit("ip",   ip,          IP_MAX);
+      if (userCount === null) userCount = _fallbackHit("user", usernameKey, USER_MAX);
+    } else {
+      // Supabase RPC failed in production — log and allow through (don't block legitimate logins)
+      console.warn("[auth] rate-limit RPC unavailable — allowing attempt through");
+      return false;
+    }
+  }
 
   return ipCount > IP_MAX || userCount > USER_MAX;
 }
