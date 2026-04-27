@@ -275,11 +275,9 @@ async function syncAllTables(url, key, body) {
   await run("bl_invoices",         () => syncTable(url, key, "bl_invoices",        body.invoices));
   await run("bl_cobros",           () => syncTable(url, key, "bl_cobros",          body.cobros));
   await run("bl_fixed_templates",  () => syncTable(url, key, "bl_fixed_templates", body.fixedTemplates));
-  // Only stamp the version if all tables synced successfully — a partial write must not advance the version
-  if (errors.length === 0) {
-    await run("bl_settlement_status", () => syncSettlementStatus(url, key, body.settlementStatus));
-  }
   if (errors.length > 0) throw new Error(errors.join("; "));
+  // syncSettlementStatus is intentionally NOT called here — the POST handler is the sole writer
+  // of the version stamp so _version is always set atomically after all tables confirm success.
 }
 
 // Re-injects passwords that GET strips for security.
@@ -377,8 +375,12 @@ export default async (request) => {
         data = await readAllTables(SUPABASE_URL, SUPABASE_SERVICE_KEY);
         serverVersion = data.settlementStatus?._version || 0;
       } catch (relErr) {
-        // bl_* tables don't exist yet — fall back to legacy blob so client data isn't wiped.
-        // This happens when BLOGIX_RELATIONAL=true is set before running the migration SQL.
+        // Only fall back to blob when the error is "table not found" (migration not yet run).
+        // Transient Supabase errors (network blip, 503) must return 500 so the client retries
+        // rather than silently serving stale blob data.
+        if (!relErr.message.includes("not found")) {
+          return Response.json({ error: `DB read failed: ${relErr.message}` }, { status: 500, headers: corsHeaders });
+        }
         const blobRes = await fetch(`${legacyTableUrl}?id=eq.1&select=data,updated_at`, {
           headers: supabaseHeaders(SUPABASE_SERVICE_KEY),
         });
