@@ -7,6 +7,11 @@
   NODE_VERSION = "20"
 
 [[redirects]]
+  from   = "/privacy"
+  to     = "/privacy/index.html"
+  status = 200
+
+[[redirects]]
   from   = "/*"
   to     = "/index.html"
   status = 200
@@ -32,7 +37,7 @@
     # Force HTTPS for 1 year
     Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
     # Content Security Policy
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none';"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none';"
 
 [[headers]]
   for = "/api/*"

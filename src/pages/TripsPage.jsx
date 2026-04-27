@@ -6,7 +6,7 @@ import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js"
 import { generateConduce } from "../utils/generateConduce.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td, StatusBadge, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers }) {
+export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({});
@@ -18,11 +18,12 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const [filterDriver, setFilterDriver] = useState("all");
   const [filterTruck, setFilterTruck] = useState("all");
   const [rateMsg, setRateMsg] = useState("");
+  const [formError, setFormError] = useState("");
 
   const emptyForm = { date: today(), province: "", municipality: "", truckId: "", driverId: "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [], tarifaOverride: null };
 
-  const openNew = () => { setForm({ ...emptyForm, createdBy: user.name }); setEditId(null); setShowForm(true); setRateMsg(""); };
-  const openEdit = (tr) => { setForm({ ...tr }); setEditId(tr.id); setShowForm(true); setRateMsg(""); };
+  const openNew = () => { setForm({ ...emptyForm, createdBy: user.name }); setEditId(null); setShowForm(true); setRateMsg(""); setFormError(""); };
+  const openEdit = (tr) => { setForm({ ...tr }); setEditId(tr.id); setShowForm(true); setRateMsg(""); setFormError(""); };
 
   const handleClientChange = (cid) => {
     const cl = clients.find(c => c.id === Number(cid));
@@ -85,21 +86,41 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   };
 
   const saveTrip = () => {
-    if (!form.province || !form.municipality) return;
+    if (!form.province || !form.municipality) { setFormError(t.destinationRequired || "Destino requerido"); return; }
+    if (!form.clientId) { setFormError(t.clientRequired || "Cliente requerido"); return; }
+    if (!form.truckId) { setFormError(t.truckRequired || "Camión requerido"); return; }
+    const revNum = Number(form.revenue);
+    if (isNaN(revNum) || revNum < 0) { setFormError(t.invalidRevenue || "Ingreso debe ser ≥ 0"); return; }
     const cl = clients.find(c => c.id === Number(form.clientId));
-    if (cl?.rules.requiresInvoiceRef && !form.invoiceRef) { alert(t.invoiceRefRequired); return; }
+    if (cl?.rules.requiresInvoiceRef && !form.invoiceRef) { setFormError(t.invoiceRefRequired); return; }
     const helpersPay = Number(form.helperPayEach) || 0;
     const helpersArr = Array.from({ length: Number(form.numHelpers) || 0 }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
     const data = { ...form, truckId: Number(form.truckId), driverId: Number(form.driverId), clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr };
+    const calcDriverPay = (driver, d) => {
+      if (!driver || driver.salaryType === "fixed") return 0;
+      if (driver.salaryType === "porcentaje") return Math.round((d.revenue || 0) * (driver.percentageAmount || 0) / 100);
+      if (driver.salaryType === "perTrip") {
+        const rate = (driver.rates || []).find(r => r.province === d.province && r.municipality === d.municipality);
+        if (rate) {
+          const tk = trucks.find(t2 => t2.id === Number(d.truckId));
+          const size = d.tarifaOverride || tk?.size || "T1";
+          return size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
+        }
+        return 0;
+      }
+      return Math.round((d.revenue || 0) * 0.20);
+    };
     if (editId) {
       const prevTrip = trips.find(tr => tr.id === editId);
       setTrips(trips.map(tr => tr.id === editId ? { ...data, id: editId } : tr));
-      if (prevTrip && data.revenue > 0 && prevTrip.revenue !== data.revenue) {
+      const payChanged = prevTrip && (prevTrip.revenue !== data.revenue || prevTrip.truckId !== data.truckId || prevTrip.driverId !== data.driverId);
+      if (payChanged && data.revenue > 0) {
         setExpenses(prev => prev.map(e => {
           if (e.tripId === editId && e.category === "driverPay") {
             const driver = drivers.find(d => d.id === data.driverId);
-            const newPay = Math.round(data.revenue * 0.20);
-            return { ...e, amount: newPay, description: `Nómina 20%: ${driver?.name || ''}`, tripId: editId };
+            const newPay = calcDriverPay(driver, data);
+            const pct = driver?.salaryType === "porcentaje" ? (driver.percentageAmount || 0) : 20;
+            return { ...e, amount: newPay, description: `Nómina ${pct}%: ${driver?.name || ''}`, tripId: editId, driverId: data.driverId };
           }
           return e;
         }));
@@ -109,15 +130,19 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       setTrips([...trips, { ...data, id: newId }]);
       const newExpenses = [];
       const broker = data.brokerId ? brokers.find(b => b.id === data.brokerId) : null;
-      if (broker && data.revenue > 0) {
+      const isPassThrough = cl?.rules?.brokerPassThrough === true;
+      if (broker && data.revenue > 0 && !isPassThrough) {
         const fee = Math.round(data.revenue * broker.commissionPct / 100);
         newExpenses.push({ category: "broker_commission", amount: fee, description: `${t.brokerAutoDeducted}: ${broker.name} (${broker.commissionPct}%)`, paymentMethod: "transfer", brokerId: data.brokerId, status: "paid" });
       }
       if (data.revenue > 0 && data.driverId) {
         const driver = drivers.find(d => d.id === data.driverId);
-        const driverName = driver ? driver.name : `Conductor #${data.driverId}`;
-        const driverPay = Math.round(data.revenue * 0.20);
-        newExpenses.push({ category: "driverPay", amount: driverPay, description: `Nómina 20%: ${driverName}`, paymentMethod: "transfer", driverId: data.driverId, status: "pending" });
+        if (driver?.salaryType !== "fixed") {
+          const driverPay = calcDriverPay(driver, data);
+          const pct = driver?.salaryType === "porcentaje" ? (driver.percentageAmount || 0) : 20;
+          const driverName = driver ? driver.name : `Conductor #${data.driverId}`;
+          if (driverPay > 0) newExpenses.push({ category: "driverPay", amount: driverPay, description: `Nómina ${pct}%: ${driverName}`, paymentMethod: "transfer", driverId: data.driverId, status: "pending" });
+        }
       }
       if (newExpenses.length > 0) {
         setExpenses(prev => {
@@ -205,7 +230,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           </Sel>
         </div>
         <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginTop: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginTop: 10 }}>
           <div>
             <Sel label={t.truck} value={form.truckId} onChange={e => handleTruckChange(e.target.value)}>
               <option value="">— {t.selectTruck || "Seleccionar camión"} —</option>
@@ -263,7 +288,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           {selectedClient.rules.defaultBrokerId && (() => { const b = brokers.find(x => x.id === selectedClient.rules.defaultBrokerId); return b ? <Badge label={`${t.broker}: ${b.name} ${b.commissionPct}%`} color={colors.yellow} icon={Handshake} /> : null; })()}
         </div>}
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22` }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
             <Sel label={t.numHelpers} value={form.numHelpers ?? 0} onChange={e => setForm({ ...form, numHelpers: Number(e.target.value) })}>
               {[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n === 0 ? "0 — " + t.none : `${n} ayudante${n > 1 ? "s" : ""}`}</option>)}
             </Sel>
@@ -283,6 +308,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
             </div>
           ))}
         </div>
+        {formError && <div style={{ color: colors.red, fontSize: 12, marginTop: 8, padding: "6px 10px", background: colors.red + "12", borderRadius: 6, border: `1px solid ${colors.red}33` }}>{formError}</div>}
         <div style={{ display: "flex", gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${colors.border}33` }}>
           <Btn onClick={saveTrip} style={{ flex: 1, justifyContent: "center" }}>{t.save}</Btn>
           <Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn>
@@ -292,15 +318,15 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
 
     {/* Expense Modal */}
     {expModal && <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setExpModal(null)}>
-      <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 12, padding: 24, width: 460, border: `1px solid ${colors.border}` }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 12, padding: 24, width: "min(460px, calc(100vw - 24px))", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${colors.border}` }}>
         <h3 style={{ margin: "0 0 14px", fontSize: 16, display: "flex", alignItems: "center", gap: 6 }}><Receipt size={18} color={colors.orange} /> {t.addExpense} — #{expModal}</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 10 }}>
           <Inp label={t.expenseDate} type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} />
           <Sel label={t.expenseCategory} value={expForm.category} onChange={e => setExpForm({ ...expForm, category: e.target.value })}>
             {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{t[c] || c}</option>)}
           </Sel>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 10 }}>
           <Inp label={t.expenseAmount} type="number" value={expForm.amount} onChange={e => setExpForm({ ...expForm, amount: e.target.value })} />
           <Sel label={t.paymentMethod} value={expForm.paymentMethod} onChange={e => setExpForm({ ...expForm, paymentMethod: e.target.value })}>
             {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t[m] || m}</option>)}
@@ -322,59 +348,100 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       </div>
     </div>}
 
-    <Card style={{ overflow: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1000 }}>
-        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-          <Th>{t.date}</Th><Th>{t.destination}</Th><Th>{t.status}</Th><Th>{t.client}</Th><Th>{t.createdBy}</Th><Th>{t.driver}</Th><Th>{t.truck}</Th>
-          <Th align="center">{t.conduce}</Th><Th align="center">{t.document}</Th><Th align="center">{t.expenses}</Th><Th align="right">{t.rate}</Th><Th align="right">{t.actions}</Th>
-        </tr></thead>
-        <tbody>
-          {filtered.map(tr => {
-            const cl = clientMap.get(tr.clientId);
-            const dk = driverMap.get(tr.driverId);
-            const tk = truckMap.get(tr.truckId);
-            const tripExp = tripExpMap.get(tr.id) || 0;
-            return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}
-              onMouseEnter={e => e.currentTarget.style.background = colors.cardHover}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-              <Td>{tr.date}</Td>
-              <Td><span style={{ fontSize: 12 }}>{tr.municipality}</span><br /><span style={{ fontSize: 10, color: colors.textMuted }}>{tr.province}</span></Td>
-              <Td><StatusBadge status={tr.status} t={t} /></Td>
-              <Td bold>{cl?.companyName || "—"}{tr.invoiceRef && <><br /><span style={{ fontSize: 9, color: colors.textMuted }}>#{tr.invoiceRef}</span></>}</Td>
-              <Td><span style={{ fontSize: 11, color: colors.textMuted }}>{tr.createdBy}</span></Td>
-              <Td>{dk?.name || "—"}</Td>
-              <Td>{tk?.plate || "—"}</Td>
-              <Td align="center">
-                <button onClick={() => generateConduce(tr, cl, tk, dk)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${colors.cyan}40`, background: colors.cyan + "10", color: colors.cyan, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
-                  <Printer size={10} /> PDF
-                </button>
-              </Td>
-              <Td align="center">
-                <button onClick={() => setTrips(trips.map(x => x.id === tr.id ? { ...x, docStatus: x.docStatus === "delivered" ? "pending" : "delivered" } : x))}
-                  style={{ padding: "3px 8px", borderRadius: 10, border: "none", fontSize: 10, fontWeight: 600, cursor: "pointer", background: tr.docStatus === "delivered" ? colors.green + "18" : colors.orange + "18", color: tr.docStatus === "delivered" ? colors.green : colors.orange }}>
-                  {tr.docStatus === "delivered" ? t.deliveredDocs : t.pendingDocs}
-                </button>
-              </Td>
-              <Td align="center">
-                <button onClick={() => setExpModal(tr.id)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${colors.orange}40`, background: colors.orange + "10", color: colors.orange, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
-                  <Receipt size={10} /> {fmt(tripExp)}
-                </button>
-              </Td>
-              <Td align="right" bold color={colors.green}>
-                {fmt(tr.revenue)}
-                {tr.tarifaOverride && <><br /><span style={{ fontSize: 11, fontWeight: 700, color: colors.orange, background: colors.orange+"15", padding: "1px 6px", borderRadius: 5, display: "inline-flex", alignItems: "center", gap: 2 }}><Zap size={9} /> {tr.tarifaOverride}</span></>}
-              </Td>
-              <Td align="right">
-                <div style={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
-                  <button onClick={() => openEdit(tr)} style={{ padding: 5, borderRadius: 5, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
-                  <button onClick={() => { if (window.confirm(`¿Eliminar viaje del ${tr.date} a ${tr.municipality}?\nEsta acción eliminará también todos los gastos asociados y no se puede deshacer.`)) { setTrips(trips.filter(x => x.id !== tr.id)); setExpenses(expenses.filter(e => e.tripId !== tr.id)); } }} style={{ padding: 5, borderRadius: 5, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
+    {filtered.length === 0
+      ? <Card><div style={{ textAlign: "center", padding: 30, color: colors.textMuted }}>{t.noTrips}</div></Card>
+      : isMobile
+        ? <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {filtered.map(tr => {
+              const cl = clientMap.get(tr.clientId);
+              const dk = driverMap.get(tr.driverId);
+              const tk = truckMap.get(tr.truckId);
+              const tripExp = tripExpMap.get(tr.id) || 0;
+              return <Card key={tr.id} style={{ padding: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>{tr.municipality}</div>
+                    <div style={{ fontSize: 11, color: colors.textMuted }}>{tr.province}</div>
+                    <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>{tr.date}</div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                    <StatusBadge status={tr.status} t={t} />
+                    <div style={{ fontSize: 16, fontWeight: 800, color: colors.green }}>{fmt(tr.revenue)}</div>
+                  </div>
                 </div>
-              </Td>
-            </tr>;
-          })}
-        </tbody>
-      </table>
-      {filtered.length === 0 && <div style={{ textAlign: "center", padding: 30, color: colors.textMuted }}>{t.noTrips}</div>}
-    </Card>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 11, color: colors.textMuted, marginBottom: 10 }}>
+                  <div><span style={{ color: colors.text, fontWeight: 600 }}>{cl?.companyName || "—"}</span></div>
+                  <div>{dk?.name || "—"} · {tk?.plate || "—"}</div>
+                  {tripExp > 0 && <div style={{ color: colors.red }}>Gastos: {fmt(tripExp)}</div>}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => openEdit(tr)} style={{ flex: 1, minHeight: 44, borderRadius: 8, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 12 }}><Pencil size={13} /> {t.edit || "Editar"}</button>
+                  <button onClick={() => setExpModal(tr.id)} style={{ flex: 1, minHeight: 44, borderRadius: 8, border: `1px solid ${colors.orange}40`, background: colors.orange+"10", color: colors.orange, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 12 }}><Receipt size={13} /> {t.expenses}</button>
+                  <button onClick={() => generateConduce(tr, cl, tk, dk)} style={{ flex: 1, minHeight: 44, borderRadius: 8, border: `1px solid ${colors.cyan}40`, background: colors.cyan+"10", color: colors.cyan, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 12 }}><Printer size={13} /> PDF</button>
+                  <button onClick={() => { if (window.confirm(`¿Eliminar viaje del ${tr.date} a ${tr.municipality}?`)) { setTrips(trips.filter(x => x.id !== tr.id)); setExpenses(expenses.filter(e => e.tripId !== tr.id)); } }} style={{ minHeight: 44, minWidth: 44, borderRadius: 8, border: "none", background: "transparent", color: colors.red, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={16} /></button>
+                </div>
+              </Card>;
+            })}
+          </div>
+        : <Card>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1000 }}>
+              <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                <Th>{t.date}</Th><Th>{t.destination}</Th><Th>{t.status}</Th><Th>{t.client}</Th>
+                <Th>{t.createdBy}</Th>
+                <Th>{t.driver}</Th><Th>{t.truck}</Th>
+                <Th align="center">{t.conduce}</Th>
+                <Th align="center">{t.document}</Th>
+                <Th align="center">{t.expenses}</Th><Th align="right">{t.rate}</Th><Th align="right">{t.actions}</Th>
+              </tr></thead>
+              <tbody>
+                {filtered.map(tr => {
+                  const cl = clientMap.get(tr.clientId);
+                  const dk = driverMap.get(tr.driverId);
+                  const tk = truckMap.get(tr.truckId);
+                  const tripExp = tripExpMap.get(tr.id) || 0;
+                  return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}
+                    onMouseEnter={e => e.currentTarget.style.background = colors.cardHover}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <Td>{tr.date}</Td>
+                    <Td><span style={{ fontSize: 12 }}>{tr.municipality}</span><br /><span style={{ fontSize: 10, color: colors.textMuted }}>{tr.province}</span></Td>
+                    <Td><StatusBadge status={tr.status} t={t} /></Td>
+                    <Td bold>{cl?.companyName || "—"}{tr.invoiceRef && <><br /><span style={{ fontSize: 9, color: colors.textMuted }}>#{tr.invoiceRef}</span></>}</Td>
+                    <Td><span style={{ fontSize: 11, color: colors.textMuted }}>{tr.createdBy}</span></Td>
+                    <Td>{dk?.name || "—"}</Td>
+                    <Td>{tk?.plate || "—"}</Td>
+                    <Td align="center">
+                      <button onClick={() => generateConduce(tr, cl, tk, dk)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${colors.cyan}40`, background: colors.cyan + "10", color: colors.cyan, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
+                        <Printer size={10} /> PDF
+                      </button>
+                    </Td>
+                    <Td align="center">
+                      <button onClick={() => setTrips(trips.map(x => x.id === tr.id ? { ...x, docStatus: x.docStatus === "delivered" ? "pending" : "delivered" } : x))}
+                        style={{ padding: "3px 8px", borderRadius: 10, border: "none", fontSize: 10, fontWeight: 600, cursor: "pointer", background: tr.docStatus === "delivered" ? colors.green + "18" : colors.orange + "18", color: tr.docStatus === "delivered" ? colors.green : colors.orange }}>
+                        {tr.docStatus === "delivered" ? t.deliveredDocs : t.pendingDocs}
+                      </button>
+                    </Td>
+                    <Td align="center">
+                      <button onClick={() => setExpModal(tr.id)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${colors.orange}40`, background: colors.orange + "10", color: colors.orange, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
+                        <Receipt size={10} /> {fmt(tripExp)}
+                      </button>
+                    </Td>
+                    <Td align="right" bold color={colors.green}>
+                      {fmt(tr.revenue)}
+                      {tr.tarifaOverride && <><br /><span style={{ fontSize: 11, fontWeight: 700, color: colors.orange, background: colors.orange+"15", padding: "1px 6px", borderRadius: 5, display: "inline-flex", alignItems: "center", gap: 2 }}><Zap size={9} /> {tr.tarifaOverride}</span></>}
+                    </Td>
+                    <Td align="right">
+                      <div style={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
+                        <button onClick={() => openEdit(tr)} style={{ padding: "10px", borderRadius: 5, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", minHeight: 44, minWidth: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><Pencil size={12} /></button>
+                        <button onClick={() => { if (window.confirm(`¿Eliminar viaje del ${tr.date} a ${tr.municipality}?\nEsta acción eliminará también todos los gastos asociados y no se puede deshacer.`)) { setTrips(trips.filter(x => x.id !== tr.id)); setExpenses(expenses.filter(e => e.tripId !== tr.id)); } }} style={{ padding: "10px", borderRadius: 5, border: "none", background: "transparent", color: colors.red, cursor: "pointer", minHeight: 44, minWidth: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={12} /></button>
+                      </div>
+                    </Td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+            </div>
+          </Card>
+    }
   </div>;
           }

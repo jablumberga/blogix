@@ -5,19 +5,40 @@ import { fmt, nxId } from "../utils/helpers.js";
 import { DR_PROVINCES } from "../constants/destinations.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
-export default function DriversPage({ t, drivers, setDrivers, trucks }) {
+export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks, trips, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, percentageAmount: 0, username: "", password: "", rates: [] });
   const [rForm, setRForm] = useState({ province: "", municipality: "", priceT1: "", priceT2: "" });
+  const [error, setError] = useState("");
 
-  const openNew = () => { setForm({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, percentageAmount: 0, username: "", password: "", rates: [] }); setEditId(null); setShowForm(true); };
-  const openEdit = (d) => { setForm({ ...d }); setEditId(d.id); setShowForm(true); };
+  const openNew = () => { setForm({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, percentageAmount: 0, username: "", password: "", rates: [] }); setEditId(null); setError(""); setShowForm(true); };
+  const openEdit = (d) => { setForm({ ...d }); setEditId(d.id); setError(""); setShowForm(true); };
   const save = () => {
     if (!form.name) return;
-    const d = { ...form, truckId: Number(form.truckId) || null, fixedAmount: Number(form.fixedAmount) || 0, percentageAmount: Number(form.percentageAmount) || 0 };
-    if (editId) setDrivers(drivers.map(x => x.id === editId ? { ...d, id: editId } : x));
-    else setDrivers([...drivers, { ...d, id: nxId(drivers) }]);
+    if (form.username) {
+      const duplicate = drivers.some(d => d.username === form.username && d.id !== (editId || -1));
+      if (duplicate) { setError("Este usuario ya existe"); return; }
+    }
+    const newTruckId = Number(form.truckId) || null;
+    const d = { ...form, truckId: newTruckId, fixedAmount: Number(form.fixedAmount) || 0, percentageAmount: Number(form.percentageAmount) || 0 };
+    const savedId = editId || nxId(drivers);
+    if (editId) {
+      setDrivers(drivers.map(x => x.id === editId ? { ...d, id: editId } : x));
+    } else {
+      setDrivers([...drivers, { ...d, id: savedId }]);
+    }
+    // Keep truck.driverId in sync with driver.truckId
+    if (setTrucks) {
+      const prevTruckId = editId ? (drivers.find(x => x.id === editId)?.truckId ?? null) : null;
+      if (prevTruckId !== newTruckId) {
+        setTrucks(prev => prev.map(tk => {
+          if (tk.id === prevTruckId) return { ...tk, driverId: null };
+          if (tk.id === newTruckId)  return { ...tk, driverId: savedId };
+          return tk;
+        }));
+      }
+    }
     setShowForm(false);
   };
   const addRate = () => {
@@ -29,7 +50,7 @@ export default function DriversPage({ t, drivers, setDrivers, trucks }) {
   return <div>
     <PageHeader title={t.drivers} action={<Btn onClick={openNew}><Plus size={14} /> {t.addDriver}</Btn>} />
     {showForm && <Card style={{ marginBottom: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
         <Inp label={t.driverName} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
         <Inp label={t.phone} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
         <Inp label={t.license} value={form.license} onChange={e => setForm({ ...form, license: e.target.value })} />
@@ -37,7 +58,7 @@ export default function DriversPage({ t, drivers, setDrivers, trucks }) {
           <option value="">{t.none}</option>{trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}
         </Sel>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
         <Sel label={t.salaryType} value={form.salaryType} onChange={e => setForm({ ...form, salaryType: e.target.value })}>
           <option value="fixed">{t.fixedSalary}</option><option value="perTrip">{t.perTrip}</option><option value="porcentaje">{t.porcentaje}</option>
         </Sel>
@@ -66,9 +87,11 @@ export default function DriversPage({ t, drivers, setDrivers, trucks }) {
           <Btn onClick={addRate} style={{ padding: "5px 8px", fontSize: 10 }}><Plus size={10} /></Btn>
         </div>
       </div>}
+      {error && <div style={{ color: colors.red, fontSize: 12, marginBottom: 8 }}>{error}</div>}
       <div style={{ display: "flex", gap: 8 }}><Btn onClick={save}>{t.save}</Btn><Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn></div>
     </Card>}
     <Card>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
           <Th>{t.driverName}</Th><Th>{t.phone}</Th><Th>{t.license}</Th><Th>{t.assignedTruck}</Th><Th>{t.salaryType}</Th><Th align="right">{t.actions}</Th>
@@ -79,12 +102,17 @@ export default function DriversPage({ t, drivers, setDrivers, trucks }) {
             <Td bold>{d.name}</Td><Td>{d.phone}</Td><Td>{d.license}</Td><Td>{tk?.plate || "—"}</Td>
             <Td><Badge label={d.salaryType === "fixed" ? `${t.fixedSalary}: ${fmt(d.fixedAmount)}` : d.salaryType === "porcentaje" ? `${t.porcentaje}: ${d.percentageAmount || 0}%` : t.perTrip} color={d.salaryType === "fixed" ? colors.accent : d.salaryType === "porcentaje" ? colors.cyan : colors.green} /></Td>
             <Td align="right">
-              <button onClick={() => openEdit(d)} style={{ padding: 4, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
-              <button onClick={() => setDrivers(drivers.filter(x => x.id !== d.id))} style={{ padding: 4, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
+              <button onClick={() => openEdit(d)} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Pencil size={12} /></button>
+              <button onClick={() => {
+                const tripCount = (trips || []).filter(tr => tr.driverId === d.id).length;
+                if (!window.confirm(`Eliminar ${d.name}? Tiene ${tripCount} viaje(s) registrado(s). Esta acción no se puede deshacer.`)) return;
+                setDrivers(drivers.filter(x => x.id !== d.id));
+              }} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.red, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={12} /></button>
             </Td>
           </tr>;
         })}</tbody>
       </table>
+      </div>
     </Card>
   </div>;
 }

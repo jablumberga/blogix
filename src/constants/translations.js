@@ -72,6 +72,9 @@ export const t_en = {
   accumulated: "Accumulated", earnings: "Earnings",
   payrollSummary: "Payroll Summary", tripPay: "Trip Pay", helperPay: "Helper Pay",
   totalEarnings: "Total Earnings", totalDiscounts: "Total Discounts", netPay: "Net Pay",
+  truckProfitability: "Truck Profitability", noTruckLinked: "No truck", selectTruck: "Select Truck",
+  billingCycle: "Billing Cycle", billingCycleInvoice: "By Invoice Date", billingCycleCutoff: "Bi-monthly Cutoff",
+  cutDay1: "Cut Day (Q1)", selectSupplier: "Supplier (optional)",
 };
 
 export const t_es = {
@@ -155,6 +158,9 @@ export const t_es = {
   accumulated: "Acumulado", earnings: "Ingresos",
   payrollSummary: "Resumen Nómina", tripPay: "Pago Viajes", helperPay: "Pago Ayudantes",
   totalEarnings: "Total Ingresos", totalDiscounts: "Total Descuentos", netPay: "Pago Neto",
+  truckProfitability: "Rentabilidad del Camión", noTruckLinked: "Sin camión", selectTruck: "Seleccionar Camión",
+  billingCycle: "Ciclo de Corte", billingCycleInvoice: "Fecha de Factura", billingCycleCutoff: "Corte Quincenal",
+  cutDay1: "Día de Corte Q1", selectSupplier: "Suplidor (opcional)",
 };
 
 export const translations = { en: t_en, es: t_es };

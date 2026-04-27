@@ -1,0 +1,17 @@
+{
+  "appId": "com.blogix.app",
+  "appName": "B-Logix",
+  "webDir": "dist",
+  "server": {
+    "url": "https://blogix.do",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}

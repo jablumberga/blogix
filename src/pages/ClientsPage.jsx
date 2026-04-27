@@ -5,10 +5,10 @@ import { fmt, nxId } from "../utils/helpers.js";
 import { DR_PROVINCES } from "../constants/destinations.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Chk, Th, Td } from "../components/ui/index.jsx";
 
-export default function ClientsPage({ t, clients, setClients, brokers }) {
+export default function ClientsPage({ t, clients, setClients, brokers, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
-  const emptyRules = { paymentTerms: 30, billingCycle: "net", period1PayDay: 30, period2PayDay: 15, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null };
+  const emptyRules = { paymentTerms: 30, billingCycle: "net", period1PayDay: 30, period2PayDay: 15, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null, brokerPassThrough: false };
   const [form, setForm] = useState({ companyName: "", contactPerson: "", phone: "", email: "", notes: "", status: "active", rules: emptyRules, rates: [] });
   const [rForm, setRForm] = useState({ province: "", municipality: "", priceT1: "", priceT2: "" });
 
@@ -21,12 +21,12 @@ export default function ClientsPage({ t, clients, setClients, brokers }) {
     <PageHeader title={t.clients} action={<Btn onClick={openNew}><Plus size={14} /> {t.addClient}</Btn>} />
     {showForm && <Card style={{ marginBottom: 16 }}>
       <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>{editId ? t.editClient : t.addClient}</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
         <Inp label={t.companyName} value={form.companyName} onChange={e => setForm({ ...form, companyName: e.target.value })} />
         <Inp label={t.contactPerson} value={form.contactPerson} onChange={e => setForm({ ...form, contactPerson: e.target.value })} />
         <Sel label={t.statusLabel} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}><option value="active">{t.active}</option><option value="inactive">{t.inactive}</option></Sel>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 2fr", gap: 12, marginBottom: 12 }}>
         <Inp label={t.phone} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
         <Inp label={t.email} value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
         <Inp label={t.notes} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
@@ -39,11 +39,25 @@ export default function ClientsPage({ t, clients, setClients, brokers }) {
             <option value="net">Días netos desde el viaje</option>
             <option value="bimonthly_delayed">Quincenal con fondo (1–15 / 16–31)</option>
           </Sel>
-          <Sel label={t.defaultBroker} value={form.rules.defaultBrokerId || ""} onChange={e => setForm({ ...form, rules: { ...form.rules, defaultBrokerId: e.target.value ? Number(e.target.value) : null } })}>
+          <Sel label={t.defaultBroker} value={form.rules.defaultBrokerId || ""} onChange={e => setForm({ ...form, rules: { ...form.rules, defaultBrokerId: e.target.value ? Number(e.target.value) : null, brokerPassThrough: e.target.value ? form.rules.brokerPassThrough : false } })}>
             <option value="">{t.noBroker}</option>
             {brokers.map(b => <option key={b.id} value={b.id}>{b.name} ({b.commissionPct}%)</option>)}
           </Sel>
         </div>
+        {form.rules.defaultBrokerId && (
+          <div style={{ marginBottom: 8 }}>
+            <Chk
+              label="El broker descuenta su comisión antes de pagarme (factura por monto neto)"
+              checked={!!form.rules.brokerPassThrough}
+              onChange={() => setForm({ ...form, rules: { ...form.rules, brokerPassThrough: !form.rules.brokerPassThrough } })}
+            />
+            <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 3, marginLeft: 22 }}>
+              {form.rules.brokerPassThrough
+                ? "Las facturas mostrarán el monto neto (menos comisión). No se genera gasto de broker separado."
+                : "Tú pagas la comisión del broker. Las facturas son por tarifa completa y se genera un gasto de broker."}
+            </div>
+          </div>
+        )}
         {(form.rules.billingCycle || "net") === "net"
           ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 8 }}>
               <Inp label="Días de crédito" type="number" value={form.rules.paymentTerms} onChange={e => setForm({ ...form, rules: { ...form.rules, paymentTerms: Number(e.target.value) } })} />
@@ -62,7 +76,7 @@ export default function ClientsPage({ t, clients, setClients, brokers }) {
 
       <div style={{ background: colors.inputBg, borderRadius: 8, padding: 12, marginBottom: 12, border: `1px solid ${colors.border}` }}>
         <h4 style={{ margin: "0 0 10px", fontSize: 13, color: colors.green }}><DollarSign size={14} /> {t.clientRates} — {t.province} / {t.municipality} / T1 / T2</h4>
-        {form.rates.length > 0 && <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 8 }}>
+        {form.rates.length > 0 && <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}><table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 8 }}>
           <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
             <td style={{ fontSize: 11, color: colors.textMuted, padding: "2px 0" }}>{t.province}</td>
             <td style={{ fontSize: 11, color: colors.textMuted }}>{t.municipality}</td>
@@ -76,7 +90,7 @@ export default function ClientsPage({ t, clients, setClients, brokers }) {
             <td style={{ textAlign: "right", fontWeight: 600, color: colors.orange, fontSize: 12 }}>{fmt(r.priceT2 ?? r.price ?? 0)}</td>
             <td style={{ width: 30, textAlign: "right" }}><button onClick={() => setForm({ ...form, rates: form.rates.filter(x => x.id !== r.id) })} style={{ background: "none", border: "none", color: colors.red, cursor: "pointer" }}><X size={10} /></button></td>
           </tr>)}</tbody>
-        </table>}
+        </table></div>}
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
           <Sel label={t.province} value={rForm.province} onChange={e => setRForm({ ...rForm, province: e.target.value, municipality: "" })} style={{ flex: 2, fontSize: 11 }}>
             <option value="">--</option>{DR_PROVINCES.map(p => <option key={p.province} value={p.province}>{p.province}</option>)}
@@ -94,6 +108,7 @@ export default function ClientsPage({ t, clients, setClients, brokers }) {
     </Card>}
 
     <Card>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
           <Th>{t.companyName}</Th><Th>{t.contactPerson}</Th><Th>{t.phone}</Th><Th align="center">{t.rules}</Th><Th align="center">{t.rates}</Th><Th align="center">{t.statusLabel}</Th><Th align="right">{t.actions}</Th>
@@ -115,11 +130,12 @@ export default function ClientsPage({ t, clients, setClients, brokers }) {
           <Td align="center"><Badge label={`${c.rates.length}`} color={colors.green} /></Td>
           <Td align="center"><Badge label={c.status === "active" ? t.active : t.inactive} color={c.status === "active" ? colors.green : colors.red} /></Td>
           <Td align="right">
-            <button onClick={() => openEdit(c)} style={{ padding: 4, borderRadius: 4, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
-            <button onClick={() => setClients(clients.filter(x => x.id !== c.id))} style={{ padding: 4, borderRadius: 4, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
+            <button onClick={() => openEdit(c)} style={{ padding: "8px 10px", borderRadius: 4, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
+            <button onClick={() => setClients(clients.filter(x => x.id !== c.id))} style={{ padding: "8px 10px", borderRadius: 4, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
           </Td>
         </tr>)}</tbody>
       </table>
+      </div>
       {clients.length === 0 && <div style={{ textAlign: "center", padding: 30, color: colors.textMuted }}>{t.noClients}</div>}
     </Card>
   </div>;

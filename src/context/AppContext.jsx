@@ -9,7 +9,7 @@ const AppContext = createContext(null);
 function applyData(data, setters) {
   const { setClients, setPartners, setTrucks, setDrivers, setTrips,
           setExpenses, setBrokers, setSuppliers, setFixedTemplates,
-          setSettlementStatus, setCobros } = setters;
+          setSettlementStatus, setCobros, setInvoices } = setters;
   if (!data || Object.keys(data).length === 0) return;
   if (Array.isArray(data.clients))        setClients(data.clients);
   if (Array.isArray(data.partners))       setPartners(data.partners);
@@ -22,6 +22,7 @@ function applyData(data, setters) {
   if (Array.isArray(data.fixedTemplates)) setFixedTemplates(data.fixedTemplates);
   if (data.settlementStatus)              setSettlementStatus(data.settlementStatus);
   if (Array.isArray(data.cobros))         setCobros(data.cobros);
+  if (Array.isArray(data.invoices))       setInvoices(data.invoices);
 }
 
 export function AppProvider({ children }) {
@@ -60,29 +61,32 @@ export function AppProvider({ children }) {
   const [fixedTemplates, setFixedTemplates] = useState([]);
   const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
   const [cobros, setCobros] = useState([]);
+  const [invoices, setInvoices] = useState([]);
   const [syncStatus, setSyncStatus] = useState("idle");
 
-  const saveTimerRef    = useRef(null);
-  const dataLoadedRef   = useRef(false);
-  const isReloadingRef  = useRef(false); // blocks auto-save during post-login reload
-  const currentDataRef  = useRef(null);  // always holds latest state snapshot for pagehide flush
-  const userRef         = useRef(user);  // tracks current user role for pagehide (avoids stale closure)
+  const saveTimerRef   = useRef(null);
+  const dataLoadedRef  = useRef(false);
+  const isReloadingRef = useRef(false); // blocks auto-save during post-login reload
+  const versionRef     = useRef(0);     // optimistic lock — 0 means "unknown / loaded from cache"
+  const currentDataRef = useRef(null);  // latest state snapshot for pagehide flush
+  const userRef        = useRef(user);  // tracks current user role for pagehide (avoids stale closure)
 
   const setters = {
     setClients, setPartners, setTrucks, setDrivers, setTrips,
     setExpenses, setBrokers, setSuppliers, setFixedTemplates,
-    setSettlementStatus, setCobros,
+    setSettlementStatus, setCobros, setInvoices,
   };
 
   // ── Load on mount ─────────────────────────────────────────────────────────
   useEffect(() => {
-    loadData().then(({ source, data }) => {
+    loadData().then(({ source, data, version = 0 }) => {
       if (source === "unauthenticated") {
         setUser(null);
         dataLoadedRef.current = true;
         return;
       }
       applyData(data, setters);
+      versionRef.current = version; // 0 if from localStorage (offline) — skips server check
       dataLoadedRef.current = true;
       setSyncStatus(source === "api" ? "saved" : "offline");
     });
@@ -95,15 +99,15 @@ export function AppProvider({ children }) {
     if (!dataLoadedRef.current) return;
     currentDataRef.current = {
       clients, partners, trucks, drivers, trips, expenses,
-      brokers, suppliers, fixedTemplates, settlementStatus, cobros,
+      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
     };
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices]);
 
   // ── Flush to localStorage on tab close / Android OS kill (admin only) ────
   useEffect(() => {
     const flush = () => {
       if (dataLoadedRef.current && currentDataRef.current && userRef.current?.role === "admin") {
-        saveData(currentDataRef.current); // localStorage write is synchronous; API is best-effort
+        saveData(currentDataRef.current, versionRef.current); // localStorage write is synchronous; API is best-effort
       }
     };
     window.addEventListener("pagehide", flush);
@@ -114,26 +118,39 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (!dataLoadedRef.current) return;
     if (isReloadingRef.current) return;
-    if (user?.role !== "admin") return; // partners/drivers are read-only
+    if (user?.role !== "admin" && user?.role !== "driver") return; // partners read-only; drivers can save own trips
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSyncStatus("saving");
       const result = await saveData({
         clients, partners, trucks, drivers, trips, expenses,
-        brokers, suppliers, fixedTemplates, settlementStatus, cobros,
-      });
+        brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
+      }, versionRef.current);
       if (result.saved === "unauthorized") { setUser(null); return; }
+      if (result.saved === "conflict") {
+        setSyncStatus("conflict");
+        // Reload from server to get the winning version; user's unsaved changes are lost
+        isReloadingRef.current = true;
+        loadData().then(({ source, data, version = 0 }) => {
+          applyData(data, setters);
+          versionRef.current = version;
+          isReloadingRef.current = false;
+          setSyncStatus(source === "api" ? "saved" : "offline");
+        });
+        return;
+      }
+      if (result.saved === "api") versionRef.current = result.version || 0;
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices]);
 
   // ── Dynamic user list ─────────────────────────────────────────────────────
-  const allUsers = [
+  const allUsers = useMemo(() => [
     ...USERS.filter(u => u.role === "admin"),
-    ...partners.map(p => ({ id: `p-${p.id}`, username: p.username, password: p.password, role: "partner", name: p.name, refId: p.id })),
-    ...drivers.map(d => ({ id: `d-${d.id}`, username: d.username, password: d.password, role: "driver", name: d.name, refId: d.id })),
-  ];
+    ...partners.map(p => ({ id: `p-${p.id}`, username: p.username, role: "partner", name: p.name, refId: p.id })),
+    ...drivers.map(d => ({ id: `d-${d.id}`, username: d.username, role: "driver", name: d.name, refId: d.id })),
+  ], [partners, drivers]);
 
   // ── Computed helpers ──────────────────────────────────────────────────────
   const isAdmin = user?.role === "admin";
@@ -145,7 +162,7 @@ export function AppProvider({ children }) {
     () => partner ? trucks.filter(tk => tk.partnerId === partner.id).map(tk => tk.id) : [],
     [partner, trucks]
   );
-  const driverObj = isDriver ? drivers.find(d => d.name === user?.name) : null;
+  const driverObj = isDriver ? drivers.find(d => d.id === user?.refId) : null;
 
   const alerts = useMemo(
     () => isAdmin ? computeAlerts({ trips, expenses, clients, drivers, trucks, partners, brokers, settlementStatus }) : [],
@@ -162,7 +179,7 @@ export function AppProvider({ children }) {
     // Reload data from API with new token
     isReloadingRef.current = true;
     dataLoadedRef.current = false;
-    loadData().then(({ source, data }) => {
+    loadData().then(({ source, data, version = 0 }) => {
       if (source === "unauthenticated") {
         clearToken();
         setUser(null);
@@ -171,6 +188,7 @@ export function AppProvider({ children }) {
         return;
       }
       applyData(data, setters);
+      versionRef.current = version;
       dataLoadedRef.current = true;
       isReloadingRef.current = false;
       setSyncStatus(source === "api" ? "saved" : "offline");
@@ -184,12 +202,38 @@ export function AppProvider({ children }) {
   };
 
   const syncAll = () => {
-    const toAdd = [];
+    // ── Build lookup maps for O(1) access ─────────────────────────────────────
+    const clientMap  = new Map(clients.map(c => [c.id, c]));
+    const brokerMap  = new Map(brokers.map(b => [b.id, b]));
+    const driverMap  = new Map(drivers.map(d => [d.id, d]));
+    const truckMap   = new Map(trucks.map(t => [t.id, t]));
 
+    // ── Step 1: Remove broker_commission expenses that belong to pass-through clients ──
+    // These are stale: the broker deducts before paying, so there was never an outgoing expense.
+    // This makes the cleanup retroactive — toggling brokerPassThrough on an existing client
+    // immediately removes the rogue expenses on the next syncAll run.
+    const staleExpIds = new Set(
+      expenses
+        .filter(e => e.category === "broker_commission" && e.tripId != null)
+        .filter(e => {
+          const tr = trips.find(t => t.id === e.tripId);
+          const cl = tr ? clientMap.get(tr.clientId) : null;
+          return cl?.rules?.brokerPassThrough === true;
+        })
+        .map(e => e.id)
+    );
+    if (staleExpIds.size > 0) {
+      setExpenses(prev => prev.filter(e => !staleExpIds.has(e.id)));
+    }
+
+    // ── Step 2: Generate missing driver pay and broker commissions ─────────────
+    // Note: expenses state hasn't updated yet (Step 1 is batched), so we check
+    // against the live `expenses` array minus the stale ones we're removing.
+    const toAdd = [];
     trips.forEach(tr => {
-      // ── Driver pay ──────────────────────────────────────────────────────────
+      // ── Driver pay ────────────────────────────────────────────────────────
       if (tr.driverId) {
-        const driver = drivers.find(d => d.id === tr.driverId);
+        const driver = driverMap.get(tr.driverId);
         const hasDriverPay = expenses.some(e => e.category === "driverPay" && e.tripId === tr.id);
         if (driver && driver.salaryType !== "fixed" && !hasDriverPay) {
           let pay = 0;
@@ -198,11 +242,10 @@ export function AppProvider({ children }) {
           } else if (driver.salaryType === "perTrip") {
             const rate = (driver.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality);
             if (rate) {
-              const tk = trucks.find(t2 => t2.id === tr.truckId);
+              const tk = truckMap.get(tr.truckId);
               const size = tr.tarifaOverride || tk?.size || "T1";
               pay = size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
             } else {
-              // No rate configured for this route → fall back to 20%
               pay = Math.round((tr.revenue || 0) * 0.20);
             }
           } else {
@@ -221,11 +264,14 @@ export function AppProvider({ children }) {
         }
       }
 
-      // ── Broker commission ────────────────────────────────────────────────────
+      // ── Broker commission (non-pass-through only) ──────────────────────────
       if (tr.brokerId && tr.revenue > 0) {
-        const broker = brokers.find(b => b.id === tr.brokerId);
-        const hasBrokerPay = expenses.some(e => e.category === "broker_commission" && e.tripId === tr.id);
-        if (broker && !hasBrokerPay) {
+        const broker = brokerMap.get(tr.brokerId);
+        const client = clientMap.get(tr.clientId);
+        const isPassThrough = client?.rules?.brokerPassThrough === true;
+        const isStale = expenses.some(e => e.category === "broker_commission" && e.tripId === tr.id && staleExpIds.has(e.id));
+        const hasBrokerPay = !isStale && expenses.some(e => e.category === "broker_commission" && e.tripId === tr.id);
+        if (broker && !hasBrokerPay && !isPassThrough) {
           const commission = Math.round((tr.revenue || 0) * (broker.commissionPct || 10) / 100);
           if (commission > 0) {
             toAdd.push({
@@ -240,24 +286,50 @@ export function AppProvider({ children }) {
 
     if (toAdd.length > 0) {
       setExpenses(prev => {
-        let next = [...prev];
-        toAdd.forEach(exp => {
-          const newId = Math.max(0, ...next.map(e => e.id)) + 1;
-          next = [...next, { id: newId, ...exp }];
-        });
-        return next;
+        let maxId = prev.reduce((m, e) => e.id > m ? e.id : m, 0);
+        return [...prev, ...toAdd.map(exp => ({ id: ++maxId, ...exp }))];
       });
     }
-    return toAdd.length;
+
+    // ── Step 3: Backfill invoice amounts for pass-through clients ──────────────
+    // Old invoices lack a stored `amount`. For pass-through clients, recompute
+    // the net amount (gross − broker deduction) and store it so the CFO pipeline
+    // shows the correct collectible amount retroactively.
+    const invoicesToPatch = invoices.filter(inv => {
+      if (inv.amount != null) return false;
+      const cl = clientMap.get(inv.clientId);
+      return cl?.rules?.brokerPassThrough === true;
+    });
+    if (invoicesToPatch.length > 0) {
+      const patchIds = new Set(invoicesToPatch.map(i => i.id));
+      setInvoices(prev => prev.map(inv => {
+        if (!patchIds.has(inv.id)) return inv;
+        let gross = 0, deduction = 0;
+        (inv.tripIds || []).forEach(tid => {
+          const tr = trips.find(t => t.id === tid);
+          if (!tr) return;
+          gross += tr.revenue || 0;
+          if (tr.brokerId) {
+            const br = brokerMap.get(tr.brokerId);
+            if (br) deduction += Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
+          }
+        });
+        return { ...inv, amount: gross - deduction, ...(deduction > 0 ? { brokerDeduction: deduction } : {}) };
+      }));
+    }
+
+    return { added: toAdd.length, removed: staleExpIds.size, invoicesPatched: invoicesToPatch.length };
   };
 
   const forceSync = async () => {
     setSyncStatus("saving");
     const result = await saveData({
       clients, partners, trucks, drivers, trips, expenses,
-      brokers, suppliers, fixedTemplates, settlementStatus, cobros,
-    });
+      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
+    }, versionRef.current);
     if (result.saved === "unauthorized") { setUser(null); return; }
+    if (result.saved === "conflict") { setSyncStatus("conflict"); return result; }
+    if (result.saved === "api") versionRef.current = result.version || 0;
     setSyncStatus(result.saved === "api" ? "saved" : "offline");
     return result;
   };
@@ -280,6 +352,7 @@ export function AppProvider({ children }) {
     fixedTemplates, setFixedTemplates,
     settlementStatus, setSettlementStatus,
     cobros, setCobros,
+    invoices, setInvoices,
     // Computed
     partner, partnerTruckIds, driverObj, alerts,
   };

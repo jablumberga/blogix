@@ -4,7 +4,17 @@ export const fmt = (n) =>
 
 export const pct = (n) => (n * 100).toFixed(1) + "%";
 
-export const nxId = (arr) => (arr.length ? Math.max(...arr.map((x) => x.id)) + 1 : 1);
+export const nxId = (arr) => (arr.length ? arr.reduce((max, x) => x.id > max ? x.id : max, 0) + 1 : 1);
+
+// Returns the resolved truck id for an expense: direct truckId first, then trip-indirect
+export function expenseTruckId(expense, tripMap) {
+  if (expense.truckId) return expense.truckId;
+  if (expense.tripId && tripMap) {
+    const tr = tripMap.get(expense.tripId);
+    if (tr?.truckId) return tr.truckId;
+  }
+  return null;
+}
 
 export const today = () => new Date().toISOString().slice(0, 10);
 
@@ -92,6 +102,7 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
 
   // AGENT 8: Broker sin comisión
   trips.filter(tr => tr.brokerId && tr.status !== "cancelled" && tr.revenue > 0).forEach(tr => {
+    if (clients.find(c => c.id === tr.clientId)?.rules?.brokerPassThrough === true) return;
     if (!brokerFeeTripIds.has(tr.id)) {
       const br = brokerMap.get(tr.brokerId);
       alerts.push({ id: `brk-${tr.id}`, severity: "warning", category: "broker", tripId: tr.id,
@@ -134,6 +145,16 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
       msg: `Cliente "${c.companyName}" no tiene tarifario definido` });
   });
 
+  // AGENT 13: Camión con gastos este mes pero sin viajes — unidad que cuesta sin producir
+  const thisMonth13 = monthStr();
+  const tripMap13 = new Map(trips.map(tr => [tr.id, tr]));
+  trucks.forEach(tk => {
+    const hasExp = expenses.some(e => expenseTruckId(e, tripMap13) === tk.id && (e.date || "").startsWith(thisMonth13));
+    const hasTrips = trips.some(tr => tr.truckId === tk.id && (tr.date || "").startsWith(thisMonth13) && tr.status !== "cancelled");
+    if (hasExp && !hasTrips) alerts.push({ id: `idle-${tk.id}`, severity: "warning", category: "fleet",
+      msg: `Camión ${tk.plate} tiene gastos este mes pero 0 viajes — unidad con costo sin ingreso` });
+  });
+
   return alerts;
 }
 
@@ -157,8 +178,8 @@ export function genPeriods(dates = []) {
       const prevM = pm === 1 ? 12 : pm - 1, prevY = pm === 1 ? py - 1 : py;
       const startDay = Math.min(30, lastDayOf(prevY, prevM));
       return { year: py, month: pm, half: ph, mStr,
-        dateFrom: `${prevY}-${pad(prevM)}-${pad(startDay)}`, dateTo: `${mStr}-14`,
-        label: `${MONTHS_ES[prevM-1]} ${startDay} – ${MONTHS_ES[pm-1]} 14, ${py}` };
+        dateFrom: `${prevY}-${pad(prevM)}-${pad(startDay)}`, dateTo: `${mStr}-15`,
+        label: `${MONTHS_ES[prevM-1]} ${startDay} – ${MONTHS_ES[pm-1]} 15, ${py}` };
     }
     return { year: py, month: pm, half: ph, mStr,
       dateFrom: `${mStr}-15`, dateTo: `${mStr}-29`,
@@ -171,6 +192,29 @@ export function genPeriods(dates = []) {
     if (h === 2) { h = 1; } else { h = 2; if (m === 1) { m = 12; y--; } else { m--; } }
   }
   return periods;
+}
+
+// Computes due date for a supplier expense.
+// "invoice_date" cycle: dueDate = expenseDate + creditDays
+// "cutoff_period" cycle: dueDate = end_of_cut_period + creditDays
+//   period 1: days 1–period1CutDay → cutoff at period1CutDay
+//   period 2: days (period1CutDay+1)–end_of_month → cutoff at end_of_month
+export function getSupplierDueDate(expenseDate, supplier) {
+  if (!expenseDate) return expenseDate;
+  if (!supplier || supplier.paymentCondition !== "credit" || !supplier.creditDays) return expenseDate;
+  const [y, m, d] = expenseDate.split("-").map(Number);
+  const cycle = supplier.billingCycle || "invoice_date";
+  if (cycle === "cutoff_period") {
+    const period1Cut = Number(supplier.period1CutDay) || 15;
+    const lastDay = new Date(y, m, 0).getDate();
+    const cutDay = d <= period1Cut ? period1Cut : lastDay;
+    const cutEnd = new Date(y, m - 1, cutDay);
+    cutEnd.setDate(cutEnd.getDate() + Number(supplier.creditDays));
+    return cutEnd.toISOString().slice(0, 10);
+  }
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + Number(supplier.creditDays));
+  return dt.toISOString().slice(0, 10);
 }
 
 export function getPeriodInfo(date, client) {

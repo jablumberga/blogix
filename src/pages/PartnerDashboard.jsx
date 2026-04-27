@@ -4,7 +4,7 @@ import { colors } from "../constants/theme.js";
 import { fmt, pad, MONTHS_ES } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Sel, Badge, Th, Td, StatusBadge } from "../components/ui/index.jsx";
 
-export default function PartnerDashboard({ t, trips, trucks, expenses, partner, partnerTruckIds, clients, settlementStatus, setSettlementStatus }) {
+export default function PartnerDashboard({ t, trips, trucks, expenses, partner, partnerTruckIds, clients, brokers, settlementStatus, setSettlementStatus, isMobile }) {
   const [truckFilter, setTruckFilter] = useState("all");
   const now = new Date();
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
@@ -35,6 +35,9 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, partner, 
     if (half === 1) { setHalf(2); }
     else { setHalf(1); if (month === 12) { setMonth(1); setYear(y => y + 1); } else { setMonth(m => m + 1); } }
   };
+
+  const clientMap = new Map((clients || []).map(c => [c.id, c]));
+  const brokerMap = new Map((brokers || []).map(b => [b.id, b]));
 
   const myTrucks = trucks.filter(tk => (partnerTruckIds||[]).includes(tk.id));
   let filtered = trips.filter(tr => (partnerTruckIds||[]).includes(tr.truckId) && tr.date >= dateFrom && tr.date <= dateTo);
@@ -70,8 +73,19 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, partner, 
   ];
   const retenciones    = tripExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s+e.amount, 0);
   const otrosGastos    = tripExpenses.filter(e => e.category !== "broker_commission").reduce((s,e) => s+e.amount, 0);
-  const rev  = filtered.reduce((s,tr) => s+tr.revenue, 0);
-  const net  = rev - retenciones - otrosGastos;
+
+  // Pass-through deduction: broker deducts before paying, no expense recorded — reduce revenue directly
+  const passThruDeduction = filtered.reduce((s, tr) => {
+    const cl = clientMap.get(tr.clientId);
+    if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return s;
+    const br = brokerMap.get(tr.brokerId);
+    if (!br) return s;
+    return s + Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
+  }, 0);
+
+  const grossRev = filtered.reduce((s,tr) => s+tr.revenue, 0);
+  const rev      = grossRev - passThruDeduction; // real money received
+  const net      = rev - retenciones - otrosGastos;
   const adminComm = Math.round(net * ((partner?.commissionPct||0) / 100));
   const toReceive = net - adminComm;
 
@@ -95,8 +109,8 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, partner, 
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 12, marginBottom: 16 }}>
       <StatCard icon={Truck} label="Mis Camiones" value={myTrucks.length} color={colors.accent} />
       <StatCard icon={Route} label={t.totalTrips} value={filtered.length} color={colors.cyan} />
-      <StatCard icon={TrendingUp} label="Ingreso Bruto" value={fmt(rev)} color={colors.green} />
-      <StatCard icon={TrendingDown} label="Total Deducciones" value={fmt(retenciones + otrosGastos)} color={colors.orange} />
+      <StatCard icon={TrendingUp} label={passThruDeduction > 0 ? "Ingreso Neto" : "Ingreso Bruto"} value={fmt(rev)} color={colors.green} />
+      <StatCard icon={TrendingDown} label="Total Deducciones" value={fmt(passThruDeduction + retenciones + otrosGastos)} color={colors.orange} />
       <StatCard icon={CircleDollarSign} label="A Recibir esta Quincena" value={fmt(toReceive)} color={toReceive >= 0 ? colors.green : colors.red} />
     </div>
 
@@ -111,26 +125,37 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, partner, 
       </div>
       {filtered.length === 0
         ? <div style={{ textAlign: "center", padding: 32, color: colors.textMuted }}>Sin viajes para el filtro seleccionado.</div>
-        : <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-            <Th>{t.date}</Th><Th>Ruta</Th><Th>{t.client}</Th><Th>{t.truck}</Th><Th align="right">{t.revenue}</Th><Th align="right">Retenciones</Th><Th align="center">{t.status}</Th><Th align="center">{t.document}</Th>
-          </tr></thead>
-          <tbody>{filtered.slice().sort((a,b) => a.date.localeCompare(b.date)).map(tr => {
-            const cl = clients.find(c => c.id === tr.clientId);
-            const tk = trucks.find(t2 => t2.id === tr.truckId);
-            const tripRet = expenses.filter(e => e.tripId === tr.id && e.category === "broker_commission").reduce((s,e) => s+e.amount, 0);
-            return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
-              <Td>{tr.date}</Td>
-              <Td>{tr.municipality}{tr.province ? `, ${tr.province}` : ""}</Td>
-              <Td>{cl?.companyName || "—"}</Td>
-              <Td>{tk?.plate || "—"}</Td>
-              <Td align="right" bold color={colors.green}>{fmt(tr.revenue)}</Td>
-              <Td align="right" color={tripRet > 0 ? colors.orange : colors.textMuted}>{tripRet > 0 ? `− ${fmt(tripRet)}` : "—"}</Td>
-              <Td align="center"><StatusBadge status={tr.status} t={t} /></Td>
-              <Td align="center"><Badge label={tr.docStatus === "delivered" ? t.deliveredDocs : t.pendingDocs} color={tr.docStatus === "delivered" ? colors.green : colors.orange} /></Td>
-            </tr>;
-          })}</tbody>
-        </table>}
+        : <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+              <Th>{t.date}</Th><Th>Ruta</Th><Th>{t.client}</Th><Th>{t.truck}</Th><Th align="right">{t.revenue}</Th><Th align="right">Retenciones</Th><Th align="center">{t.status}</Th><Th align="center">{t.document}</Th>
+            </tr></thead>
+            <tbody>{filtered.slice().sort((a,b) => a.date.localeCompare(b.date)).map(tr => {
+              const cl = clientMap.get(tr.clientId);
+              const tk = trucks.find(t2 => t2.id === tr.truckId);
+              const tripRet = expenses.filter(e => e.tripId === tr.id && e.category === "broker_commission").reduce((s,e) => s+e.amount, 0);
+              // For pass-through trips, the deduction is implicit (not an expense) — compute it directly
+              const isPassThru = cl?.rules?.brokerPassThrough && tr.brokerId;
+              const passThruTripDed = isPassThru ? (() => {
+                const br = brokerMap.get(tr.brokerId);
+                return br ? Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100) : 0;
+              })() : 0;
+              const totalTripDed = tripRet + passThruTripDed;
+              return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+                <Td>{tr.date}</Td>
+                <Td>{tr.municipality}{tr.province ? `, ${tr.province}` : ""}</Td>
+                <Td>{cl?.companyName || "—"}</Td>
+                <Td>{tk?.plate || "—"}</Td>
+                <Td align="right" bold color={colors.green}>{fmt(tr.revenue)}</Td>
+                <Td align="right" color={totalTripDed > 0 ? colors.orange : colors.textMuted}>
+                  {totalTripDed > 0 ? `− ${fmt(totalTripDed)}` : "—"}
+                </Td>
+                <Td align="center"><StatusBadge status={tr.status} t={t} /></Td>
+                <Td align="center"><Badge label={tr.docStatus === "delivered" ? t.deliveredDocs : t.pendingDocs} color={tr.docStatus === "delivered" ? colors.green : colors.orange} /></Td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>}
     </Card>
   </div>;
 }

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { LogIn, Eye, EyeOff, AlertCircle } from "lucide-react";
-import bcrypt from "bcryptjs";
 import { colors } from "../constants/theme.js";
 import { Inp, Btn } from "./ui/index.jsx";
 
-export default function LoginPage({ t, onLogin, allUsers }) {
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+
+export default function LoginPage({ t, onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -17,7 +18,7 @@ export default function LoginPage({ t, onLogin, allUsers }) {
     setError("");
     try {
       // Try server auth first (gets signed JWT for RLS)
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -28,23 +29,19 @@ export default function LoginPage({ t, onLogin, allUsers }) {
         setLoading(false);
         return;
       }
-      // Server reachable but rejected — don't bypass to offline auth
       if (res.status === 401 || res.status === 400) {
         setError(t.invalidLogin);
         setLoading(false);
         return;
       }
+      // Server error (5xx or unexpected)
+      setError("Error del servidor. Intenta de nuevo en unos momentos.");
+      setLoading(false);
+      return;
     } catch {
-      // Server unavailable — fall back to local user list
-    }
-    // Offline fallback: validate against allUsers (supports both hashed and plaintext passwords)
-    const candidate = allUsers.find(u => u.username === username);
-    if (candidate) {
-      const isHashed = typeof candidate.password === "string" && candidate.password.startsWith("$2");
-      const match = isHashed
-        ? await bcrypt.compare(password, candidate.password)
-        : candidate.password === password;
-      if (match) { onLogin(candidate, keepSignedIn, null); setError(""); setLoading(false); return; }
+      setError("Sin conexión. Verifica tu internet e intenta de nuevo.");
+      setLoading(false);
+      return;
     }
     setError(t.invalidLogin);
     setLoading(false);
@@ -65,7 +62,7 @@ export default function LoginPage({ t, onLogin, allUsers }) {
             label={t.username}
             value={username}
             onChange={e => setUsername(e.target.value)}
-            placeholder="admin"
+            placeholder=""
             onKeyDown={e => e.key === "Enter" && handleLogin()}
           />
           <div style={{ position: "relative" }}>

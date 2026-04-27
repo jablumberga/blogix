@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogIn, UserCheck, Menu, TrendingUp, RefreshCw } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
+import { getToken } from "./api.js";
 import { colors } from "./constants/theme.js";
 import { Badge } from "./components/ui/index.jsx";
 import LoginPage from "./components/LoginPage.jsx";
@@ -21,12 +22,19 @@ import NominaPage from "./pages/NominaPage.jsx";
 import SuppliersPage from "./pages/SuppliersPage.jsx";
 import SettlementsPage from "./pages/SettlementsPage.jsx";
 import CxCPage from "./pages/CxCPage.jsx";
+import InvoicesPage from "./pages/InvoicesPage.jsx";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
 function SyncAllButton({ syncAll, sidebarOpen }) {
   const [msg, setMsg] = useState(null);
   const handle = () => {
-    const added = syncAll();
-    const text = added > 0 ? `✅ +${added} entrada${added !== 1 ? "s" : ""} de nómina` : "✅ Todo sincronizado";
+    const { added, removed, invoicesPatched } = syncAll();
+    const parts = [];
+    if (added > 0) parts.push(`+${added} nómina`);
+    if (removed > 0) parts.push(`−${removed} gasto${removed !== 1 ? "s" : ""} broker`);
+    if (invoicesPatched > 0) parts.push(`${invoicesPatched} factura${invoicesPatched !== 1 ? "s" : ""} actualizadas`);
+    const text = parts.length > 0 ? `✅ ${parts.join(", ")}` : "✅ Todo sincronizado";
     setMsg(text);
     setTimeout(() => setMsg(null), 4000);
   };
@@ -44,6 +52,33 @@ function SyncAllButton({ syncAll, sidebarOpen }) {
   );
 }
 
+async function initPushNotifications(userRole) {
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    if (!Capacitor.isNativePlatform()) return;
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    const perm = await PushNotifications.requestPermissions();
+    if (perm.receive !== "granted") return;
+    await PushNotifications.register();
+    PushNotifications.addListener("registration", async (token) => {
+      try {
+        await fetch(`${API_BASE}/api/push/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${getToken()}` },
+          body: JSON.stringify({ token: token.value, platform: Capacitor.getPlatform() }),
+        });
+      } catch { /* non-critical — token will be retried on next login */ }
+    });
+    PushNotifications.addListener("pushNotificationReceived", () => {
+    });
+    PushNotifications.addListener("pushNotificationActionPerformed", () => {
+      // User tapped notification — app already opens to foreground
+    });
+  } catch (e) {
+    // Not on native platform, ignore silently
+  }
+}
+
 export default function App() {
   const {
     lang, setLang, t, user, login, logout, forceSync, syncAll,
@@ -52,7 +87,7 @@ export default function App() {
     drivers, setDrivers, trips, setTrips, expenses, setExpenses,
     brokers, setBrokers, suppliers, setSuppliers,
     fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus,
-    cobros, setCobros, syncStatus,
+    cobros, setCobros, invoices, setInvoices, syncStatus,
     partner, partnerTruckIds, driverObj, alerts,
   } = useApp();
 
@@ -76,9 +111,44 @@ export default function App() {
     return () => window.removeEventListener("resize", handle);
   }, []);
 
-  if (!user) return <LoginPage t={t} allUsers={allUsers} onLogin={(u, remember, token) => {
+  if (window.location.pathname.startsWith("/privacy")) {
+    return (
+      <div style={{ fontFamily: "Arial, sans-serif", maxWidth: 800, margin: "40px auto", padding: "0 20px", color: "#333", lineHeight: 1.7 }}>
+        <h1 style={{ color: "#c0392b" }}>Política de Privacidad — B-Logix</h1>
+        <p><strong>Última actualización:</strong> 23 de abril de 2026</p>
+        <p>B-Logix es una plataforma de gestión logística para empresas de transporte en República Dominicana. Esta política describe cómo recopilamos, usamos y protegemos su información.</p>
+        <h2>1. Información que recopilamos</h2>
+        <ul>
+          <li><strong>Información de cuenta:</strong> nombre de usuario y contraseña (almacenada encriptada).</li>
+          <li><strong>Datos operativos:</strong> registros de viajes, gastos, camiones y liquidaciones.</li>
+          <li><strong>Datos del dispositivo:</strong> información básica para el funcionamiento de la app.</li>
+        </ul>
+        <h2>2. Cómo usamos la información</h2>
+        <ul>
+          <li>Para proveer las funciones de la plataforma (gestión de flota, nómina, cuentas por cobrar).</li>
+          <li>Para autenticar usuarios y controlar acceso según rol (administrador, socio, conductor).</li>
+          <li>Para enviar notificaciones push sobre nómina y viajes asignados.</li>
+        </ul>
+        <h2>3. Compartir información</h2>
+        <p>No vendemos ni compartimos su información con terceros. Los datos se almacenan en servidores seguros vía Supabase y Netlify.</p>
+        <h2>4. Seguridad</h2>
+        <p>Contraseñas almacenadas con encriptación bcrypt. Comunicaciones vía HTTPS.</p>
+        <h2>5. Permisos de la aplicación</h2>
+        <ul>
+          <li><strong>Cámara:</strong> para adjuntar fotos de recibos a gastos (opcional).</li>
+          <li><strong>Notificaciones:</strong> para avisos de nómina y viajes.</li>
+          <li><strong>Internet:</strong> para sincronizar datos con el servidor.</li>
+        </ul>
+        <h2>6. Contacto</h2>
+        <p>Para preguntas: <a href="mailto:soporte@blogix.do" style={{ color: "#c0392b" }}>soporte@blogix.do</a></p>
+      </div>
+    );
+  }
+
+  if (!user) return <LoginPage t={t} onLogin={(u, remember, token) => {
     login(u, remember, token);
     setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : "dashboard");
+    initPushNotifications(u.role);
   }} />;
 
   const alertCount = alerts.filter(a => a.severity === "error" || a.severity === "warning").length;
@@ -89,6 +159,7 @@ export default function App() {
     { id: "dashboard",   icon: LayoutDashboard, label: t.dashboard },
     { divider: true },
     { id: "clients",     icon: Building2,        label: t.clients },
+    { id: "invoices",    icon: FileText,         label: "Facturas" },
     { id: "cxc",         icon: TrendingUp,       label: "Cuentas x Cobrar" },
     { id: "trips",       icon: Route,            label: t.trips },
     { id: "fleet",       icon: Truck,            label: t.fleet },
@@ -113,11 +184,53 @@ export default function App() {
   ];
   const navItems = isAdmin ? adminNav : isPartner ? partnerNav : driverNav;
 
-  const ctx = { t, user, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, partner, partnerTruckIds, driverObj, alerts };
+  const ctx = { t, user, isMobile, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, partner, partnerTruckIds, driverObj, alerts };
+
+  const pageTitles = {
+    dashboard:   t.dashboard,
+    partnerDash: t.partnerDashboard,
+    driverDash:  t.dashboard,
+    clients:     t.clients,
+    invoices:    "Facturas",
+    cxc:         "Cuentas x Cobrar",
+    trips:       t.trips,
+    fleet:       t.fleet,
+    drivers:     t.drivers,
+    partners:    t.partners,
+    brokers:     t.brokers,
+    expenses:    t.expenses,
+    cxp:         "Cuentas x Pagar",
+    nomina:      "Nómina",
+    suppliers:   t.suppliers,
+    settlements: t.settlements,
+    agents:      t.agents,
+  };
+
+  const bottomNavTabs = [
+    { id: "dashboard", icon: Home,         label: "Dashboard" },
+    { id: "trips",     icon: Truck,        label: "Viajes"    },
+    { id: "expenses",  icon: DollarSign,   label: "Gastos"    },
+    { id: "__mas__",   icon: Menu,         label: "Más"       },
+  ];
 
   return (
     <div style={{ display: "flex", height: "100vh", background: colors.bg, color: colors.text, fontFamily: "'Inter',-apple-system,sans-serif", fontSize: 13 }}>
       {isMobile && sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 190 }} />}
+
+      {/* Mobile top bar */}
+      {isMobile && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 52, zIndex: 200, background: colors.card, borderBottom: `1px solid ${colors.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
+          <button onClick={() => setSidebarOpen(true)} style={{ background: "transparent", border: "none", color: colors.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8, flexShrink: 0 }}>
+            <Menu size={20} />
+          </button>
+          <span style={{ fontWeight: 600, fontSize: 15, color: colors.text, flex: 1, textAlign: "center" }}>
+            {pageTitles[page] ?? "B-Logix"}
+          </span>
+          <button onClick={logout} title="Cerrar sesión" style={{ background: "transparent", border: "none", color: colors.red, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8, flexShrink: 0 }}>
+            <LogOut size={18} />
+          </button>
+        </div>
+      )}
 
       <div style={{ width: isMobile ? (sidebarOpen ? 220 : 0) : (sidebarOpen ? 220 : 60), ...(isMobile ? { position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 200 } : {}), background: colors.sidebar, borderRight: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", transition: "width 0.2s", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ padding: "14px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${colors.border}`, cursor: "pointer" }} onClick={() => setSidebarOpen(!sidebarOpen)}>
@@ -127,7 +240,7 @@ export default function App() {
           {sidebarOpen && <span style={{ fontWeight: 700, fontSize: 16 }}>B-Logix</span>}
         </div>
 
-        <nav style={{ flex: 1, padding: "10px 6px", display: "flex", flexDirection: "column", gap: 1 }}>
+        <nav style={{ flex: 1, padding: "10px 6px", display: "flex", flexDirection: "column", gap: 1, overflowY: "auto", overflowX: "hidden" }}>
           {navItems.map((item, idx) => {
             if (item.divider) {
               return <div key={`div-${idx}`} style={{ height: 1, background: colors.border, margin: "4px 6px", opacity: 0.6 }} />;
@@ -144,27 +257,57 @@ export default function App() {
           })}
         </nav>
 
-        <div style={{ padding: "8px 6px", borderTop: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ padding: "8px 6px", borderTop: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", gap: 2 }}>
           {isAdmin && <CfoChat data={{ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, settlementStatus }} t={t} sidebarOpen={sidebarOpen} isMobile={isMobile} />}
           {isAdmin && <SyncAllButton syncAll={syncAll} sidebarOpen={sidebarOpen} />}
-          <button onClick={() => setLang(lang === "en" ? "es" : "en")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
-            <Globe size={14} />{sidebarOpen && <span>{lang === "en" ? "Español" : "English"}</span>}
-          </button>
-          <button onClick={logout} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, width: "100%" }}>
-            <LogIn size={14} />{sidebarOpen && <span>{t.logout}</span>}
-          </button>
-          {sidebarOpen && <div style={{ padding: "6px 10px", fontSize: 11, color: colors.textMuted, display: "flex", alignItems: "center", gap: 6 }}><UserCheck size={12} /> {user.name} <Badge label={user.role} color={user.role === "admin" ? colors.green : user.role === "partner" ? colors.orange : colors.accent} /></div>}
+
+          {/* User info row — visible only when sidebar is open */}
           {sidebarOpen && (
-            <div style={{ padding: "4px 10px 8px", fontSize: 10, color: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : colors.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : "#555", display: "inline-block" }} />
-              {syncStatus === "saved" ? "Guardado ✓" : syncStatus === "saving" ? "Guardando..." : "Sin conexión (local)"}
+            <div style={{ padding: "6px 10px 4px", display: "flex", alignItems: "center", gap: 6 }}>
+              <UserCheck size={13} color={colors.textMuted} style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: colors.text, fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</span>
+              <Badge label={user.role} color={user.role === "admin" ? colors.green : user.role === "partner" ? colors.orange : colors.accent} />
             </div>
           )}
+
+          {/* Sync status — visible only when sidebar is open */}
+          {sidebarOpen && (
+            <div style={{ padding: "2px 10px 6px", fontSize: 10, color: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : syncStatus === "conflict" ? colors.red : colors.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: syncStatus === "saved" ? colors.green : syncStatus === "saving" ? colors.orange : syncStatus === "conflict" ? colors.red : "#555", flexShrink: 0, display: "inline-block" }} />
+              {syncStatus === "saved" ? "Guardado ✓" : syncStatus === "saving" ? "Guardando..." : syncStatus === "conflict" ? "Conflicto — recargando..." : "Sin conexión (local)"}
+            </div>
+          )}
+
+          {/* Divider above action buttons */}
+          <div style={{ height: 1, background: colors.border, margin: "2px 4px 4px", opacity: 0.7 }} />
+
+          {/* Logout button */}
+          <button
+            onClick={logout}
+            title="Cerrar sesión"
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", minHeight: 44, borderRadius: 7, border: "none", background: "transparent", color: colors.red, cursor: "pointer", fontSize: 13, fontWeight: 600, width: "100%", transition: "background 0.15s" }}
+            onMouseEnter={e => e.currentTarget.style.background = colors.red + "18"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+          >
+            <LogOut size={16} style={{ flexShrink: 0 }} />
+            {sidebarOpen && <span style={{ whiteSpace: "nowrap" }}>{t.logout}</span>}
+          </button>
+
+          {/* Language toggle button */}
+          <button
+            onClick={() => setLang(lang === "en" ? "es" : "en")}
+            title={lang === "en" ? "Cambiar a Español" : "Switch to English"}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", minHeight: 44, borderRadius: 7, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 13, width: "100%", transition: "background 0.15s" }}
+            onMouseEnter={e => e.currentTarget.style.background = colors.card}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+          >
+            <Globe size={16} style={{ flexShrink: 0 }} />
+            {sidebarOpen && <span style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Español" : "English"}</span>}
+          </button>
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "56px 14px 14px" : 20, position: "relative" }}>
-        {isMobile && <button onClick={() => setSidebarOpen(true)} style={{ position: "fixed", top: 16, left: 16, zIndex: 150, background: colors.accent, border: "none", borderRadius: 8, padding: "8px 11px", cursor: "pointer", color: "white", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}><Menu size={18} /></button>}
+      <div style={{ flex: 1, overflow: "auto", paddingTop: isMobile ? 52 : 20, paddingLeft: isMobile ? 14 : 20, paddingRight: isMobile ? 14 : 20, paddingBottom: isMobile ? `calc(56px + env(safe-area-inset-bottom))` : `calc(20px + env(safe-area-inset-bottom))`, position: "relative" }}>
         {showRecoveryBanner && (
           <div style={{ position: "sticky", top: 0, zIndex: 101, background: "#7c3aed", color: "#fff", padding: "10px 16px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderRadius: 8, marginBottom: 12 }}>
             <span>🔔 Tienes {localDataCount} registros locales que no están en el servidor. ¿Restaurar ahora?</span>
@@ -195,7 +338,8 @@ export default function App() {
         {page === "partnerDash" && isPartner  && <PartnerDashboard {...ctx} />}
         {page === "driverDash"  && isDriver   && <DriverDashboard  {...ctx} />}
         {page === "clients"     && isAdmin    && <ClientsPage      {...ctx} />}
-        {page === "cxc"         && isAdmin    && <CxCPage          {...ctx} />}
+        {page === "invoices"    && isAdmin    && <InvoicesPage      {...ctx} />}
+        {page === "cxc"         && isAdmin    && <CxCPage          {...ctx} setPage={setPage} />}
         {page === "trips"       && isAdmin    && <TripsPage        {...ctx} />}
         {page === "fleet"       && isAdmin    && <FleetPage        {...ctx} />}
         {page === "drivers"     && isAdmin    && <DriversPage      {...ctx} />}
@@ -205,9 +349,60 @@ export default function App() {
         {page === "cxp"         && isAdmin    && <CxPPage          {...ctx} />}
         {page === "nomina"      && isAdmin    && <NominaPage       {...ctx} />}
         {page === "suppliers"   && isAdmin    && <SuppliersPage    {...ctx} />}
-        {page === "settlements"               && <SettlementsPage  {...ctx} />}
+        {page === "settlements" && (isAdmin || isPartner) && <SettlementsPage  {...ctx} />}
         {page === "agents"      && isAdmin    && <AgentsPage       {...ctx} />}
       </div>
+
+      {/* Mobile bottom navigation — partner */}
+      {isMobile && user.role === "partner" && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 56, zIndex: 200, background: colors.card, borderTop: `1px solid ${colors.border}`, display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)" }}>
+          {[
+            { id: "partnerDash", icon: LayoutDashboard, label: t.partnerDashboard || "Dashboard" },
+            { id: "settlements", icon: Handshake,       label: t.settlements || "Liquidaciones" },
+          ].map(tab => {
+            const Icon = tab.icon; const isActive = page === tab.id;
+            return <button key={tab.id} onClick={() => setPage(tab.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: isActive ? colors.accent : colors.textMuted, cursor: "pointer", fontSize: 10, fontWeight: isActive ? 600 : 400, padding: "6px 0", minWidth: 0 }}>
+              <Icon size={20} color={isActive ? colors.accent : colors.textMuted} />
+              <span style={{ lineHeight: 1 }}>{tab.label}</span>
+            </button>;
+          })}
+        </div>
+      )}
+
+      {/* Mobile bottom navigation — driver */}
+      {isMobile && user.role === "driver" && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 56, zIndex: 200, background: colors.card, borderTop: `1px solid ${colors.border}`, display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)" }}>
+          <button onClick={() => setPage("driverDash")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: colors.accent, cursor: "pointer", fontSize: 10, fontWeight: 600, padding: "6px 0", minWidth: 0 }}>
+            <LayoutDashboard size={20} color={colors.accent} />
+            <span style={{ lineHeight: 1 }}>{t.dashboard}</span>
+          </button>
+          <button onClick={logout} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 10, padding: "6px 0", minWidth: 0 }}>
+            <LogOut size={20} color={colors.textMuted} />
+            <span style={{ lineHeight: 1 }}>{t.logout || "Salir"}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Mobile bottom navigation — admin only */}
+      {isMobile && user.role === "admin" && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 56, zIndex: 200, background: colors.card, borderTop: `1px solid ${colors.border}`, display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)" }}>
+          {bottomNavTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isMas = tab.id === "__mas__";
+            const isActive = !isMas && page === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => isMas ? setSidebarOpen(true) : setPage(tab.id)}
+                style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: isActive ? colors.accent : colors.textMuted, cursor: "pointer", fontSize: 10, fontWeight: isActive ? 600 : 400, padding: "6px 0", minWidth: 0 }}
+              >
+                <Icon size={20} color={isActive ? colors.accent : colors.textMuted} />
+                <span style={{ lineHeight: 1 }}>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
     </div>
   );

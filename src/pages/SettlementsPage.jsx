@@ -7,7 +7,7 @@ import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.js
 
 
 function SettlementCard({ card, partner, periodLabel, clients, trucks, t, isPartnerView, onToggle }) {
-  const { pTrips, pExpenses, retenciones, otrosGastos, rev, net, adminComm, toTransfer, status } = card;
+  const { pTrips, pExpenses, retenciones, otrosGastos, grossRev, passThruDeduction, rev, net, adminComm, toTransfer, status } = card;
   const isPaid = status === "paid";
   const [showDetail, setShowDetail] = useState(false);
 
@@ -36,6 +36,7 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, t, isPart
 
     {showDetail && <>
       <div style={{ marginTop: 12 }}>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
           <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
             <Th>Fecha</Th><Th>Ruta</Th><Th>Cliente</Th><Th>{t.truck}</Th><Th align="center">Estado</Th><Th align="right">Ingreso</Th>
@@ -53,17 +54,26 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, t, isPart
             </tr>;
           })}</tbody>
         </table>
+        </div>
       </div>
 
       <div style={{ background: colors.inputBg, borderRadius: 10, padding: "14px 16px", border: `1px solid ${colors.border}` }}>
         <h4 style={{ margin: "0 0 10px", fontSize: 13 }}>Resumen Financiero</h4>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: colors.textMuted }}>Ingreso Bruto</span>
-            <span style={{ fontWeight: 600, color: colors.green }}>+ {fmt(rev)}</span>
+            <span style={{ color: colors.textMuted }}>Ingreso Bruto (tarifas)</span>
+            <span style={{ fontWeight: 600, color: colors.green }}>+ {fmt(grossRev)}</span>
           </div>
+          {passThruDeduction > 0 && <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ color: colors.textMuted }}>{isPartnerView ? "Retenciones" : "Deducción broker (pass-through)"}</span>
+            <span style={{ color: colors.orange }}>− {fmt(passThruDeduction)}</span>
+          </div>}
+          {passThruDeduction > 0 && <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: 4, borderBottom: `1px dashed ${colors.border}` }}>
+            <span style={{ fontWeight: 600 }}>Ingreso Neto Recibido</span>
+            <span style={{ fontWeight: 700, color: colors.green }}>{fmt(rev)}</span>
+          </div>}
           {retenciones > 0 && <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: colors.textMuted }}>Retenciones</span>
+            <span style={{ color: colors.textMuted }}>{isPartnerView ? "Retenciones" : "Comisiones broker (gastos)"}</span>
             <span style={{ color: colors.orange }}>− {fmt(retenciones)}</span>
           </div>}
           {otrosGastos > 0 && (() => {
@@ -104,8 +114,11 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, t, isPart
   </Card>;
 }
 
-export default function SettlementsPage({ t, trips, trucks, expenses, clients, partners, settlementStatus, setSettlementStatus, user, partner, partnerTruckIds }) {
+export default function SettlementsPage({ t, trips, trucks, expenses, clients, partners, brokers, settlementStatus, setSettlementStatus, user, partner, partnerTruckIds, isMobile }) {
   const isPartnerView = user?.role === "partner";
+
+  const clientMap = new Map((clients || []).map(c => [c.id, c]));
+  const brokerMap = new Map((brokers || []).map(b => [b.id, b]));
 
   const toggleStatus = (key) => setSettlementStatus(prev => ({ ...prev, [key]: prev[key] === "paid" ? "unpaid" : "paid" }));
 
@@ -141,12 +154,24 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
     const pExpenses  = [...tripExpenses, ...overrideExpenses];
     const retenciones = pExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s+e.amount, 0);
     const otrosGastos = pExpenses.filter(e => e.category !== "broker_commission").reduce((s,e) => s+e.amount, 0);
-    const rev        = pTrips.reduce((s,tr) => s+tr.revenue, 0);
-    const net        = rev - retenciones - otrosGastos;
-    const adminComm  = Math.round(net * ((p.commissionPct||0) / 100));
-    const toTransfer = net - adminComm;
-    const status     = settlementStatus[key] || "unpaid";
-    return { pTrips, pExpenses, retenciones, otrosGastos, rev, net, adminComm, toTransfer, status, key };
+
+    // For pass-through clients the broker deducts before paying — no broker_commission expense exists,
+    // so we must reduce revenue directly to get the real amount that entered the business.
+    const passThruDeduction = pTrips.reduce((s, tr) => {
+      const cl = clientMap.get(tr.clientId);
+      if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return s;
+      const br = brokerMap.get(tr.brokerId);
+      if (!br) return s;
+      return s + Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
+    }, 0);
+
+    const grossRev    = pTrips.reduce((s,tr) => s+tr.revenue, 0);
+    const rev         = grossRev - passThruDeduction; // actual revenue received
+    const net         = rev - retenciones - otrosGastos;
+    const adminComm   = Math.round(net * ((p.commissionPct||0) / 100));
+    const toTransfer  = net - adminComm;
+    const status      = settlementStatus[key] || "unpaid";
+    return { pTrips, pExpenses, retenciones, otrosGastos, grossRev, passThruDeduction, rev, net, adminComm, toTransfer, status, key };
   };
 
   const periods = genPeriods(trips.map(tr => tr.date));
