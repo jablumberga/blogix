@@ -25,7 +25,7 @@ const TARIFARIO_T1T2 = [
   { province: "Samaná",                 municipality: "Santa Bárbara de Samaná",    priceT1: 2200, helperT1: 1000, dietaT1: 500, priceT2: 0,    helperT2: 0,    dietaT2: 0    },
   { province: "Independencia",          municipality: "Jimaní",                     priceT1: 0,    helperT1: 0,    dietaT1: 0,   priceT2: 4000, helperT2: 1500, dietaT2: 1000 },
 ];
-const TARGET_NAMES = ["luis alberto", "joan", "emil", "rober"];
+const TARGET_NAMES = ["luis alberto", "joan", "emil", "rober", "edwin"];
 
 export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks, trips, isMobile, expenses, setExpenses }) {
   const [showForm, setShowForm] = useState(false);
