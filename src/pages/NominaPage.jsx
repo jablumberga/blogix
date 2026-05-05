@@ -140,8 +140,8 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
         const rate = (driver.rates || []).find(r => r.province === trip.province && r.municipality === trip.municipality);
         if (rate) {
           dietaAmt = effectiveSize === "T2" ? (rate.dietaT2 || 0) : (rate.dietaT1 || 0);
-          ayudanteAmt = effectiveSize === "T2" ? (rate.helperT2 || 0) : (rate.helperT1 || 0);
-          baseChofer = Math.max(0, exp.amount - dietaAmt);
+          ayudanteAmt = effectiveSize === "T2" ? (rate.helperT2 || 0) * 2 : (rate.helperT1 || 0);
+          baseChofer = Math.max(0, exp.amount - dietaAmt - ayudanteAmt);
         }
       }
       const deductionsHTML = [
@@ -346,8 +346,8 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
             const rate = (driver.rates || []).find(r => r.province === trip.province && r.municipality === trip.municipality);
             if (rate) {
               expDieta = effectiveSize === "T2" ? (rate.dietaT2 || 0) : (rate.dietaT1 || 0);
-              expAyudante = effectiveSize === "T2" ? (rate.helperT2 || 0) : (rate.helperT1 || 0);
-              expBaseChofer = Math.max(0, exp.amount - expDieta);
+              expAyudante = effectiveSize === "T2" ? (rate.helperT2 || 0) * 2 : (rate.helperT1 || 0);
+              expBaseChofer = Math.max(0, exp.amount - expDieta - expAyudante);
             }
           }
           return <Fragment key={exp.id}>

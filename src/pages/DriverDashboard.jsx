@@ -73,7 +73,9 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
         if (rate) {
           const tk = trucks.find(t2 => t2.id === Number(data.truckId));
           const size = tk?.size || "T1";
-          driverPay = size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0);
+          driverPay = size === "T2"
+            ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) + (rate.helperT2 || 0) * 2
+            : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0) + (rate.helperT1 || 0);
         }
       } else {
         driverPay = Math.round((data.revenue || 0) * 0.20);
@@ -108,7 +110,9 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
       if (!rate) return 0;
       const tk = trucks.find(t2 => t2.id === tr.truckId);
       const size = tr.tarifaOverride || tk?.size || "T1";
-      return size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0);
+      return size === "T2"
+        ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) + (rate.helperT2 || 0) * 2
+        : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0) + (rate.helperT1 || 0);
     }
     if (driverObj?.salaryType === "porcentaje") return (tr.revenue || 0) * ((driverObj.percentageAmount || 0) / 100);
     return 0;
@@ -122,7 +126,7 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
     if (driverObj?.salaryType === "fixed") return sum + (driverObj.fixedAmount || 0);
     return sum + allMyTrips.filter(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo).reduce((s, tr) => s + calcPay(tr), 0);
   }, 0);
-  const totalHelpers = allMyTrips.reduce((s, tr) => s + (tr.helpers || []).reduce((h, x) => h + (x.pay || 0), 0), 0);
+  const totalHelpers = driverObj?.salaryType === "perTrip" ? 0 : allMyTrips.reduce((s, tr) => s + (tr.helpers || []).reduce((h, x) => h + (x.pay || 0), 0), 0);
   const totalDescuentos = allMyTrips.reduce((s, tr) => s + (tr.discounts || []).reduce((d, x) => d + (x.amount || 0), 0), 0);
   const totalAdelantos = (expenses || []).filter(e => e.category === "adelanto_conductor" && (e.driverId === driverObj?.id || (e.tripId && allMyTrips.some(tr => tr.id === e.tripId)))).reduce((s, e) => s + (e.amount || 0), 0);
   const totalNeto = Math.max(0, totalBruto - totalHelpers - totalDescuentos - totalAdelantos);
@@ -214,7 +218,9 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
       if (!rate) return 0;
       const tk = trucks.find(t2 => t2.id === tr.truckId);
       const size = tr.tarifaOverride || tk?.size || "T1";
-      return size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0);
+      return size === "T2"
+        ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) + (rate.helperT2 || 0) * 2
+        : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0) + (rate.helperT1 || 0);
     }
     if (driverObj?.salaryType === "porcentaje") return (tr.revenue || 0) * ((driverObj.percentageAmount || 0) / 100);
     return 0;
@@ -231,7 +237,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
   );
   const brutoPay = totalOverrideExp ? totalOverrideExp.amount : calcBruto;
 
-  const helperPay = periodTrips.reduce((s, tr) => s + (tr.helpers || []).reduce((h, x) => h + (x.pay || 0), 0), 0);
+  const helperPay = driverObj?.salaryType === "perTrip" ? 0 : periodTrips.reduce((s, tr) => s + (tr.helpers || []).reduce((h, x) => h + (x.pay || 0), 0), 0);
   const discountsTotal = periodTrips.reduce((s, tr) => s + (tr.discounts || []).reduce((d, x) => d + (x.amount || 0), 0), 0);
 
   const adelantoExps = (expenses || []).filter(e =>
@@ -288,7 +294,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                   const trSize = (tr.tarifaOverride && tr.tarifaOverride !== "custom") ? tr.tarifaOverride : (trTk?.size || "T1");
                   const basePay = trRate ? (trSize === "T2" ? (trRate.priceT2 ?? trRate.priceT1 ?? 0) : (trRate.priceT1 ?? 0)) : calcDriverPay(tr);
                   const dieta = trRate ? (trSize === "T2" ? (trRate.dietaT2 || 0) : (trRate.dietaT1 || 0)) : 0;
-                  const ayudanteRef = trRate ? (trSize === "T2" ? (trRate.helperT2 || 0) : (trRate.helperT1 || 0)) : 0;
+                  const ayudanteRef = trRate ? (trSize === "T2" ? (trRate.helperT2 || 0) * 2 : (trRate.helperT1 || 0)) : 0;
                   const tripHelpers = (tr.helpers || []).reduce((s, x) => s + (x.pay || 0), 0);
                   const tripDiscounts = (tr.discounts || []).reduce((s, x) => s + (x.amount || 0), 0);
                   const stColor = tr.status === "delivered" ? colors.green : tr.status === "in_transit" ? colors.yellow : colors.accent;
@@ -306,9 +312,10 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                       {(() => {
                         const linkedAdel = adelantoExps.find(e => e.tripId === tr.id);
                         const adelAmt = linkedAdel ? linkedAdel.amount : 0;
-                        if (tripHelpers === 0 && tripDiscounts === 0 && adelAmt === 0) return <Td align="right" color={colors.textMuted}>—</Td>;
+                        const showHelpers = driverObj?.salaryType !== "perTrip" && tripHelpers > 0;
+                        if (!showHelpers && tripDiscounts === 0 && adelAmt === 0) return <Td align="right" color={colors.textMuted}>—</Td>;
                         return <Td align="right" style={{ lineHeight: 1.4, verticalAlign: "top" }}>
-                          {tripHelpers > 0 && <div style={{ color: colors.orange, fontWeight: 600 }}>− {fmt(tripHelpers)}</div>}
+                          {showHelpers && <div style={{ color: colors.orange, fontWeight: 600 }}>− {fmt(tripHelpers)}</div>}
                           {tripDiscounts > 0 && <div style={{ color: colors.red, fontWeight: 600 }}>− {fmt(tripDiscounts)}</div>}
                           {adelAmt > 0 && <div style={{ fontSize: 10, color: colors.orange }}>↳ Adel − {fmt(adelAmt)}</div>}
                         </Td>;
