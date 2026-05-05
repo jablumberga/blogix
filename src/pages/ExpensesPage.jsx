@@ -21,12 +21,14 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
 
   const tripMap = useMemo(() => new Map((trips||[]).map(tr => [tr.id, tr])), [trips]);
 
-  const byCategory = EXPENSE_CATEGORIES.map(c => ({ cat: c, label: t[c] || c, total: expenses.filter(e => e.category === c).reduce((s, e) => s + e.amount, 0) })).filter(c => c.total > 0).sort((a, b) => b.total - a.total);
-  const total        = expenses.reduce((s, e) => s + e.amount, 0);
-  const pendingTotal = expenses.filter(e => !e.status || e.status === "pending").reduce((s, e) => s + e.amount, 0);
-  const paidTotal    = expenses.filter(e => e.status === "paid").reduce((s, e) => s + e.amount, 0);
+  // Exclude nominaTotalOverride from Gastos — it's an internal NominaPage marker, not a payable expense
+  const visibleExp   = expenses.filter(e => e.category !== "nominaTotalOverride");
+  const byCategory = EXPENSE_CATEGORIES.map(c => ({ cat: c, label: t[c] || c, total: visibleExp.filter(e => e.category === c).reduce((s, e) => s + e.amount, 0) })).filter(c => c.total > 0).sort((a, b) => b.total - a.total);
+  const total        = visibleExp.reduce((s, e) => s + e.amount, 0);
+  const pendingTotal = visibleExp.filter(e => !e.status || e.status === "pending").reduce((s, e) => s + e.amount, 0);
+  const paidTotal    = visibleExp.filter(e => e.status === "paid").reduce((s, e) => s + e.amount, 0);
 
-  let filtered = filterCat === "all" ? expenses : expenses.filter(e => e.category === filterCat);
+  let filtered = filterCat === "all" ? visibleExp : visibleExp.filter(e => e.category === filterCat);
   if (filterStatus !== "all") filtered = filtered.filter(e => filterStatus === "pending" ? (!e.status || e.status === "pending") : e.status === filterStatus);
   if (filterTruck !== "all") filtered = filtered.filter(e => expenseTruckId(e, tripMap) === Number(filterTruck));
 

@@ -101,9 +101,16 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       (e.tripId && periodTripIds.has(e.tripId)) ||
       (!e.tripId && e.date >= dateFrom && e.date <= dateTo)
     );
-    const nomina     = periodExpenses.filter(e => e.category === "driverPay").reduce((s,e) => s + e.amount, 0);
+    // Exclude driverPay for any driver+period that has a nominaTotalOverride (prevents double-count)
+    const pKey = (e) => e.driverId ? `${e.driverId}-${(e.date||"").slice(0,7)}-${parseInt((e.date||"").slice(8)||0,10)<=15?1:2}` : null;
+    const overridePKeys = new Set(periodExpenses.filter(e => e.category === "nominaTotalOverride").map(pKey).filter(Boolean));
+    const nomina     = periodExpenses.filter(e => {
+      if (e.category === "nominaTotalOverride") return true;
+      if (e.category === "driverPay") return !overridePKeys.has(pKey(e));
+      return false;
+    }).reduce((s,e) => s + e.amount, 0);
     const brokerFees = periodExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s + e.amount, 0);
-    const operExp    = periodExpenses.filter(e => !["driverPay","broker_commission"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
+    const operExp    = periodExpenses.filter(e => !["driverPay","nominaTotalOverride","broker_commission","adelanto_conductor"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
     const totalExp   = nomina + brokerFees + operExp;
     // grossProfit uses netRevenue: broker pass-through deductions are contra-revenue,
     // and since syncAll doesn't generate broker_commission expenses for pass-through clients,
@@ -151,7 +158,14 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   // ── CxP (accounts payable — all pending expenses) ──────────────────────
   const { cxpNomina, cxpSupplier, cxpFijos, totalCxP } = useMemo(() => {
     const allPending  = expenses.filter(e => !e.status || e.status === "pending");
-    const cxpNomina   = allPending.filter(e => e.category === "driverPay").reduce((s,e) => s + e.amount, 0);
+    // Same override-aware exclusion for CxP: exclude driverPay for periods with a nominaTotalOverride
+    const cxpPKey = (e) => e.driverId ? `${e.driverId}-${(e.date||"").slice(0,7)}-${parseInt((e.date||"").slice(8)||0,10)<=15?1:2}` : null;
+    const cxpOverridePKeys = new Set(expenses.filter(e => e.category === "nominaTotalOverride").map(cxpPKey).filter(Boolean));
+    const cxpNomina   = allPending.filter(e => {
+      if (e.category === "nominaTotalOverride") return true;
+      if (e.category === "driverPay") return !cxpOverridePKeys.has(cxpPKey(e));
+      return false;
+    }).reduce((s,e) => s + e.amount, 0);
     const cxpSupplier = allPending.filter(e => ["fuel","repair","maintenance","tire","helper","other","toll"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
     const cxpFijos    = allPending.filter(e => ["loan","insurance"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
     return { cxpNomina, cxpSupplier, cxpFijos, totalCxP: cxpNomina + cxpSupplier + cxpFijos };

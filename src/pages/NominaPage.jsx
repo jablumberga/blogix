@@ -473,7 +473,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
       }
       return prev.map(e => {
         if (!isPayEntry(e, driver, pd)) return e;
-        if (hasOverride && e.category !== "nominaTotalOverride") return e;
+        // Mark both the override AND the original driverPay entries as paid, so CxP stays clean
         if (!e.status || e.status === "pending")
           return { ...e, status: "paid", paidDate: new Date().toISOString().slice(0, 10) };
         return e;
