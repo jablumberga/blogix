@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 
 import { Clock, ChevronDown, ChevronRight, CheckCircle2, Users, FileText, Pencil, X, Check } from "lucide-react";
 import { colors } from "../constants/theme.js";
@@ -16,7 +16,7 @@ function OverrideInline({ exp, onSave, onCancel }) {
 
   return (
     <tr style={{ background: colors.accent + "0a" }}>
-      <td colSpan={5} style={{ padding: "8px 10px" }}>
+      <td colSpan={7} style={{ padding: "8px 10px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 11, color: colors.textMuted }}>Override pago:</span>
           <input
@@ -62,7 +62,7 @@ function TotalOverrideInline({ current, note, onSave, onCancel }) {
   );
 }
 
-function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal, trips, allExpenses, periodDateFrom, periodDateTo, periodLabel, onMarkPaid, onMarkUnpaid, setExpenses }) {
+function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal, trips, allExpenses, periodDateFrom, periodDateTo, periodLabel, onMarkPaid, onMarkUnpaid, setExpenses, trucks }) {
   const [showDetail, setShowDetail] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editingTotal, setEditingTotal] = useState(false);
@@ -133,6 +133,17 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
       const tripDiscounts = trip ? (trip.discounts || []).filter(d => d.amount > 0) : [];
       const linkedAdel = adelantoExps.find(a => a.tripId === exp.tripId);
       const isOverridden = exp.calcAmount !== undefined && exp.calcAmount !== exp.amount;
+      let dietaAmt = 0, ayudanteAmt = 0, baseChofer = exp.amount;
+      if (driver.salaryType === "perTrip" && trip) {
+        const tk = (trucks || []).find(t => t.id === trip.truckId);
+        const effectiveSize = (trip.tarifaOverride && trip.tarifaOverride !== "custom") ? trip.tarifaOverride : (tk?.size || "T1");
+        const rate = (driver.rates || []).find(r => r.province === trip.province && r.municipality === trip.municipality);
+        if (rate) {
+          dietaAmt = effectiveSize === "T2" ? (rate.dietaT2 || 0) : (rate.dietaT1 || 0);
+          ayudanteAmt = effectiveSize === "T2" ? (rate.helperT2 || 0) : (rate.helperT1 || 0);
+          baseChofer = Math.max(0, exp.amount - dietaAmt);
+        }
+      }
       const deductionsHTML = [
         ...tripDiscounts.map(d => `<div style="font-size:11px;color:#c0392b;padding-left:8px">↳ Desc: ${d.desc || "—"} − ${fmt(d.amount)}</div>`),
         ...(linkedAdel ? [`<div style="font-size:11px;color:#e67e22;padding-left:8px">↳ Adelanto: − ${fmt(linkedAdel.amount)}</div>`] : []),
@@ -143,7 +154,9 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
         <td>${exp.date}</td>
         <td style="color:#666">${exp.tripId ? `#${exp.tripId}` : "—"}</td>
         <td>${route}</td>
-        <td style="text-align:right;font-weight:600;color:${isPaid ? "#27ae60" : "#e67e22"}">${fmt(exp.amount)}</td>
+        <td style="text-align:right;font-weight:600;color:${isPaid ? "#27ae60" : "#e67e22"}">${fmt(baseChofer)}</td>
+        <td class="right">${dietaAmt > 0 ? fmt(dietaAmt) : "—"}</td>
+        <td class="right">${ayudanteAmt > 0 ? fmt(ayudanteAmt) : "—"}</td>
         <td style="font-size:12px">${deductionsHTML || "—"}</td>
       </tr>`;
     }).join("");
@@ -190,35 +203,30 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
 <table>
   <thead>
     <tr>
-      <th>Fecha</th><th>Viaje</th><th>Ruta</th><th class="right">Tu Pago</th><th>Descuentos / Notas</th>
+      <th>Fecha</th><th>Viaje</th><th>Ruta</th><th class="right">Chofer</th><th class="right">Dieta</th><th class="right">Ayudante*</th><th>Descuentos / Notas</th>
     </tr>
   </thead>
   <tbody>
     ${tripRowsHTML}
     <tr class="sep">
-      <td colspan="3" class="total-lbl">Bruto calculado:</td>
+      <td colspan="6" class="total-lbl">Bruto calculado:</td>
       <td class="total-val" style="color:#e67e22">${fmt(pendingTotal)}</td>
-      <td></td>
     </tr>
     ${totalOverrideExp ? `<tr>
-      <td colspan="3" class="total-lbl" style="color:#7c3aed">✏️ Override total${totalOverrideExp.overrideNote ? ` (${totalOverrideExp.overrideNote})` : ""}:</td>
+      <td colspan="6" class="total-lbl" style="color:#7c3aed">✏️ Override total${totalOverrideExp.overrideNote ? ` (${totalOverrideExp.overrideNote})` : ""}:</td>
       <td class="total-val" style="color:#7c3aed">${fmt(totalOverrideExp.amount)}</td>
-      <td></td>
     </tr>` : ""}
     ${adelantos > 0 ? `<tr>
-      <td colspan="3" class="total-lbl red">Adelantos a descontar:</td>
+      <td colspan="6" class="total-lbl red">Adelantos a descontar:</td>
       <td class="total-val red">− ${fmt(adelantos)}</td>
-      <td></td>
     </tr>` : ""}
     <tr>
-      <td colspan="3" class="neto-lbl">💰 NETO A TRANSFERIR:</td>
+      <td colspan="6" class="neto-lbl">💰 NETO A TRANSFERIR:</td>
       <td class="neto-val">${fmt(netoAPagar)}</td>
-      <td></td>
     </tr>
     ${paidTotal > 0 ? `<tr>
-      <td colspan="3" class="total-lbl green">Ya pagado este corte:</td>
+      <td colspan="6" class="total-lbl green">Ya pagado este corte:</td>
       <td class="total-val green">${fmt(paidTotal)}</td>
-      <td></td>
     </tr>` : ""}
   </tbody>
 </table>
@@ -322,7 +330,7 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
       <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-          <Th>Fecha</Th><Th>Viaje #</Th><Th>Ruta</Th><Th align="right">Pago</Th><Th align="right">Estado</Th>
+          <Th>Fecha</Th><Th>Viaje #</Th><Th>Ruta</Th><Th align="right">Chofer</Th><Th align="right">Dieta</Th><Th align="right">Ayudante*</Th><Th align="right">Estado</Th>
         </tr></thead>
         <tbody>{exps.map(exp => {
           const trip = trips.find(tr => tr.id === exp.tripId);
@@ -331,8 +339,19 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
           const tripDiscounts = trip ? (trip.discounts || []).filter(d => d.amount > 0) : [];
           const isOverridden = exp.calcAmount !== undefined && exp.calcAmount !== exp.amount;
           const isEditing = editingId === exp.id;
-          return <>
-            <tr key={exp.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+          let expDieta = 0, expAyudante = 0, expBaseChofer = exp.amount;
+          if (driver.salaryType === "perTrip" && trip) {
+            const tk = (trucks || []).find(t => t.id === trip.truckId);
+            const effectiveSize = (trip.tarifaOverride && trip.tarifaOverride !== "custom") ? trip.tarifaOverride : (tk?.size || "T1");
+            const rate = (driver.rates || []).find(r => r.province === trip.province && r.municipality === trip.municipality);
+            if (rate) {
+              expDieta = effectiveSize === "T2" ? (rate.dietaT2 || 0) : (rate.dietaT1 || 0);
+              expAyudante = effectiveSize === "T2" ? (rate.helperT2 || 0) : (rate.helperT1 || 0);
+              expBaseChofer = Math.max(0, exp.amount - expDieta);
+            }
+          }
+          return <Fragment key={exp.id}>
+            <tr style={{ borderBottom: `1px solid ${colors.border}11` }}>
               <Td>{exp.date}</Td>
               <Td>{exp.tripId ? `#${exp.tripId}` : "—"}</Td>
               <Td>{trip ? `${trip.municipality || trip.destination || "—"}, ${trip.province || ""}` : exp.description}</Td>
@@ -341,7 +360,7 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
                   {isOverridden && (
                     <span style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(exp.calcAmount)}</span>
                   )}
-                  <span style={{ fontWeight: 700, color: isOverridden ? "#9b7fe8" : (isPaid ? colors.green : colors.orange) }}>{fmt(exp.amount)}</span>
+                  <span style={{ fontWeight: 700, color: isOverridden ? "#9b7fe8" : (isPaid ? colors.green : colors.orange) }}>{fmt(expBaseChofer)}</span>
                   {!isPaid && (
                     <button
                       onClick={() => setEditingId(isEditing ? null : exp.id)}
@@ -356,6 +375,8 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
                   <div style={{ fontSize: 10, color: "#9b7fe8", marginTop: 2 }}>✏️ {exp.overrideNote}</div>
                 )}
               </Td>
+              <Td align="right" color={expDieta > 0 ? colors.accent : colors.textMuted}>{expDieta > 0 ? fmt(expDieta) : "—"}</Td>
+              <Td align="right" color={expAyudante > 0 ? colors.cyan : colors.textMuted}>{expAyudante > 0 ? fmt(expAyudante) : "—"}</Td>
               <Td align="right"><Badge label={isPaid ? "✓ Pagado" : "Pendiente"} color={isPaid ? colors.green : colors.orange} /></Td>
             </tr>
             {isEditing && (
@@ -368,17 +389,17 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
             )}
             {tripDiscounts.map((d, i) => (
               <tr key={`d-${exp.id}-${i}`} style={{ background: "#c0392b08" }}>
-                <Td></Td><Td colSpan={2} style={{ fontSize: 11, color: "#c0392b", paddingLeft: 20 }}>↳ Desc: {d.desc || "—"}</Td>
+                <Td></Td><Td colSpan={4} style={{ fontSize: 11, color: "#c0392b", paddingLeft: 20 }}>↳ Desc: {d.desc || "—"}</Td>
                 <Td align="right" style={{ fontSize: 11, color: "#c0392b" }}>− {fmt(d.amount)}</Td><Td></Td>
               </tr>
             ))}
             {linkedAdel && (
               <tr key={`a-${exp.id}`} style={{ background: "#e67e2208" }}>
-                <Td></Td><Td colSpan={2} style={{ fontSize: 11, color: "#e67e22", paddingLeft: 20 }}>↳ Adelanto vinculado</Td>
+                <Td></Td><Td colSpan={4} style={{ fontSize: 11, color: "#e67e22", paddingLeft: 20 }}>↳ Adelanto vinculado</Td>
                 <Td align="right" style={{ fontSize: 11, color: "#e67e22" }}>− {fmt(linkedAdel.amount)}</Td><Td></Td>
               </tr>
             )}
-          </>;
+          </Fragment>;
         })}</tbody>
       </table>
       </div>
@@ -386,7 +407,7 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
   </Card>;
 }
 
-function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, allExpenses, markPaid, markUnpaid, defaultOpen, setExpenses }) {
+function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, allExpenses, markPaid, markUnpaid, defaultOpen, setExpenses, trucks }) {
   const [open, setOpen] = useState(defaultOpen);
   const allPaid = periodPending === 0;
 
@@ -412,7 +433,8 @@ function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, 
         periodDateFrom={pd.dateFrom} periodDateTo={pd.dateTo} periodLabel={pd.label}
         onMarkPaid={(effectiveTotal) => markPaid(g.driver, pd, effectiveTotal)}
         onMarkUnpaid={() => markUnpaid(g.driver, pd)}
-        setExpenses={setExpenses} />
+        setExpenses={setExpenses}
+        trucks={trucks} />
     ))}
   </div>;
 }
@@ -429,6 +451,26 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
       const hasOverride = prev.some(e =>
         e.category === "nominaTotalOverride" && isPayEntry(e, driver, pd)
       );
+      const hasAnyRealEntry = prev.some(e => isPayEntry(e, driver, pd));
+      // Fixed-salary driver with no real expense for this period: create a paid nominaTotalOverride
+      if (driver.salaryType === "fixed" && !hasAnyRealEntry) {
+        const fixedAmt = effectiveTotal != null ? effectiveTotal : (driver.fixedAmount || 0);
+        const periodDate = pd.half === 1 ? `${pd.mStr}-01` : `${pd.mStr}-16`;
+        const newId = Math.max(0, ...prev.map(e => e.id)) + 1;
+        return [...prev, {
+          id: newId,
+          category: "nominaTotalOverride",
+          driverId: driver.id,
+          amount: fixedAmt,
+          date: periodDate,
+          status: "paid",
+          paidDate: new Date().toISOString().slice(0, 10),
+          description: `Nómina fija — ${driver.name || driver.driverName} ${pd.mStr} H${pd.half}`,
+          paymentMethod: "transfer",
+          supplierId: null,
+          tripId: null,
+        }];
+      }
       return prev.map(e => {
         if (!isPayEntry(e, driver, pd)) return e;
         if (hasOverride && e.category !== "nominaTotalOverride") return e;
@@ -503,7 +545,8 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
       <NominaPeriodGroup key={`${pd.mStr}-${pd.half}`} pd={pd} driverCards={driverCards}
         periodPending={periodPending} periodPaid={periodPaid} trips={trips}
         allExpenses={expenses} markPaid={markPaid} markUnpaid={markUnpaid} defaultOpen={idx === 0}
-        setExpenses={setExpenses} />
+        setExpenses={setExpenses}
+        trucks={trucks} />
     ))}
   </div>;
 }

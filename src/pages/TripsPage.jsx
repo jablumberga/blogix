@@ -29,8 +29,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     const cl = clients.find(c => c.id === Number(cid));
     const f = { ...form, clientId: Number(cid) || "" };
     if (cl) {
-      if (cl.rules.requiresDocuments) f.docStatus = "pending";
-      if (cl.rules.defaultBrokerId) f.brokerId = cl.rules.defaultBrokerId;
+      if (cl.rules?.requiresDocuments) f.docStatus = "pending";
+      if (cl.rules?.defaultBrokerId) f.brokerId = cl.rules.defaultBrokerId;
       tryApplyRate(f, cl);
     }
     setForm(f);
@@ -81,7 +81,18 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const handleDestChange = (field, val) => {
     const f = { ...form, [field]: val };
     if (field === "province") { f.municipality = ""; setRateMsg(""); }
-    else tryApplyRate(f, null);
+    else {
+      tryApplyRate(f, null);
+      if (val && f.driverId) {
+        const driver = drivers.find(d => d.id === Number(f.driverId));
+        if (driver?.salaryType === "perTrip") {
+          const tk = trucks.find(t2 => t2.id === Number(f.truckId));
+          const size = (f.tarifaOverride && f.tarifaOverride !== "custom") ? f.tarifaOverride : (tk?.size || "T1");
+          const driverRate = (driver.rates || []).find(r => r.province === f.province && r.municipality === val);
+          f.helperPayEach = driverRate ? (size === "T2" ? (driverRate.helperT2 || 0) : (driverRate.helperT1 || 0)) : "";
+        }
+      }
+    }
     setForm(f);
   };
 
@@ -92,7 +103,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     const revNum = Number(form.revenue);
     if (isNaN(revNum) || revNum < 0) { setFormError(t.invalidRevenue || "Ingreso debe ser ≥ 0"); return; }
     const cl = clients.find(c => c.id === Number(form.clientId));
-    if (cl?.rules.requiresInvoiceRef && !form.invoiceRef) { setFormError(t.invoiceRefRequired); return; }
+    if (cl?.rules?.requiresInvoiceRef && !form.invoiceRef) { setFormError(t.invoiceRefRequired); return; }
     const helpersPay = Number(form.helperPayEach) || 0;
     const helpersArr = Array.from({ length: Number(form.numHelpers) || 0 }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
     const data = { ...form, truckId: Number(form.truckId), driverId: Number(form.driverId), clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr };
@@ -104,7 +115,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         if (rate) {
           const tk = trucks.find(t2 => t2.id === Number(d.truckId));
           const size = d.tarifaOverride || tk?.size || "T1";
-          return size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
+          return size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0);
         }
         return 0;
       }
@@ -113,12 +124,13 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     if (editId) {
       const prevTrip = trips.find(tr => tr.id === editId);
       setTrips(trips.map(tr => tr.id === editId ? { ...data, id: editId } : tr));
-      const payChanged = prevTrip && (prevTrip.revenue !== data.revenue || prevTrip.truckId !== data.truckId || prevTrip.driverId !== data.driverId);
+      const payChanged = prevTrip && (prevTrip.revenue !== data.revenue || prevTrip.truckId !== data.truckId || prevTrip.driverId !== data.driverId || prevTrip.province !== data.province || prevTrip.municipality !== data.municipality);
       if (payChanged && data.revenue > 0) {
+        const discountTotal = (data.tripDiscounts || data.discounts || []).reduce((s, d) => s + (typeof d === "number" ? d : Number(d?.amount) || 0), 0);
         setExpenses(prev => prev.map(e => {
           if (e.tripId === editId && e.category === "driverPay") {
             const driver = drivers.find(d => d.id === data.driverId);
-            const newPay = calcDriverPay(driver, data);
+            const newPay = Math.max(0, calcDriverPay(driver, data) - discountTotal);
             const pct = driver?.salaryType === "porcentaje" ? (driver.percentageAmount || 0) : 20;
             return { ...e, amount: newPay, description: `Nómina ${pct}%: ${driver?.name || ''}`, tripId: editId, driverId: data.driverId };
           }
@@ -138,7 +150,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       if (data.revenue > 0 && data.driverId) {
         const driver = drivers.find(d => d.id === data.driverId);
         if (driver?.salaryType !== "fixed") {
-          const driverPay = calcDriverPay(driver, data);
+          const discountTotal = (data.tripDiscounts || data.discounts || []).reduce((s, d) => s + (typeof d === "number" ? d : Number(d?.amount) || 0), 0);
+          const driverPay = Math.max(0, calcDriverPay(driver, data) - discountTotal);
           const pct = driver?.salaryType === "porcentaje" ? (driver.percentageAmount || 0) : 20;
           const driverName = driver ? driver.name : `Conductor #${data.driverId}`;
           if (driverPay > 0) newExpenses.push({ category: "driverPay", amount: driverPay, description: `Nómina ${pct}%: ${driverName}`, paymentMethod: "transfer", driverId: data.driverId, status: "pending" });
@@ -157,7 +170,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
 
   const addExpense = () => {
     if (!expForm.amount || !expModal) return;
-    setExpenses([...expenses, { id: nxId(expenses), tripId: expModal, date: expForm.date, category: expForm.category, amount: Number(expForm.amount), paymentMethod: expForm.paymentMethod, description: expForm.description, supplierId: null }]);
+    setExpenses(prev => [...prev, { id: nxId(prev), tripId: expModal, date: expForm.date, category: expForm.category, amount: Number(expForm.amount), paymentMethod: expForm.paymentMethod, description: expForm.description, supplierId: null }]);
     setExpForm({ date: today(), category: "fuel", amount: "", paymentMethod: "cash", description: "" });
   };
 
@@ -278,14 +291,14 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, marginTop: 10 }}>
           <Inp label={t.cargo} value={form.cargo} onChange={e => setForm({ ...form, cargo: e.target.value })} />
           <Inp label={t.weight} type="number" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} />
-          {selectedClient?.rules.requiresInvoiceRef && <Inp label={t.invoiceRef + " *"} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: !form.invoiceRef ? colors.red : colors.border }} />}
+          {selectedClient?.rules?.requiresInvoiceRef && <Inp label={t.invoiceRef + " *"} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: !form.invoiceRef ? colors.red : colors.border }} />}
         </div>
-        {selectedClient && <div style={{ margin: "10px 0", padding: 10, background: colors.purple + "08", borderRadius: 8, border: `1px solid ${colors.purple}30`, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: 11 }}>
-          <Badge label={`${selectedClient.rules.paymentTerms}d`} color={colors.accent} icon={Calendar} />
-          {selectedClient.rules.requiresPOD && <Badge label="POD" color={colors.orange} icon={FileCheck} />}
-          {selectedClient.rules.requiresInvoiceRef && <Badge label={t.invoiceRef} color={colors.red} icon={Hash} />}
-          {selectedClient.rules.requiresDocuments && <Badge label={t.document} color={colors.purple} icon={FileText} />}
-          {selectedClient.rules.defaultBrokerId && (() => { const b = brokers.find(x => x.id === selectedClient.rules.defaultBrokerId); return b ? <Badge label={`${t.broker}: ${b.name} ${b.commissionPct}%`} color={colors.yellow} icon={Handshake} /> : null; })()}
+        {selectedClient && selectedClient.rules && <div style={{ margin: "10px 0", padding: 10, background: colors.purple + "08", borderRadius: 8, border: `1px solid ${colors.purple}30`, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: 11 }}>
+          <Badge label={`${selectedClient.rules?.paymentTerms}d`} color={colors.accent} icon={Calendar} />
+          {selectedClient.rules?.requiresPOD && <Badge label="POD" color={colors.orange} icon={FileCheck} />}
+          {selectedClient.rules?.requiresInvoiceRef && <Badge label={t.invoiceRef} color={colors.red} icon={Hash} />}
+          {selectedClient.rules?.requiresDocuments && <Badge label={t.document} color={colors.purple} icon={FileText} />}
+          {selectedClient.rules?.defaultBrokerId && (() => { const b = brokers.find(x => x.id === selectedClient.rules.defaultBrokerId); return b ? <Badge label={`${t.broker}: ${b.name} ${b.commissionPct}%`} color={colors.yellow} icon={Handshake} /> : null; })()}
         </div>}
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22` }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>

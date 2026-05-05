@@ -9,7 +9,7 @@ export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks,
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, percentageAmount: 0, username: "", password: "", rates: [] });
-  const [rForm, setRForm] = useState({ province: "", municipality: "", priceT1: "", priceT2: "" });
+  const [rForm, setRForm] = useState({ province: "", municipality: "", priceT1: "", priceT2: "", helperT1: "", helperT2: "", dietaT1: "", dietaT2: "" });
   const [error, setError] = useState("");
 
   const openNew = () => { setForm({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, percentageAmount: 0, username: "", password: "", rates: [] }); setEditId(null); setError(""); setShowForm(true); };
@@ -42,9 +42,9 @@ export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks,
     setShowForm(false);
   };
   const addRate = () => {
-    if (!rForm.province || !rForm.municipality || !rForm.priceT1 || !rForm.priceT2) return;
-    setForm({ ...form, rates: [...(form.rates || []), { id: nxId(form.rates || []), province: rForm.province, municipality: rForm.municipality, priceT1: Number(rForm.priceT1), priceT2: Number(rForm.priceT2) }] });
-    setRForm({ province: "", municipality: "", priceT1: "", priceT2: "" });
+    if (!rForm.province || !rForm.municipality || !rForm.priceT1) return;
+    setForm({ ...form, rates: [...(form.rates || []), { id: nxId(form.rates || []), province: rForm.province, municipality: rForm.municipality, priceT1: Number(rForm.priceT1), priceT2: Number(rForm.priceT2) || 0, helperT1: Number(rForm.helperT1) || 0, helperT2: Number(rForm.helperT2) || 0, dietaT1: Number(rForm.dietaT1) || 0, dietaT2: Number(rForm.dietaT2) || 0 }] });
+    setRForm({ province: "", municipality: "", priceT1: "", priceT2: "", helperT1: "", helperT2: "", dietaT1: "", dietaT2: "" });
   };
 
   return <div>
@@ -71,8 +71,9 @@ export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks,
         <h4 style={{ margin: "0 0 8px", fontSize: 12, color: colors.green }}>{t.driverRateSheet} (T1 / T2)</h4>
         {(form.rates || []).map(r => <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", fontSize: 11 }}>
           <span style={{ flex: 1 }}>{r.municipality}, {r.province}</span>
-          <span style={{ fontWeight: 600, color: colors.accent }}>T1: {fmt(r.priceT1 ?? r.price ?? 0)}</span>
-          <span style={{ fontWeight: 600, color: colors.orange }}>T2: {fmt(r.priceT2 ?? r.price ?? 0)}</span>
+          <span style={{ fontWeight: 600, color: colors.accent }}>T1: {fmt(r.priceT1 ?? r.price ?? 0)}{r.dietaT1 > 0 ? `+${fmt(r.dietaT1)}` : ""}</span>
+          <span style={{ fontWeight: 600, color: colors.cyan }}>Ay: {fmt(r.helperT1 ?? 0)}</span>
+          <span style={{ fontWeight: 600, color: colors.orange }}>T2: {fmt(r.priceT2 ?? 0)}</span>
           <button onClick={() => setForm({ ...form, rates: form.rates.filter(x => x.id !== r.id) })} style={{ background: "none", border: "none", color: colors.red, cursor: "pointer" }}><X size={10} /></button>
         </div>)}
         <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "flex-end" }}>
@@ -82,8 +83,12 @@ export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks,
           <Sel value={rForm.municipality} onChange={e => setRForm({ ...rForm, municipality: e.target.value })} style={{ flex: 2, fontSize: 10 }}>
             <option value="">Mun.</option>{(DR_PROVINCES.find(p => p.province === rForm.province)?.municipalities || []).map(m => <option key={m} value={m}>{m}</option>)}
           </Sel>
-          <Inp type="number" placeholder="T1 $" value={rForm.priceT1} onChange={e => setRForm({ ...rForm, priceT1: e.target.value })} style={{ width: 70, fontSize: 10 }} />
-          <Inp type="number" placeholder="T2 $" value={rForm.priceT2} onChange={e => setRForm({ ...rForm, priceT2: e.target.value })} style={{ width: 70, fontSize: 10 }} />
+          <Inp type="number" placeholder="T1 $" value={rForm.priceT1} onChange={e => setRForm({ ...rForm, priceT1: e.target.value })} style={{ width: 58, fontSize: 10 }} />
+          <Inp type="number" placeholder="Dieta1" value={rForm.dietaT1} onChange={e => setRForm({ ...rForm, dietaT1: e.target.value })} style={{ width: 58, fontSize: 10 }} />
+          <Inp type="number" placeholder="Ay1 $" value={rForm.helperT1} onChange={e => setRForm({ ...rForm, helperT1: e.target.value })} style={{ width: 58, fontSize: 10 }} />
+          <Inp type="number" placeholder="T2 $" value={rForm.priceT2} onChange={e => setRForm({ ...rForm, priceT2: e.target.value })} style={{ width: 58, fontSize: 10 }} />
+          <Inp type="number" placeholder="Dieta2" value={rForm.dietaT2} onChange={e => setRForm({ ...rForm, dietaT2: e.target.value })} style={{ width: 58, fontSize: 10 }} />
+          <Inp type="number" placeholder="Ay2 $" value={rForm.helperT2} onChange={e => setRForm({ ...rForm, helperT2: e.target.value })} style={{ width: 58, fontSize: 10 }} />
           <Btn onClick={addRate} style={{ padding: "5px 8px", fontSize: 10 }}><Plus size={10} /></Btn>
         </div>
       </div>}

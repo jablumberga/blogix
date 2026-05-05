@@ -1,10 +1,10 @@
 export const DR_PROVINCES = [
   { province: "Santo Domingo / Distrito Nacional", municipalities: ["Santo Domingo de Guzmán", "Santo Domingo Este", "Santo Domingo Norte", "Santo Domingo Oeste", "Boca Chica", "Los Alcarrizos", "San Antonio de Guerra"] },
-  { province: "Santiago", municipalities: ["Santiago de los Caballeros", "Tamboril", "Villa González", "Licey al Medio", "San José de las Matas", "Bisonó"] },
+  { province: "Santiago", municipalities: ["Santiago de los Caballeros", "Tamboril", "Villa González", "Licey al Medio", "San José de las Matas", "Bisonó", "Navarrete"] },
   { province: "La Vega", municipalities: ["La Vega", "Constanza", "Jarabacoa"] },
   { province: "San Cristóbal", municipalities: ["San Cristóbal", "Bajos de Haina", "Villa Altagracia", "Cambita Garabitos", "San Gregorio de Nigua", "Yaguate"] },
   { province: "Duarte", municipalities: ["San Francisco de Macorís", "Las Guáranas", "Pimentel", "Villa Riva", "Castillo"] },
-  { province: "Puerto Plata", municipalities: ["Puerto Plata", "Sosúa", "Imbert", "Altamira", "Luperón", "Villa Isabela"] },
+  { province: "Puerto Plata", municipalities: ["Puerto Plata", "Sosúa", "Imbert", "Altamira", "Luperón", "Villa Isabela", "Cabarete"] },
   { province: "San Pedro de Macorís", municipalities: ["San Pedro de Macorís", "Guayacanes", "Quisqueya", "Consuelo", "Ramón Santana"] },
   { province: "La Romana", municipalities: ["La Romana", "Guaymate", "Villa Hermosa"] },
   { province: "La Altagracia", municipalities: ["Higüey", "Punta Cana", "San Rafael del Yuma"] },

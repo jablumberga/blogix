@@ -46,6 +46,7 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
   };
 
   const saveTrip = () => {
+    if (!form.clientId) { setFormError(t.clientRequired || "Cliente requerido"); return; }
     if (!form.province || !form.municipality) { setFormError(t.destinationRequired || "Destino requerido"); return; }
     const cl = clients.find(c => c.id === Number(form.clientId));
     if (cl?.rules?.requiresInvoiceRef && !form.invoiceRef) { setFormError(t.invoiceRefRequired); return; }
@@ -66,19 +67,19 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
     if (driverObj && driverObj.salaryType !== "fixed") {
       let driverPay = 0;
       if (driverObj.salaryType === "porcentaje") {
-        driverPay = Math.round((data.revenue || 0) * (driverObj.percentageAmount || 20) / 100);
+        driverPay = Math.round((data.revenue || 0) * (driverObj.percentageAmount ?? 20) / 100);
       } else if (driverObj.salaryType === "perTrip") {
         const rate = (driverObj.rates || []).find(r => r.province === data.province && r.municipality === data.municipality);
         if (rate) {
           const tk = trucks.find(t2 => t2.id === Number(data.truckId));
           const size = tk?.size || "T1";
-          driverPay = size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
+          driverPay = size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0);
         }
       } else {
         driverPay = Math.round((data.revenue || 0) * 0.20);
       }
       if (driverPay > 0) {
-        const pct = driverObj.salaryType === "porcentaje" ? (driverObj.percentageAmount || 20) : 20;
+        const pct = driverObj.salaryType === "porcentaje" ? (driverObj.percentageAmount ?? 20) : 20;
         newExpenses.push({ category: "driverPay", amount: driverPay, description: `Nómina ${pct}%: ${driverObj.name}`, paymentMethod: "transfer", driverId: driverObj.id, status: "pending" });
       }
     }
@@ -107,7 +108,7 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
       if (!rate) return 0;
       const tk = trucks.find(t2 => t2.id === tr.truckId);
       const size = tr.tarifaOverride || tk?.size || "T1";
-      return size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
+      return size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0);
     }
     if (driverObj?.salaryType === "porcentaje") return (tr.revenue || 0) * ((driverObj.percentageAmount || 0) / 100);
     return 0;
@@ -162,7 +163,14 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
         <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} />
         <div style={{ marginTop: 10 }}>
           <Sel label={t.truck} value={form.truckId} onChange={e => setForm({ ...form, truckId: e.target.value })}>
-            {trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}
+            {trucks.length === 0
+              ? <option value="">— Sin camión asignado (contacta al admin) —</option>
+              : (() => {
+                  const assigned = trucks.filter(tk => tk.id === driverObj?.truckId || tk.driverId === driverObj?.id);
+                  const opts = assigned.length > 0 ? assigned : trucks;
+                  return opts.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>);
+                })()
+            }
           </Sel>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginTop: 10 }}>
@@ -171,7 +179,7 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
             <option value="in_transit">{t.inTransit}</option>
             <option value="delivered">{t.delivered}</option>
           </Sel>
-          {selectedClient?.rules.requiresInvoiceRef && <Inp label={t.invoiceRef + " *"} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: !form.invoiceRef ? colors.red : colors.border }} />}
+          {selectedClient?.rules?.requiresInvoiceRef && <Inp label={t.invoiceRef + " *"} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: !form.invoiceRef ? colors.red : colors.border }} />}
         </div>
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22`, display: "grid", gridTemplateColumns: Number(form.numHelpers) > 0 ? "1fr 1fr" : "1fr", gap: 10 }}>
           <Sel label={t.numHelpers} value={form.numHelpers ?? 0} onChange={e => setForm({ ...form, numHelpers: Number(e.target.value) })}>
@@ -206,7 +214,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
       if (!rate) return 0;
       const tk = trucks.find(t2 => t2.id === tr.truckId);
       const size = tr.tarifaOverride || tk?.size || "T1";
-      return size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
+      return size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0);
     }
     if (driverObj?.salaryType === "porcentaje") return (tr.revenue || 0) * ((driverObj.percentageAmount || 0) / 100);
     return 0;
@@ -270,36 +278,43 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
             <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 14 }}>
               <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-                <Th>{t.date}</Th><Th>{t.destination}</Th><Th>{t.client}</Th><Th align="right">Mi Pago</Th><Th align="right">Ayudantes</Th><Th align="right">Descuentos</Th><Th align="center">{t.status}</Th>
+                <Th>{t.date}</Th><Th>{t.destination}</Th><Th>{t.client}</Th><Th align="right">Chofer</Th><Th align="right">Dieta</Th><Th align="right">Ayudante*</Th><Th align="right">Descuentos</Th><Th align="center">{t.status}</Th>
               </tr></thead>
               <tbody>
                 {periodTrips.slice().sort((a, b) => a.date.localeCompare(b.date)).map(tr => {
                   const cl = clients.find(c => c.id === tr.clientId);
-                  const pay = calcDriverPay(tr);
+                  const trRate = driverObj?.salaryType === "perTrip" ? (driverObj.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality) : null;
+                  const trTk = trucks.find(t2 => t2.id === tr.truckId);
+                  const trSize = (tr.tarifaOverride && tr.tarifaOverride !== "custom") ? tr.tarifaOverride : (trTk?.size || "T1");
+                  const basePay = trRate ? (trSize === "T2" ? (trRate.priceT2 ?? trRate.priceT1 ?? 0) : (trRate.priceT1 ?? 0)) : calcDriverPay(tr);
+                  const dieta = trRate ? (trSize === "T2" ? (trRate.dietaT2 || 0) : (trRate.dietaT1 || 0)) : 0;
+                  const ayudanteRef = trRate ? (trSize === "T2" ? (trRate.helperT2 || 0) : (trRate.helperT1 || 0)) : 0;
                   const tripHelpers = (tr.helpers || []).reduce((s, x) => s + (x.pay || 0), 0);
                   const tripDiscounts = (tr.discounts || []).reduce((s, x) => s + (x.amount || 0), 0);
                   const stColor = tr.status === "delivered" ? colors.green : tr.status === "in_transit" ? colors.yellow : colors.accent;
-                  const nextStatus = { pending: "in_transit", in_transit: "delivered", delivered: "pending" };
+                  const nextStatus = { pending: "in_transit", in_transit: "delivered" };
                   return <Fragment key={tr.id}>
                     <tr style={{ borderBottom: `1px solid ${colors.border}11` }}>
                       <Td>{tr.date}</Td>
                       <Td>{tr.municipality}, {tr.province}</Td>
                       <Td>{cl?.companyName || "—"}</Td>
                       <Td align="right" bold color={colors.green}>
-                        {driverObj?.salaryType === "fixed" ? <span style={{ fontSize: 10, color: colors.textMuted }}>Fijo</span> : pay > 0 ? fmt(pay) : <span style={{ fontSize: 10, color: colors.orange }}>—</span>}
+                        {driverObj?.salaryType === "fixed" ? <span style={{ fontSize: 10, color: colors.textMuted }}>Fijo</span> : basePay > 0 ? fmt(basePay) : <span style={{ fontSize: 10, color: colors.orange }}>—</span>}
                       </Td>
-                      <Td align="right" color={tripHelpers > 0 ? colors.orange : colors.textMuted}>{tripHelpers > 0 ? `− ${fmt(tripHelpers)}` : "—"}</Td>
+                      <Td align="right" color={dieta > 0 ? colors.accent : colors.textMuted}>{dieta > 0 ? fmt(dieta) : "—"}</Td>
+                      <Td align="right" color={ayudanteRef > 0 ? colors.cyan : colors.textMuted}>{ayudanteRef > 0 ? fmt(ayudanteRef) : "—"}</Td>
                       {(() => {
                         const linkedAdel = adelantoExps.find(e => e.tripId === tr.id);
                         const adelAmt = linkedAdel ? linkedAdel.amount : 0;
-                        if (tripDiscounts === 0 && adelAmt === 0) return <Td align="right" color={colors.textMuted}>—</Td>;
+                        if (tripHelpers === 0 && tripDiscounts === 0 && adelAmt === 0) return <Td align="right" color={colors.textMuted}>—</Td>;
                         return <Td align="right" style={{ lineHeight: 1.4, verticalAlign: "top" }}>
+                          {tripHelpers > 0 && <div style={{ color: colors.orange, fontWeight: 600 }}>− {fmt(tripHelpers)}</div>}
                           {tripDiscounts > 0 && <div style={{ color: colors.red, fontWeight: 600 }}>− {fmt(tripDiscounts)}</div>}
                           {adelAmt > 0 && <div style={{ fontSize: 10, color: colors.orange }}>↳ Adel − {fmt(adelAmt)}</div>}
                         </Td>;
                       })()}
                       <Td align="center">
-                        <button onClick={() => setTrips(allTrips.map(x => x.id === tr.id ? { ...x, status: nextStatus[x.status] || "pending" } : x))}
+                        <button onClick={() => setTrips(allTrips.map(x => x.id === tr.id ? { ...x, status: nextStatus[x.status] || x.status } : x))}
                           style={{ padding: "3px 8px", borderRadius: 10, border: "none", fontSize: 10, fontWeight: 600, cursor: "pointer", background: stColor + "18", color: stColor }}>
                           {tr.status === "delivered" ? t.delivered : tr.status === "in_transit" ? t.inTransit : t.pending}
                         </button>
@@ -307,7 +322,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                     </tr>
                     {(tr.discounts || []).filter(d => d.amount > 0).map((d, i) => (
                       <tr key={`disc-${tr.id}-${i}`} style={{ background: colors.red + "08" }}>
-                        <Td></Td><Td colSpan={4} style={{ fontSize: 11, color: colors.red, paddingLeft: 20 }}>↳ Descuento: {d.desc || "—"}</Td>
+                        <Td></Td><Td colSpan={5} style={{ fontSize: 11, color: colors.red, paddingLeft: 20 }}>↳ Descuento: {d.desc || "—"}</Td>
                         <Td align="right" style={{ fontSize: 11, color: colors.red }}>− {fmt(d.amount)}</Td><Td></Td>
                       </tr>
                     ))}
@@ -315,7 +330,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                       const linkedAdel = adelantoExps.find(e => e.tripId === tr.id);
                       if (!linkedAdel) return null;
                       return <tr key={`adv-${tr.id}`} style={{ background: colors.orange + "08" }}>
-                        <Td></Td><Td colSpan={4} style={{ fontSize: 11, color: colors.orange, paddingLeft: 20 }}>↳ Adelanto vinculado</Td>
+                        <Td></Td><Td colSpan={5} style={{ fontSize: 11, color: colors.orange, paddingLeft: 20 }}>↳ Adelanto vinculado</Td>
                         <Td align="right" style={{ fontSize: 11, color: colors.orange }}>− {fmt(linkedAdel.amount)}</Td><Td></Td>
                       </tr>;
                     })()}
