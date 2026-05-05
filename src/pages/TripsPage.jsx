@@ -200,43 +200,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
 
   const selectedClient = clients.find(c => c.id === Number(form.clientId));
 
-  const recalcDriverPayApr30 = () => {
-    const CUTOFF = "2026-04-30";
-    const perTripDrivers = drivers.filter(d => d.salaryType === "perTrip");
-    if (perTripDrivers.length === 0) { alert("No hay conductores perTrip."); return; }
-    let updated = 0, created = 0;
-    setExpenses(prev => {
-      let next = [...prev];
-      for (const driver of perTripDrivers) {
-        const driverTrips = trips.filter(tr => tr.driverId === driver.id && (tr.date || "") >= CUTOFF);
-        for (const tr of driverTrips) {
-          const rate = (driver.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality);
-          if (!rate) continue;
-          const tk = trucks.find(t2 => t2.id === tr.truckId);
-          const size = (tr.tarifaOverride && tr.tarifaOverride !== "custom") ? tr.tarifaOverride : (tk?.size || "T1");
-          const newAmt = size === "T2"
-            ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) + (rate.helperT2 || 0) * 2
-            : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0) + (rate.helperT1 || 0);
-          if (newAmt === 0) continue;
-          const existing = next.find(e => e.tripId === tr.id && e.category === "driverPay" && e.driverId === driver.id);
-          if (existing) {
-            next = next.map(e => e.id === existing.id ? { ...e, amount: newAmt, description: `Nómina por viaje: ${driver.name}` } : e);
-            updated++;
-          } else {
-            const maxId = Math.max(0, ...next.map(e => e.id));
-            next.push({ id: maxId + 1, tripId: tr.id, driverId: driver.id, date: tr.date, category: "driverPay", amount: newAmt, description: `Nómina por viaje: ${driver.name}`, paymentMethod: "transfer", status: "pending", supplierId: null });
-            created++;
-          }
-        }
-      }
-      return next;
-    });
-    alert(`Recalculado: ${updated} actualizado(s), ${created} creado(s).`);
-  };
-
   return <div>
     <PageHeader title={t.trips} action={<Btn onClick={openNew}><Plus size={14} /> {t.newTrip}</Btn>} />
-    {user?.role === "admin" && <div style={{ marginBottom: 10 }}><button onClick={recalcDriverPayApr30} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 7, border: `1px solid ${colors.orange}`, background: colors.orange + "14", color: colors.orange, cursor: "pointer" }}>🔄 Recalcular nómina perTrip (Apr 30+)</button></div>}
 
     <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
       <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
