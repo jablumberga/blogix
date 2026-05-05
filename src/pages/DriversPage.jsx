@@ -5,12 +5,69 @@ import { fmt, nxId } from "../utils/helpers.js";
 import { DR_PROVINCES } from "../constants/destinations.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
-export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks, trips, isMobile }) {
+const TARIFARIO_T1T2 = [
+  { province: "Santiago",               municipality: "Santiago de los Caballeros", priceT1: 900,  helperT1: 700,  dietaT1: 0,   priceT2: 1200, helperT2: 750,  dietaT2: 0    },
+  { province: "Espaillat",              municipality: "Moca",                       priceT1: 1000, helperT1: 700,  dietaT1: 0,   priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "Santiago",               municipality: "Navarrete",                  priceT1: 1000, helperT1: 700,  dietaT1: 0,   priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "La Vega",                municipality: "La Vega",                    priceT1: 1000, helperT1: 700,  dietaT1: 0,   priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "Valverde",               municipality: "Esperanza",                  priceT1: 1100, helperT1: 700,  dietaT1: 300, priceT2: 1300, helperT2: 800,  dietaT2: 0    },
+  { province: "Hermanas Mirabal",       municipality: "Salcedo",                    priceT1: 1100, helperT1: 700,  dietaT1: 300, priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "Monseñor Nouel",         municipality: "Bonao",                      priceT1: 1300, helperT1: 800,  dietaT1: 300, priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "La Vega",                municipality: "Jarabacoa",                  priceT1: 1400, helperT1: 800,  dietaT1: 300, priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "Sánchez Ramírez",        municipality: "Cotuí",                      priceT1: 1400, helperT1: 800,  dietaT1: 300, priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "Duarte",                 municipality: "San Francisco de Macorís",   priceT1: 1400, helperT1: 800,  dietaT1: 300, priceT2: 1700, helperT2: 900,  dietaT2: 300  },
+  { province: "Valverde",               municipality: "Mao",                        priceT1: 1400, helperT1: 800,  dietaT1: 300, priceT2: 1600, helperT2: 900,  dietaT2: 300  },
+  { province: "Puerto Plata",           municipality: "Puerto Plata",               priceT1: 1700, helperT1: 900,  dietaT1: 400, priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "Puerto Plata",           municipality: "Cabarete",                   priceT1: 1800, helperT1: 900,  dietaT1: 400, priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "María Trinidad Sánchez", municipality: "Nagua",                      priceT1: 1800, helperT1: 900,  dietaT1: 400, priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "La Vega",                municipality: "Constanza",                  priceT1: 1900, helperT1: 1000, dietaT1: 400, priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "Dajabón",                municipality: "Dajabón",                    priceT1: 2000, helperT1: 1000, dietaT1: 500, priceT2: 2500, helperT2: 1200, dietaT2: 600  },
+  { province: "Samaná",                 municipality: "Santa Bárbara de Samaná",    priceT1: 2200, helperT1: 1000, dietaT1: 500, priceT2: 0,    helperT2: 0,    dietaT2: 0    },
+  { province: "Independencia",          municipality: "Jimaní",                     priceT1: 0,    helperT1: 0,    dietaT1: 0,   priceT2: 4000, helperT2: 1500, dietaT2: 1000 },
+];
+const TARGET_NAMES = ["luis alberto", "joan", "emil", "rober"];
+
+export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks, trips, isMobile, expenses, setExpenses }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, percentageAmount: 0, username: "", password: "", rates: [] });
   const [rForm, setRForm] = useState({ province: "", municipality: "", priceT1: "", priceT2: "", helperT1: "", helperT2: "", dietaT1: "", dietaT2: "" });
   const [error, setError] = useState("");
+  const [patchMsg, setPatchMsg] = useState("");
+
+  const applyTarifario = () => {
+    const rates = TARIFARIO_T1T2.map((r, i) => ({ ...r, id: i + 1 }));
+    const log = [];
+    let emilId = null;
+    const newDrivers = drivers.map(driver => {
+      const n = (driver.name || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      if (!TARGET_NAMES.some(t => n.includes(t))) return driver;
+      if (n.includes("emil")) emilId = driver.id;
+      log.push(driver.name);
+      return { ...driver, salaryType: "perTrip", rates };
+    });
+    setDrivers(newDrivers);
+    let expMsg = "";
+    if (emilId !== null && setExpenses) {
+      const emilDriver = newDrivers.find(d => d.id === emilId);
+      const emilTrips = (trips || []).filter(tr => tr.driverId === emilId && String(tr.date || "").endsWith("-30"));
+      emilTrips.forEach(trip => {
+        const rate = (emilDriver.rates || []).find(r => r.province === trip.province && r.municipality === trip.municipality);
+        if (!rate) return;
+        const tk = trucks.find(t2 => t2.id === trip.truckId);
+        const size = (trip.tarifaOverride && trip.tarifaOverride !== "custom") ? trip.tarifaOverride : (tk?.size || "T1");
+        const newAmount = size === "T2" ? (rate.priceT2 + rate.dietaT2) : (rate.priceT1 + rate.dietaT1);
+        let found = false;
+        setExpenses(prev => prev.map(exp => {
+          if (exp.tripId === trip.id && exp.category === "driverPay" && exp.driverId === emilId) { found = true; return { ...exp, amount: newAmount, description: `Nómina por viaje: ${emilDriver.name}` }; }
+          return exp;
+        }));
+        if (!found) setExpenses(prev => [...prev, { id: Math.max(0, ...prev.map(e => e.id)) + 1, tripId: trip.id, driverId: emilId, date: trip.date, category: "driverPay", amount: newAmount, description: `Nómina por viaje: ${emilDriver.name}`, paymentMethod: "transfer", status: "pending", supplierId: null }]);
+        expMsg = ` | Viaje Emil día 30 → ${fmt(newAmount)}`;
+      });
+    }
+    setPatchMsg(log.length > 0 ? `✅ Tarifario aplicado a: ${log.join(", ")}${expMsg}` : `⚠️ No se encontraron conductores. Nombres en sistema: ${drivers.map(d => d.name).join(", ")}`);
+  };
 
   const openNew = () => { setForm({ name: "", phone: "", license: "", truckId: "", salaryType: "perTrip", fixedAmount: 0, percentageAmount: 0, username: "", password: "", rates: [] }); setEditId(null); setError(""); setShowForm(true); };
   const openEdit = (d) => { setForm({ ...d }); setEditId(d.id); setError(""); setShowForm(true); };
@@ -48,7 +105,8 @@ export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks,
   };
 
   return <div>
-    <PageHeader title={t.drivers} action={<Btn onClick={openNew}><Plus size={14} /> {t.addDriver}</Btn>} />
+    <PageHeader title={t.drivers} action={<div style={{ display: "flex", gap: 8 }}><Btn onClick={applyTarifario} style={{ background: colors.orange, fontSize: 12 }}>⚡ Cargar Tarifario T1+T2</Btn><Btn onClick={openNew}><Plus size={14} /> {t.addDriver}</Btn></div>} />
+    {patchMsg && <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 8, background: patchMsg.startsWith("✅") ? colors.green + "18" : colors.orange + "18", border: `1px solid ${patchMsg.startsWith("✅") ? colors.green : colors.orange}40`, color: patchMsg.startsWith("✅") ? colors.green : colors.orange, fontSize: 13, fontWeight: 600 }}>{patchMsg}</div>}
     {showForm && <Card style={{ marginBottom: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
         <Inp label={t.driverName} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
