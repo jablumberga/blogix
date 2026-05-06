@@ -5,7 +5,7 @@ import { fmt, nxId } from "../utils/helpers.js";
 import { DR_PROVINCES } from "../constants/destinations.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Chk, Th, Td } from "../components/ui/index.jsx";
 
-export default function ClientsPage({ t, clients, setClients, brokers, isMobile }) {
+export default function ClientsPage({ t, clients, setClients, brokers, setTrips, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const emptyRules = { paymentTerms: 30, billingCycle: "net", period1PayDay: 30, period2PayDay: 15, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null, brokerPassThrough: false };
@@ -15,7 +15,7 @@ export default function ClientsPage({ t, clients, setClients, brokers, isMobile 
   const openNew = () => { setForm({ companyName: "", contactPerson: "", phone: "", email: "", notes: "", status: "active", rules: emptyRules, rates: [] }); setEditId(null); setShowForm(true); };
   const openEdit = (c) => { setForm({ ...c }); setEditId(c.id); setShowForm(true); };
   const save = () => { if (!form.companyName) return; if (editId) setClients(clients.map(c => c.id === editId ? { ...form, id: editId } : c)); else setClients([...clients, { ...form, id: nxId(clients) }]); setShowForm(false); };
-  const addRate = () => { if (!rForm.province || !rForm.municipality || !rForm.priceT1 || !rForm.priceT2) return; setForm({ ...form, rates: [...form.rates, { id: nxId(form.rates), province: rForm.province, municipality: rForm.municipality, priceT1: Number(rForm.priceT1), priceT2: Number(rForm.priceT2) }] }); setRForm({ province: "", municipality: "", priceT1: "", priceT2: "" }); };
+  const addRate = () => { if (!rForm.province || !rForm.municipality || !rForm.priceT1) return; setForm({ ...form, rates: [...form.rates, { id: nxId(form.rates), province: rForm.province, municipality: rForm.municipality, priceT1: Number(rForm.priceT1), priceT2: Number(rForm.priceT2) || 0 }] }); setRForm({ province: "", municipality: "", priceT1: "", priceT2: "" }); };
 
   return <div>
     <PageHeader title={t.clients} action={<Btn onClick={openNew}><Plus size={14} /> {t.addClient}</Btn>} />
@@ -131,7 +131,10 @@ export default function ClientsPage({ t, clients, setClients, brokers, isMobile 
           <Td align="center"><Badge label={c.status === "active" ? t.active : t.inactive} color={c.status === "active" ? colors.green : colors.red} /></Td>
           <Td align="right">
             <button onClick={() => openEdit(c)} style={{ padding: "8px 10px", borderRadius: 4, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
-            <button onClick={() => setClients(clients.filter(x => x.id !== c.id))} style={{ padding: "8px 10px", borderRadius: 4, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
+            <button onClick={() => {
+              if (setTrips) setTrips(prev => prev.map(tr => tr.clientId === c.id ? { ...tr, clientId: null } : tr));
+              setClients(clients.filter(x => x.id !== c.id));
+            }} style={{ padding: "8px 10px", borderRadius: 4, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
           </Td>
         </tr>)}</tbody>
       </table>

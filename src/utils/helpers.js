@@ -111,10 +111,12 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
   });
 
   // AGENT 9: Liquidaciones pendientes
+  const settleCutoff = new Date(today()); settleCutoff.setDate(settleCutoff.getDate() - 60);
+  const settleCutoffStr = settleCutoff.toISOString().slice(0, 10);
   partners.forEach(p => {
     const pTruckIds  = trucksByPartner.get(p.id) || [];
     const pTruckSet  = new Set(pTruckIds);
-    const unpaidTrips = trips.filter(tr => pTruckSet.has(tr.truckId) && tr.status === "delivered");
+    const unpaidTrips = trips.filter(tr => pTruckSet.has(tr.truckId) && tr.status === "delivered" && (tr.date || "") >= settleCutoffStr);
     if (unpaidTrips.length > 0) {
       const key = `${p.id}-${monthStr()}`;
       if (!settlementStatus[key] || settlementStatus[key] === "unpaid") {
@@ -125,7 +127,7 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
   });
 
   // AGENT 10: CxP pendientes
-  const cxpItems = expenses.filter(e => e.paymentMethod === "credit");
+  const cxpItems = expenses.filter(e => e.dueDate && e.status === "pending" && !["driverPay", "broker_commission", "nominaTotalOverride"].includes(e.category));
   if (cxpItems.length > 0) {
     const total = cxpItems.reduce((s, e) => s + e.amount, 0);
     alerts.push({ id: "cxp-total", severity: "info", category: "cxp",
@@ -158,32 +160,75 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
   return alerts;
 }
 
+// Generates classic settlement periods: half-1 = 1st–15th, half-2 = 16th–30th.
+// Day 31 of any month is treated as belonging to the NEXT month's half-1
+// (dateFrom is set to the 31st of the previous month when applicable).
+export function genSettlementPeriods(dates = []) {
+  const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
+  const now = new Date(); const day = now.getDate();
+  let y = now.getFullYear(), m = now.getMonth() + 1, h;
+  if (day <= 15) { h = 1; }
+  else if (day <= 30) { h = 2; }
+  else { h = 1; if (m === 12) { m = 1; y++; } else { m++; } }
+  const earliest = [...dates].sort()[0] || `${y}-${pad(m)}-01`;
+  const buildPd = (py, pm, ph) => {
+    const mStr = `${py}-${pad(pm)}`;
+    if (ph === 2) {
+      return { year: py, month: pm, half: ph, mStr,
+        dateFrom: `${mStr}-16`, dateTo: `${mStr}-30`,
+        label: `${MONTHS_ES[pm-1]} 16–30, ${py}` };
+    }
+    // Half-1: starts on day 1, but if previous month had 31 days include that day too
+    const prevM = pm === 1 ? 12 : pm - 1;
+    const prevY = pm === 1 ? py - 1 : py;
+    const prevMStr = `${prevY}-${pad(prevM)}`;
+    const lastPrev = lastDayOf(prevY, prevM);
+    const dateFrom = lastPrev === 31 ? `${prevMStr}-31` : `${mStr}-01`;
+    return { year: py, month: pm, half: ph, mStr,
+      dateFrom, dateTo: `${mStr}-15`,
+      label: `${MONTHS_ES[pm-1]} 1–15, ${py}` };
+  };
+  const periods = [];
+  for (let i = 0; i < 60; i++) {
+    const pd = buildPd(y, m, h); periods.push(pd);
+    if (pd.dateTo < earliest) break;
+    if (h === 2) { h = 1; } else { h = 2; if (m === 1) { m = 12; y--; } else { m--; } }
+  }
+  return periods;
+}
+
 // ─── Billing / Period Helpers ─────────────────────────────────────────────────
 export const pad = n => String(n).padStart(2, "0");
 
 export const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
 // Generates bimonthly payroll periods going back to the earliest date in `dates`.
-// Each period is: half-1 = prev-month-30 → this-month-14, half-2 = 15→29.
+// Corte 1: day 30 of prev month → day 14 of current month (day 31 of prev included via >= filter)
+// Corte 2: day 15 → day 29 of current month
+// Days 30+ belong to the NEXT month's corte 1.
 export function genPeriods(dates = []) {
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
   const now = new Date(); const day = now.getDate();
   let y = now.getFullYear(), m = now.getMonth() + 1, h;
-  if (day >= 30) { if (m === 12) { y++; m = 1; } else { m++; } h = 1; }
-  else { h = day >= 15 ? 2 : 1; }
+  if (day <= 14) { h = 1; }
+  else if (day <= 29) { h = 2; }
+  else { h = 1; if (m === 12) { m = 1; y++; } else { m++; } }
   const earliest = [...dates].sort()[0] || `${y}-${pad(m)}-01`;
   const buildPd = (py, pm, ph) => {
     const mStr = `${py}-${pad(pm)}`;
-    if (ph === 1) {
-      const prevM = pm === 1 ? 12 : pm - 1, prevY = pm === 1 ? py - 1 : py;
-      const startDay = Math.min(30, lastDayOf(prevY, prevM));
+    if (ph === 2) {
       return { year: py, month: pm, half: ph, mStr,
-        dateFrom: `${prevY}-${pad(prevM)}-${pad(startDay)}`, dateTo: `${mStr}-15`,
-        label: `${MONTHS_ES[prevM-1]} ${startDay} – ${MONTHS_ES[pm-1]} 15, ${py}` };
+        dateFrom: `${mStr}-15`, dateTo: `${mStr}-29`,
+        label: `${MONTHS_ES[pm-1]} 15–29, ${py}` };
     }
+    // Corte 1: from day 30 (or last day if < 30) of prev month to day 14 of current month
+    const prevM = pm === 1 ? 12 : pm - 1;
+    const prevY = pm === 1 ? py - 1 : py;
+    const prevMStr = `${prevY}-${pad(prevM)}`;
+    const fromDay = Math.min(30, lastDayOf(prevY, prevM));
     return { year: py, month: pm, half: ph, mStr,
-      dateFrom: `${mStr}-15`, dateTo: `${mStr}-29`,
-      label: `${MONTHS_ES[pm-1]} 15–29, ${py}` };
+      dateFrom: `${prevMStr}-${pad(fromDay)}`, dateTo: `${mStr}-14`,
+      label: `${fromDay} ${MONTHS_ES[prevM-1]}–14 ${MONTHS_ES[pm-1]}, ${py}` };
   };
   const periods = [];
   for (let i = 0; i < 60; i++) {

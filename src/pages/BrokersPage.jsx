@@ -4,7 +4,7 @@ import { colors } from "../constants/theme.js";
 import { nxId } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
-export default function BrokersPage({ t, brokers, setBrokers, isMobile }) {
+export default function BrokersPage({ t, brokers, setBrokers, trips, setTrips, setExpenses, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: "", contactPerson: "", phone: "", email: "", commissionPct: "", notes: "" });
@@ -13,7 +13,9 @@ export default function BrokersPage({ t, brokers, setBrokers, isMobile }) {
   const openEdit = (b) => { setForm({ ...b }); setEditId(b.id); setShowForm(true); };
   const save = () => {
     if (!form.name) return;
-    const d = { ...form, commissionPct: Number(form.commissionPct) || 0 };
+    const commission = Number(form.commissionPct) || 0;
+    if (commission < 0 || commission > 100) { alert("Comisión debe estar entre 0 y 100"); return; }
+    const d = { ...form, commissionPct: commission };
     if (editId) setBrokers(brokers.map(b => b.id === editId ? { ...d, id: editId } : b));
     else setBrokers([...brokers, { ...d, id: nxId(brokers) }]);
     setShowForm(false);
@@ -42,7 +44,12 @@ export default function BrokersPage({ t, brokers, setBrokers, isMobile }) {
           <Td align="center"><Badge label={`${b.commissionPct}%`} color={colors.orange} /></Td>
           <Td align="right">
             <button onClick={() => openEdit(b)} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
-            <button onClick={() => setBrokers(brokers.filter(x => x.id !== b.id))} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
+            <button onClick={() => {
+              const brokerTripIds = new Set((trips || []).filter(tr => tr.brokerId === b.id).map(tr => tr.id));
+              if (setTrips) setTrips(prev => prev.map(tr => tr.brokerId === b.id ? { ...tr, brokerId: null } : tr));
+              if (setExpenses) setExpenses(prev => prev.filter(e => !(e.category === "broker_commission" && brokerTripIds.has(e.tripId))));
+              setBrokers(brokers.filter(x => x.id !== b.id));
+            }} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
           </Td>
         </tr>)}</tbody>
       </table>

@@ -2,15 +2,20 @@ import { createContext, useContext, useState, useEffect, useRef, useMemo } from 
 import { loadData, saveData, saveToken, clearToken, resetApiCache } from "../api.js";
 import { translations } from "../constants/translations.js";
 import { USERS, initSettlementStatus } from "../constants/users.js";
-import { computeAlerts } from "../utils/helpers.js";
+import { computeAlerts, today } from "../utils/helpers.js";
 
 const AppContext = createContext(null);
 
 function applyData(data, setters) {
   const { setClients, setPartners, setTrucks, setDrivers, setTrips,
           setExpenses, setBrokers, setSuppliers, setFixedTemplates,
-          setSettlementStatus, setCobros, setInvoices } = setters;
+          setSettlementStatus, setCobros, setInvoices,
+          setBankAccount, setBankReconciliation } = setters;
   if (!data || Object.keys(data).length === 0) return;
+  const hasAnyData = Object.values(data).some(v =>
+    Array.isArray(v) ? v.length > 0 : (v && typeof v === "object" ? Object.keys(v).length > 0 : Boolean(v))
+  );
+  if (!hasAnyData) return;
   if (Array.isArray(data.clients))        setClients(data.clients);
   if (Array.isArray(data.partners))       setPartners(data.partners);
   if (Array.isArray(data.trucks))         setTrucks(data.trucks);
@@ -23,6 +28,8 @@ function applyData(data, setters) {
   if (data.settlementStatus)              setSettlementStatus(data.settlementStatus);
   if (Array.isArray(data.cobros))         setCobros(data.cobros);
   if (Array.isArray(data.invoices))       setInvoices(data.invoices);
+  if (data.bankAccount != null)           setBankAccount(data.bankAccount);
+  if (data.bankReconciliation != null)    setBankReconciliation(data.bankReconciliation);
 }
 
 export function AppProvider({ children }) {
@@ -62,6 +69,8 @@ export function AppProvider({ children }) {
   const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
   const [cobros, setCobros] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [bankAccount, setBankAccount] = useState({ name: "Cuenta Principal", bank: "", openingBalance: 0, openingDate: today() });
+  const [bankReconciliation, setBankReconciliation] = useState({});
   const [syncStatus, setSyncStatus] = useState("idle");
 
   const saveTimerRef   = useRef(null);
@@ -75,6 +84,7 @@ export function AppProvider({ children }) {
     setClients, setPartners, setTrucks, setDrivers, setTrips,
     setExpenses, setBrokers, setSuppliers, setFixedTemplates,
     setSettlementStatus, setCobros, setInvoices,
+    setBankAccount, setBankReconciliation,
   };
 
   // ── Load on mount ─────────────────────────────────────────────────────────
@@ -122,10 +132,12 @@ export function AppProvider({ children }) {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSyncStatus("saving");
-      const result = await saveData({
-        clients, partners, trucks, drivers, trips, expenses,
-        brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
-      }, versionRef.current);
+      const payload = user?.role === "driver"
+        ? { trips, expenses }
+        : { clients, partners, trucks, drivers, trips, expenses,
+            brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
+            bankAccount, bankReconciliation };
+      const result = await saveData(payload, versionRef.current);
       if (result.saved === "unauthorized") { setUser(null); return; }
       if (result.saved === "conflict") {
         setSyncStatus("conflict");
@@ -143,7 +155,7 @@ export function AppProvider({ children }) {
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, bankAccount, bankReconciliation]);
 
   // ── Dynamic user list ─────────────────────────────────────────────────────
   const allUsers = useMemo(() => [
@@ -234,27 +246,29 @@ export function AppProvider({ children }) {
       // ── Driver pay ────────────────────────────────────────────────────────
       if (tr.driverId) {
         const driver = driverMap.get(tr.driverId);
-        const hasDriverPay = expenses.some(e => e.category === "driverPay" && e.tripId === tr.id);
+        const existingPay = expenses.find(e => e.category === "driverPay" && e.tripId === tr.id);
+        // If the trip date changed after driverPay was created, patch the date in place
+        if (existingPay && existingPay.date !== tr.date) {
+          setExpenses(prev => prev.map(e => e.id === existingPay.id ? { ...e, date: tr.date } : e));
+        }
+        const hasDriverPay = !!existingPay;
         if (driver && driver.salaryType !== "fixed" && !hasDriverPay) {
           let pay = 0;
           if (driver.salaryType === "porcentaje") {
-            pay = Math.round((tr.revenue || 0) * (driver.percentageAmount || 20) / 100);
+            pay = Math.round((tr.revenue || 0) * (driver.percentageAmount ?? 20) / 100);
           } else if (driver.salaryType === "perTrip") {
             const rate = (driver.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality);
             if (rate) {
               const tk = truckMap.get(tr.truckId);
               const size = tr.tarifaOverride || tk?.size || "T1";
-              pay = size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
-            } else {
-              pay = Math.round((tr.revenue || 0) * 0.20);
+              pay = size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) : (rate.priceT1 ?? 0);
             }
-          } else {
-            pay = Math.round((tr.revenue || 0) * 0.20);
+            // No rate configured → leave pay=0 so admin knows to set up the rate table
           }
           const tripDiscounts = (tr.discounts || []).reduce((s, d) => s + (d.amount || 0), 0);
           pay = Math.max(0, pay - tripDiscounts);
           if (pay > 0) {
-            const label = driver.salaryType === "porcentaje" ? `${driver.percentageAmount || 20}%` : "por viaje";
+            const label = driver.salaryType === "porcentaje" ? `${driver.percentageAmount ?? 20}%` : "por viaje";
             toAdd.push({
               tripId: tr.id, date: tr.date, category: "driverPay", amount: pay,
               description: `Nómina (${label}): ${driver.name}`,
@@ -353,6 +367,8 @@ export function AppProvider({ children }) {
     settlementStatus, setSettlementStatus,
     cobros, setCobros,
     invoices, setInvoices,
+    bankAccount, setBankAccount,
+    bankReconciliation, setBankReconciliation,
     // Computed
     partner, partnerTruckIds, driverObj, alerts,
   };

@@ -120,8 +120,27 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
             if (e.category !== "driverPay" || !updatedRevenues[e.tripId]) return e;
             const { newRevenue, driverId } = updatedRevenues[e.tripId];
             const driver = drivers.find(d => d.id === driverId);
-            const pct = driver?.salaryType === "porcentaje" ? (driver.percentageAmount || 20) : 20;
-            return { ...e, amount: Math.round(newRevenue * pct / 100), description: `Nómina ${pct}%: ${driver?.name || ''}` };
+            if (!driver) return e;
+            // Fixed-salary drivers don't accrue per-trip pay — leave the expense untouched
+            if (driver.salaryType === "fixed") return e;
+            const tr = trips.find(t2 => t2.id === e.tripId);
+            if (driver.salaryType === "porcentaje") {
+              const pct = driver.percentageAmount ?? 20;
+              return { ...e, amount: Math.round(newRevenue * pct / 100), description: `Nómina ${pct}%: ${driver.name || ''}` };
+            }
+            if (driver.salaryType === "perTrip") {
+              const rate = (driver.rates || []).find(r =>
+                tr && r.province === tr.province && r.municipality === tr.municipality
+              );
+              if (!rate) return e;
+              const pay = newSize === "T2"
+                ? (rate.priceT2 ?? rate.price ?? 0)
+                : (rate.priceT1 ?? rate.price ?? 0);
+              if (!pay) return e;
+              return { ...e, amount: pay, description: `Nómina (por viaje): ${driver.name || ''}` };
+            }
+            // Unknown salary type — zero out instead of guessing 20%
+            return { ...e, amount: 0, description: `Nómina: ${driver.name || ''}` };
           }));
         }
       }

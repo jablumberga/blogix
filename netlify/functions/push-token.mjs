@@ -10,6 +10,11 @@ import { verifyToken } from "./api.mjs";
 
 const ALLOWED_ORIGINS = new Set([
   "https://blogix.do",
+  "https://www.blogix.do",
+  "https://b-logix.do",
+  "https://www.b-logix.do",
+  "https://b-logix.com",
+  "https://www.b-logix.com",
   "https://blogix-logistica-dr.netlify.app",
   "http://localhost:5173",
   "http://localhost:8888",

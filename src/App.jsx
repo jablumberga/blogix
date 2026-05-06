@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { getToken } from "./api.js";
 import { colors } from "./constants/theme.js";
@@ -23,6 +23,7 @@ import SuppliersPage from "./pages/SuppliersPage.jsx";
 import SettlementsPage from "./pages/SettlementsPage.jsx";
 import CxCPage from "./pages/CxCPage.jsx";
 import InvoicesPage from "./pages/InvoicesPage.jsx";
+import BancoPage from "./pages/BancoPage.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -87,8 +88,9 @@ export default function App() {
     drivers, setDrivers, trips, setTrips, expenses, setExpenses,
     brokers, setBrokers, suppliers, setSuppliers,
     fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus,
-    cobros, setCobros, invoices, setInvoices, syncStatus,
-    partner, partnerTruckIds, driverObj, alerts,
+    cobros, setCobros, invoices, setInvoices,
+    bankAccount, setBankAccount, bankReconciliation, setBankReconciliation,
+    syncStatus, partner, partnerTruckIds, driverObj, alerts,
   } = useApp();
 
   const [page, setPage] = useState(() => {
@@ -170,6 +172,7 @@ export default function App() {
     { id: "expenses",    icon: Receipt,          label: t.expenses },
     { id: "cxp",         icon: CreditCard,       label: "Cuentas x Pagar" },
     { id: "nomina",      icon: Banknote,         label: "Nómina" },
+    { id: "banco",       icon: Landmark,         label: "Banco" },
     { id: "suppliers",   icon: Store,            label: t.suppliers },
     { id: "settlements", icon: Handshake,        label: t.settlements },
     { divider: true },
@@ -184,7 +187,7 @@ export default function App() {
   ];
   const navItems = isAdmin ? adminNav : isPartner ? partnerNav : driverNav;
 
-  const ctx = { t, user, isMobile, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, partner, partnerTruckIds, driverObj, alerts };
+  const ctx = { t, user, isMobile, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, partner, partnerTruckIds, driverObj, alerts };
 
   const pageTitles = {
     dashboard:   t.dashboard,
@@ -201,6 +204,7 @@ export default function App() {
     expenses:    t.expenses,
     cxp:         "Cuentas x Pagar",
     nomina:      "Nómina",
+    banco:       "Banco",
     suppliers:   t.suppliers,
     settlements: t.settlements,
     agents:      t.agents,
@@ -219,7 +223,7 @@ export default function App() {
 
       {/* Mobile top bar */}
       {isMobile && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 52, zIndex: 200, background: colors.card, borderBottom: `1px solid ${colors.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: `calc(52px + env(safe-area-inset-top, 0px))`, zIndex: 200, background: colors.card, borderBottom: `1px solid ${colors.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", paddingTop: "env(safe-area-inset-top, 0px)" }}>
           <button onClick={() => setSidebarOpen(true)} style={{ background: "transparent", border: "none", color: colors.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8, flexShrink: 0 }}>
             <Menu size={20} />
           </button>
@@ -307,7 +311,7 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", paddingTop: isMobile ? 52 : 20, paddingLeft: isMobile ? 14 : 20, paddingRight: isMobile ? 14 : 20, paddingBottom: isMobile ? `calc(56px + env(safe-area-inset-bottom))` : `calc(20px + env(safe-area-inset-bottom))`, position: "relative" }}>
+      <div style={{ flex: 1, overflow: "auto", paddingTop: isMobile ? `calc(52px + env(safe-area-inset-top, 0px))` : 20, paddingLeft: isMobile ? 14 : 20, paddingRight: isMobile ? 14 : 20, paddingBottom: isMobile ? `calc(56px + env(safe-area-inset-bottom))` : `calc(20px + env(safe-area-inset-bottom))`, position: "relative" }}>
         {showRecoveryBanner && (
           <div style={{ position: "sticky", top: 0, zIndex: 101, background: "#7c3aed", color: "#fff", padding: "10px 16px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderRadius: 8, marginBottom: 12 }}>
             <span>🔔 Tienes {localDataCount} registros locales que no están en el servidor. ¿Restaurar ahora?</span>
@@ -348,6 +352,7 @@ export default function App() {
         {page === "expenses"    && isAdmin    && <ExpensesPage     {...ctx} />}
         {page === "cxp"         && isAdmin    && <CxPPage          {...ctx} />}
         {page === "nomina"      && isAdmin    && <NominaPage       {...ctx} />}
+        {page === "banco"       && isAdmin    && <BancoPage        {...ctx} />}
         {page === "suppliers"   && isAdmin    && <SuppliersPage    {...ctx} />}
         {page === "settlements" && (isAdmin || isPartner) && <SettlementsPage  {...ctx} />}
         {page === "agents"      && isAdmin    && <AgentsPage       {...ctx} />}

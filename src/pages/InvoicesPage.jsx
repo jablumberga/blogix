@@ -245,6 +245,15 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   const markInvoicePaid = (inv) => {
     const cl = clients.find(c => c.id === inv.clientId);
     if (!cl) return;
+    const isPassThrough = cl?.rules?.brokerPassThrough === true;
+    // Net amount per trip (gross minus broker commission for pass-through clients)
+    const tripNetAmt = (tr) => {
+      const gross = tr?.revenue || 0;
+      if (!isPassThrough || !tr?.brokerId) return gross;
+      const broker = brokers.find(b => b.id === tr.brokerId);
+      if (!broker) return gross;
+      return gross - Math.round(gross * (broker.commissionPct || 10) / 100);
+    };
     // Group invoice trips by periodKey
     const byPeriod = new Map();
     (inv.tripIds || []).forEach(tid => {
@@ -270,7 +279,10 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
           const allCollected = allTripsInPeriod.every(tr => merged.includes(tr.id));
           next[idx] = { ...existing, collectedTripIds: merged, status: allCollected ? "collected" : "partial", collectedDate: allCollected ? inv.date : existing.collectedDate };
         } else {
-          const tripRevenue = tripIds.reduce((s, tid) => s + (trips.find(t => t.id === tid)?.revenue || 0), 0);
+          const tripRevenue = tripIds.reduce((s, tid) => {
+            const tr = trips.find(t => t.id === tid);
+            return s + tripNetAmt(tr);
+          }, 0);
           next.push({ id: nxId(next), clientId: inv.clientId, periodKey, status: "partial", collectedDate: null, amount: tripRevenue, collectedTripIds: tripIds });
         }
       });

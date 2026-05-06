@@ -4,7 +4,7 @@ import { colors } from "../constants/theme.js";
 import { nxId } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
-export default function PartnersPage({ t, partners, setPartners, trucks, isMobile }) {
+export default function PartnersPage({ t, partners, setPartners, trucks, setTrucks, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", email: "", commissionPct: "", negotiationType: "Net Profit %", notes: "", username: "", password: "" });
@@ -18,7 +18,9 @@ export default function PartnersPage({ t, partners, setPartners, trucks, isMobil
       const duplicate = partners.some(p => p.username === form.username && p.id !== (editId || -1));
       if (duplicate) { setError("Este usuario ya existe"); return; }
     }
-    const d = { ...form, commissionPct: Number(form.commissionPct) || 0 };
+    const commission = Number(form.commissionPct) || 0;
+    if (commission < 0 || commission > 100) { setError("Comisión debe estar entre 0 y 100"); return; }
+    const d = { ...form, commissionPct: commission };
     if (editId) setPartners(partners.map(p => p.id === editId ? { ...d, id: editId } : p));
     else setPartners([...partners, { ...d, id: nxId(partners) }]);
     setShowForm(false);
@@ -67,6 +69,7 @@ export default function PartnersPage({ t, partners, setPartners, trucks, isMobil
             <button onClick={() => {
               const truckCount = (trucks || []).filter(tk => tk.partnerId === p.id).length;
               if (!window.confirm(`Eliminar ${p.name}? Tiene ${truckCount} camión(es) registrado(s). Esta acción no se puede deshacer.`)) return;
+              if (setTrucks) setTrucks(prev => prev.map(tk => tk.partnerId === p.id ? { ...tk, partnerId: null } : tk));
               setPartners(partners.filter(x => x.id !== p.id));
             }} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.red, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={12} /></button>
           </Td>

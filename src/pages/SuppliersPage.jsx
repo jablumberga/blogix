@@ -4,7 +4,7 @@ import { colors } from "../constants/theme.js";
 import { nxId } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
-export default function SuppliersPage({ t, suppliers, setSuppliers, isMobile }) {
+export default function SuppliersPage({ t, suppliers, setSuppliers, setExpenses, isMobile }) {
   const EMPTY = { name: "", contactPerson: "", phone: "", email: "", paymentCondition: "cash", creditDays: 0, billingCycle: "invoice_date", period1CutDay: 15, notes: "" };
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -61,7 +61,10 @@ export default function SuppliersPage({ t, suppliers, setSuppliers, isMobile }) 
           <Td>{s.paymentCondition === "credit" ? `${s.creditDays}d` : "—"}</Td>
           <Td align="right">
             <button onClick={() => openEdit(s)} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
-            <button onClick={() => setSuppliers(suppliers.filter(x => x.id !== s.id))} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
+            <button onClick={() => {
+              if (setExpenses) setExpenses(prev => prev.map(e => e.supplierId === s.id ? { ...e, supplierId: null } : e));
+              setSuppliers(suppliers.filter(x => x.id !== s.id));
+            }} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
           </Td>
         </tr>)}</tbody>
       </table>
