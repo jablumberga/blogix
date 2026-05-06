@@ -170,7 +170,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       if (e.category === "driverPay") return !cxpOverridePKeys.has(cxpPKey(e));
       return false;
     }).reduce((s,e) => s + e.amount, 0);
-    const cxpSupplier = allPending.filter(e => ["fuel","repair","maintenance","tire","helper","other","toll"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
+    const cxpSupplier = allPending.filter(e => ["fuel","repair","maintenance","tire","helper","other","toll","salary"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
     const cxpFijos    = allPending.filter(e => ["loan","insurance"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
     return { cxpNomina, cxpSupplier, cxpFijos, totalCxP: cxpNomina + cxpSupplier + cxpFijos };
   }, [expenses, trips]);
@@ -205,7 +205,15 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       draftAmt:         periodInv.filter(i => i.status === "draft").reduce((s, i) => s + invAmt(i), 0),
       readyToInvoiceAmt: readyAmt,
       pendingDocsAmt:   mt.filter(tr => tr.status === "delivered" && (tr.revenue || 0) > 0 && tr.docStatus !== "delivered" && !allInvoicedIds.has(tr.id))
-                          .reduce((s, tr) => s + (tr.revenue || 0), 0),
+                          .reduce((s, tr) => {
+                            const cl = cMap.get(tr.clientId);
+                            if (cl?.rules?.brokerPassThrough && tr.brokerId) {
+                              const br = bMap.get(tr.brokerId);
+                              const ded = br ? Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100) : 0;
+                              return s + (tr.revenue || 0) - ded;
+                            }
+                            return s + (tr.revenue || 0);
+                          }, 0),
     };
   }, [invoices, mt, trips, clients, brokers, dateFrom, dateTo]);
 
@@ -476,10 +484,10 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
               { label: "Ingresos brutos", value: revenue, color: colors.green, icon: "up" },
-              { label: `Nomina conductores (${revenue > 0 ? (nomina/revenue*100).toFixed(0) : 0}%)`, value: -nomina, color: colors.accent, icon: "dn" },
-              { label: `Comisiones brokers (${revenue > 0 ? (brokerFees/revenue*100).toFixed(0) : 0}%)`, value: -brokerFees, color: colors.yellow, icon: "dn" },
-              { label: `Gastos operativos (${revenue > 0 ? (operExp/revenue*100).toFixed(0) : 0}%)`, value: -operExp, color: colors.orange, icon: "dn" },
-              ...(totalPartnerComm > 0 ? [{ label: `Liquidaciones socios (${revenue > 0 ? (totalPartnerComm/revenue*100).toFixed(0) : 0}%)`, value: -totalPartnerComm, color: colors.purple, icon: "dn" }] : []),
+              { label: `Nomina conductores (${netRevenue > 0 ? (nomina/netRevenue*100).toFixed(0) : 0}%)`, value: -nomina, color: colors.accent, icon: "dn" },
+              { label: `Comisiones brokers (${netRevenue > 0 ? (brokerFees/netRevenue*100).toFixed(0) : 0}%)`, value: -brokerFees, color: colors.yellow, icon: "dn" },
+              { label: `Gastos operativos (${netRevenue > 0 ? (operExp/netRevenue*100).toFixed(0) : 0}%)`, value: -operExp, color: colors.orange, icon: "dn" },
+              ...(totalPartnerComm > 0 ? [{ label: `Liquidaciones socios (${netRevenue > 0 ? (totalPartnerComm/netRevenue*100).toFixed(0) : 0}%)`, value: -totalPartnerComm, color: colors.purple, icon: "dn" }] : []),
             ].map(({ label, value, color, icon }) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: `1px solid ${colors.border}11` }}>
                 <span style={{ fontSize: 12, color: colors.textMuted }}>{icon === "up" ? "+" : "-"} {label}</span>
