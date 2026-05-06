@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2, Calendar, FileCheck, FileText, Handshake, Hash, Zap } from "lucide-react";
+import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2, Calendar, FileCheck, FileText, Handshake, Hash, Zap, RotateCw } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today } from "../utils/helpers.js";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
@@ -134,8 +134,9 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           if (e.tripId === editId && e.category === "driverPay") {
             const driver = drivers.find(d => d.id === data.driverId);
             const newPay = Math.max(0, calcDriverPay(driver, data) - discountTotal);
-            const pct = driver?.salaryType === "porcentaje" ? (driver.percentageAmount || 0) : 20;
-            return { ...e, amount: newPay, description: `Nómina ${pct}%: ${driver?.name || ''}`, tripId: editId, driverId: data.driverId };
+            const driverName = driver?.name || '';
+            const desc = driver?.salaryType === "perTrip" ? `Pago por viaje: ${driverName}` : `Nómina ${driver?.salaryType === "porcentaje" ? (driver.percentageAmount || 0) : 20}%: ${driverName}`;
+            return { ...e, amount: newPay, description: desc, tripId: editId, driverId: data.driverId };
           }
           return e;
         }));
@@ -167,9 +168,9 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         if (driver?.salaryType !== "fixed") {
           const discountTotal = (data.tripDiscounts || data.discounts || []).reduce((s, d) => s + (typeof d === "number" ? d : Number(d?.amount) || 0), 0);
           const driverPay = Math.max(0, calcDriverPay(driver, data) - discountTotal);
-          const pct = driver?.salaryType === "porcentaje" ? (driver.percentageAmount || 0) : 20;
           const driverName = driver ? driver.name : `Conductor #${data.driverId}`;
-          if (driverPay > 0) newExpenses.push({ category: "driverPay", amount: driverPay, description: `Nómina ${pct}%: ${driverName}`, paymentMethod: "transfer", driverId: data.driverId, status: "pending" });
+          const desc = driver?.salaryType === "perTrip" ? `Pago por viaje: ${driverName}` : `Nómina ${driver?.salaryType === "porcentaje" ? (driver.percentageAmount || 0) : 20}%: ${driverName}`;
+          if (driverPay > 0) newExpenses.push({ category: "driverPay", amount: driverPay, description: desc, paymentMethod: "transfer", driverId: data.driverId, status: "pending" });
         }
       }
       if (newExpenses.length > 0) {

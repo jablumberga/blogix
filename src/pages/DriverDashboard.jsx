@@ -83,8 +83,8 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
       const discountTotal = (data.discounts || []).reduce((s, d) => s + (Number(d?.amount) || 0), 0);
       driverPay = Math.max(0, driverPay - discountTotal);
       if (driverPay > 0) {
-        const pct = driverObj.salaryType === "porcentaje" ? (driverObj.percentageAmount ?? 20) : 20;
-        newExpenses.push({ category: "driverPay", amount: driverPay, description: `Nómina ${pct}%: ${driverObj.name}`, paymentMethod: "transfer", driverId: driverObj.id, status: "pending" });
+        const desc = driverObj.salaryType === "perTrip" ? `Pago por viaje: ${driverObj.name}` : `Nómina ${driverObj.salaryType === "porcentaje" ? (driverObj.percentageAmount || 0) : 20}%: ${driverObj.name}`;
+        newExpenses.push({ category: "driverPay", amount: driverPay, description: desc, paymentMethod: "transfer", driverId: driverObj.id, status: "pending" });
       }
     }
     if (newExpenses.length > 0) {
