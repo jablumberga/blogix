@@ -80,6 +80,8 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
       } else {
         driverPay = Math.round((data.revenue || 0) * 0.20);
       }
+      const discountTotal = (data.discounts || []).reduce((s, d) => s + (Number(d?.amount) || 0), 0);
+      driverPay = Math.max(0, driverPay - discountTotal);
       if (driverPay > 0) {
         const pct = driverObj.salaryType === "porcentaje" ? (driverObj.percentageAmount ?? 20) : 20;
         newExpenses.push({ category: "driverPay", amount: driverPay, description: `Nómina ${pct}%: ${driverObj.name}`, paymentMethod: "transfer", driverId: driverObj.id, status: "pending" });
@@ -104,19 +106,9 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
   const completed = allMyTrips.filter(tr => tr.status === "delivered").length;
   const selectedClient = clients.find(c => c.id === Number(form.clientId));
 
-  const calcPay = (tr) => {
-    if (driverObj?.salaryType === "perTrip") {
-      const rate = (driverObj.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality);
-      if (!rate) return 0;
-      const tk = trucks.find(t2 => t2.id === tr.truckId);
-      const size = tr.tarifaOverride || tk?.size || "T1";
-      return size === "T2"
-        ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) + (rate.helperT2 || 0) * 2
-        : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0) + (rate.helperT1 || 0);
-    }
-    if (driverObj?.salaryType === "porcentaje") return (tr.revenue || 0) * ((driverObj.percentageAmount || 0) / 100);
-    return 0;
-  };
+  // Read stored driverPay expense — avoids retroactive changes if salaryType is updated
+  const calcPay = (tr) =>
+    (expenses || []).find(e => e.category === "driverPay" && e.tripId === tr.id)?.amount ?? 0;
   const totalBruto = activePeriods.reduce((sum, pd) => {
     const override = (expenses || []).find(e =>
       e.category === "nominaTotalOverride" && e.driverId === driverObj?.id &&
@@ -212,23 +204,10 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
   const [open, setOpen] = useState(defaultOpen);
   const periodTrips = myTrips.filter(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo);
 
-  const calcDriverPay = (tr) => {
-    if (driverObj?.salaryType === "perTrip") {
-      const rate = (driverObj.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality);
-      if (!rate) return 0;
-      const tk = trucks.find(t2 => t2.id === tr.truckId);
-      const size = tr.tarifaOverride || tk?.size || "T1";
-      return size === "T2"
-        ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) + (rate.helperT2 || 0) * 2
-        : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0) + (rate.helperT1 || 0);
-    }
-    if (driverObj?.salaryType === "porcentaje") return (tr.revenue || 0) * ((driverObj.percentageAmount || 0) / 100);
-    return 0;
-  };
-
+  // Read stored driverPay expense — avoids retroactive changes if salaryType is updated
   const calcBruto = driverObj?.salaryType === "fixed"
     ? (driverObj.fixedAmount || 0)
-    : periodTrips.reduce((s, tr) => s + calcDriverPay(tr), 0);
+    : periodTrips.reduce((s, tr) => s + ((expenses || []).find(e => e.category === "driverPay" && e.tripId === tr.id)?.amount ?? 0), 0);
 
   const totalOverrideExp = (expenses || []).find(e =>
     e.category === "nominaTotalOverride" &&

@@ -376,7 +376,7 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
   // ── Partner view ─────────────────────────────────────────────────────────
   if (isPartnerView) {
     const periodCards = periods.map(pd => {
-      const myTrips = trips.filter(tr => (partnerTruckIds || []).includes(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo);
+      const myTrips = trips.filter(tr => (partnerTruckIds || []).includes(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo && tr.status !== "cancelled");
       if (myTrips.length === 0) return null;
       const key = `${partner?.id}-${pd.mStr}-${pd.half}`;
       return { pd, card: buildCard(partner || {}, myTrips, pd, key) };
@@ -412,7 +412,7 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
   const periodGroups = periods.map(pd => {
     const partnerCards = partners.map(p => {
       const pTruckSet = new Set(trucks.filter(tk => tk.partnerId === p.id).map(tk => tk.id));
-      const pTrips    = trips.filter(tr => pTruckSet.has(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo);
+      const pTrips    = trips.filter(tr => pTruckSet.has(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo && tr.status !== "cancelled");
       if (pTrips.length === 0) return null;
       const key = `${p.id}-${pd.mStr}-${pd.half}`;
       return { p, card: buildCard(p, pTrips, pd, key) };

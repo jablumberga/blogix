@@ -157,7 +157,11 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
   // ── CxP (accounts payable — all pending expenses) ──────────────────────
   const { cxpNomina, cxpSupplier, cxpFijos, totalCxP } = useMemo(() => {
-    const allPending  = expenses.filter(e => !e.status || e.status === "pending");
+    const cancelledTripIds = new Set(trips.filter(tr => tr.status === "cancelled").map(tr => tr.id));
+    const allPending  = expenses.filter(e =>
+      (!e.status || e.status === "pending") &&
+      !(e.category === "driverPay" && e.tripId && cancelledTripIds.has(e.tripId))
+    );
     // Same override-aware exclusion for CxP: exclude driverPay for periods with a nominaTotalOverride
     const cxpPKey = (e) => e.driverId ? `${e.driverId}-${(e.date||"").slice(0,7)}-${parseInt((e.date||"").slice(8)||0,10)<=15?1:2}` : null;
     const cxpOverridePKeys = new Set(expenses.filter(e => e.category === "nominaTotalOverride").map(cxpPKey).filter(Boolean));
@@ -169,7 +173,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
     const cxpSupplier = allPending.filter(e => ["fuel","repair","maintenance","tire","helper","other","toll"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
     const cxpFijos    = allPending.filter(e => ["loan","insurance"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
     return { cxpNomina, cxpSupplier, cxpFijos, totalCxP: cxpNomina + cxpSupplier + cxpFijos };
-  }, [expenses]);
+  }, [expenses, trips]);
 
   const cashPosition = totalCxC - totalCxP;
 

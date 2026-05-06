@@ -7,7 +7,7 @@ import { Card, StatCard, PageHeader, Sel, Badge, Th, Td, StatusBadge } from "../
 const MODES = ["quincena", "mes", "dia", "ano", "custom"];
 const MODE_LABELS = { quincena: "Quincena", mes: "Mes", dia: "Día", ano: "Año", custom: "Personalizado" };
 
-export default function PartnerDashboard({ t, trips, trucks, expenses, partner, partnerTruckIds, clients, brokers, settlementStatus, setSettlementStatus, isMobile }) {
+export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, partner, partnerTruckIds, clients, brokers, settlementStatus, setSettlementStatus, isMobile }) {
   const now = new Date();
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
   const todayStr = now.toISOString().slice(0, 10);
@@ -80,7 +80,7 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, partner, 
   const pTruckSet = new Set(partnerTruckIds || []);
 
   const myTrucks = trucks.filter(tk => pTruckSet.has(tk.id));
-  let filtered = trips.filter(tr => pTruckSet.has(tr.truckId) && tr.date >= dateFrom && tr.date <= dateTo);
+  let filtered = trips.filter(tr => pTruckSet.has(tr.truckId) && tr.date >= dateFrom && tr.date <= dateTo && tr.status !== "cancelled");
   if (truckFilter !== "all") filtered = filtered.filter(tr => tr.truckId === Number(truckFilter));
 
   const activeTruckSet = truckFilter === "all" ? pTruckSet : new Set([Number(truckFilter)]);
@@ -92,6 +92,17 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, partner, 
   const driverIdsFromTrips = new Set(filtered.map(tr => tr.driverId).filter(Boolean));
   const driverIdsFromPay   = new Set(tripDriverPayExps.map(e => e.driverId).filter(Boolean));
   const allDriverIds       = new Set([...driverIdsFromTrips, ...driverIdsFromPay]);
+
+  // Include fixed-salary drivers whose nómina arrives only via nominaTotalOverride
+  expenses.forEach(e => {
+    if (e.category !== "nominaTotalOverride") return;
+    if (!e.driverId || allDriverIds.has(e.driverId)) return;
+    if (!(e.date >= dateFrom && e.date <= dateTo)) return;
+    const driverTruckId = (drivers || []).find(d => d.id === e.driverId)?.truckId;
+    if ((e.truckId && pTruckSet.has(e.truckId)) || (driverTruckId && pTruckSet.has(driverTruckId))) {
+      allDriverIds.add(e.driverId);
+    }
+  });
 
   const overrideExps = expenses.filter(e =>
     e.category === "nominaTotalOverride" &&
@@ -132,7 +143,7 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, partner, 
   const rev              = grossRev - passThruDeduction;
   const totalDeducciones = passThruDeduction + retenciones + otrosGastos;
   const net              = rev - retenciones - otrosGastos;
-  const adminComm        = Math.round(net * ((partner?.commissionPct||0) / 100));
+  const adminComm        = Math.max(0, Math.round(net * ((partner?.commissionPct||0) / 100)));
   const toReceive        = net - adminComm;
 
   const inputStyle = { padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 12 };

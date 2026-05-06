@@ -103,8 +103,10 @@ function applyRLS(data, user) {
     const myClientIds = new Set(myTrips.map(tr => tr.clientId).filter(Boolean));
     const myDriverIds = new Set(myTrips.map(tr => tr.driverId).filter(Boolean));
     const myExp = (data.expenses || []).filter(e =>
-      myTripIds.has(e.tripId) ||
-      (e.driverId && myDriverIds.has(e.driverId) && !e.tripId)
+      e.category !== "nominaTotalOverride" && (
+        myTripIds.has(e.tripId) ||
+        (e.driverId && myDriverIds.has(e.driverId) && !e.tripId)
+      )
     );
     return {
       partners:         [partner],

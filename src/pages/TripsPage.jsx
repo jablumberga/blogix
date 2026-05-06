@@ -127,6 +127,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       const prevTrip = trips.find(tr => tr.id === editId);
       setTrips(trips.map(tr => tr.id === editId ? { ...data, id: editId } : tr));
       const payChanged = prevTrip && (prevTrip.revenue !== data.revenue || prevTrip.truckId !== data.truckId || prevTrip.driverId !== data.driverId || prevTrip.province !== data.province || prevTrip.municipality !== data.municipality);
+      const brokerChanged = prevTrip && (prevTrip.revenue !== data.revenue || prevTrip.brokerId !== data.brokerId);
       if (payChanged && data.revenue > 0) {
         const discountTotal = (data.tripDiscounts || data.discounts || []).reduce((s, d) => s + (typeof d === "number" ? d : Number(d?.amount) || 0), 0);
         setExpenses(prev => prev.map(e => {
@@ -138,6 +139,18 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           }
           return e;
         }));
+      }
+      if (brokerChanged) {
+        const broker = data.brokerId ? brokers.find(b => b.id === data.brokerId) : null;
+        const isPassThrough = cl?.rules?.brokerPassThrough === true;
+        setExpenses(prev => {
+          let next = prev.filter(e => !(e.tripId === editId && e.category === "broker_commission"));
+          if (broker && data.revenue > 0 && !isPassThrough) {
+            const fee = Math.round(data.revenue * broker.commissionPct / 100);
+            next = [...next, { id: nxId(next), category: "broker_commission", amount: fee, description: `${t.brokerAutoDeducted}: ${broker.name} (${broker.commissionPct}%)`, paymentMethod: "transfer", brokerId: data.brokerId, status: "paid", tripId: editId, date: data.date, supplierId: null }];
+          }
+          return next;
+        });
       }
     } else {
       const newId = nxId(trips);
