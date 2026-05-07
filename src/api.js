@@ -99,19 +99,13 @@ export async function loadData() {
       const apiData = await res.json();
       if (apiData && Object.keys(apiData).length > 0) {
         const { _version, ...dataOnly } = apiData;
-        // If localStorage has uncommitted changes (dirty), don't overwrite — let
-        // the auto-save push them to Supabase instead of losing them.
-        if (isDirty()) {
-          const raw = localStorage.getItem(key);
-          if (raw) {
-            try { return { source: "localStorage", data: JSON.parse(raw) }; } catch {}
-          }
-        }
-        // Only cache API data locally if it contains actual records.
+        // Always use fresh server data. The dirty flag only gates the write path
+        // (auto-save); on a fresh page load any in-memory changes are already gone.
         const apiHasData = Object.values(dataOnly).some(v => Array.isArray(v) ? v.length > 0 : Boolean(v));
         const localRaw = localStorage.getItem(key);
         if (apiHasData || !localRaw) {
           localStorage.setItem(key, JSON.stringify(dataOnly));
+          clearDirty(); // server is authoritative — dirty flag no longer valid
         }
         return { source: "api", data: dataOnly, version: _version || 0 };
       }

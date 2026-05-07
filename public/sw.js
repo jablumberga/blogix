@@ -1,4 +1,4 @@
-const CACHE_NAME = 'blogix-v1';
+const CACHE_NAME = 'blogix-v2';
 const STATIC_ASSETS = [
   '/',
     '/index.html',
