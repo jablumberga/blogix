@@ -5,6 +5,7 @@ import { getToken } from "./api.js";
 import { colors } from "./constants/theme.js";
 import { Badge } from "./components/ui/index.jsx";
 import LoginPage from "./components/LoginPage.jsx";
+import LandingPage from "./pages/LandingPage.jsx";
 import CfoChat from "./components/CfoChat.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AgentsPage from "./pages/AgentsPage.jsx";
@@ -106,6 +107,7 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth <= 768 : false);
   const [recovering, setRecovering] = useState(false);
   const [recovered, setRecovered] = useState(false);
+  const [showLanding, setShowLanding] = useState(true);
 
   useEffect(() => {
     const handle = () => { const m = window.innerWidth <= 768; setIsMobile(m); if (!m) setSidebarOpen(true); };
@@ -147,8 +149,11 @@ export default function App() {
     );
   }
 
+  if (!user && showLanding) return <LandingPage onLogin={() => setShowLanding(false)} />;
+
   if (!user) return <LoginPage t={t} onLogin={(u, remember, token) => {
     login(u, remember, token);
+    setShowLanding(true);
     setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : "dashboard");
     initPushNotifications(u.role);
   }} />;
@@ -230,7 +235,7 @@ export default function App() {
           <span style={{ fontWeight: 600, fontSize: 15, color: colors.text, flex: 1, textAlign: "center" }}>
             {pageTitles[page] ?? "B-Logix"}
           </span>
-          <button onClick={logout} title="Cerrar sesión" style={{ background: "transparent", border: "none", color: colors.red, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8, flexShrink: 0 }}>
+          <button onClick={() => { logout(); setShowLanding(true); }} title="Cerrar sesión" style={{ background: "transparent", border: "none", color: colors.red, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8, flexShrink: 0 }}>
             <LogOut size={18} />
           </button>
         </div>
@@ -287,7 +292,7 @@ export default function App() {
 
           {/* Logout button */}
           <button
-            onClick={logout}
+            onClick={() => { logout(); setShowLanding(true); }}
             title="Cerrar sesión"
             style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", minHeight: 44, borderRadius: 7, border: "none", background: "transparent", color: colors.red, cursor: "pointer", fontSize: 13, fontWeight: 600, width: "100%", transition: "background 0.15s" }}
             onMouseEnter={e => e.currentTarget.style.background = colors.red + "18"}
@@ -381,7 +386,7 @@ export default function App() {
             <LayoutDashboard size={20} color={colors.accent} />
             <span style={{ lineHeight: 1 }}>{t.dashboard}</span>
           </button>
-          <button onClick={logout} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 10, padding: "6px 0", minWidth: 0 }}>
+          <button onClick={() => { logout(); setShowLanding(true); }} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 10, padding: "6px 0", minWidth: 0 }}>
             <LogOut size={20} color={colors.textMuted} />
             <span style={{ lineHeight: 1 }}>{t.logout || "Salir"}</span>
           </button>
