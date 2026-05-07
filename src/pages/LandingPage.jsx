@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { ArrowRight, ChevronDown, ChevronUp, Truck, MapPin, BarChart3, Clock, Shield, Users } from "lucide-react";
 
+const LOGO = "/b-logix-logo.jpg";
+const LogoImg = ({ height = 36 }) => (
+  <img
+    src={LOGO}
+    alt="B-Logix"
+    style={{ height, background: "#fff", borderRadius: 6, padding: "3px 10px", display: "block", objectFit: "contain" }}
+  />
+);
+
 /* ─── TOKENS ──────────────────────────────────────────────────────────────── */
 const T = {
   navy:    "#050d1a",
@@ -96,18 +105,7 @@ function Nav({ onLogin }) {
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 8,
-            background: T.accentL,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <Truck size={20} color={T.white} />
-          </div>
-          <span style={{ fontFamily: sans, fontWeight: 800, fontSize: 18, color: T.white, letterSpacing: "-0.4px" }}>
-            B‑Logix
-          </span>
-        </div>
+        <LogoImg height={36} />
 
         {/* Login */}
         <button onClick={onLogin} style={{
@@ -470,15 +468,9 @@ function Footer() {
         maxWidth: 1200, margin: "0 auto",
         display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 6, background: T.accentL,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <Truck size={16} color={T.white} />
-          </div>
-          <span style={{ fontFamily: sans, fontWeight: 800, fontSize: 15, color: T.white }}>B‑Logix</span>
-          <span style={{ fontFamily: sans, fontSize: 12, color: "rgba(255,255,255,0.3)", marginLeft: 8 }}>© 2026</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <LogoImg height={28} />
+          <span style={{ fontFamily: sans, fontSize: 12, color: "rgba(255,255,255,0.3)" }}>© 2026</span>
         </div>
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
           <a href="mailto:soporte@blogix.do" style={{ fontFamily: sans, fontSize: 13, color: "rgba(255,255,255,0.4)", textDecoration: "none" }}>soporte@blogix.do</a>
