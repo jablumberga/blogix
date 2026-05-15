@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2, Calendar, FileCheck, FileText, Handshake, Hash, Zap, RotateCw } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today } from "../utils/helpers.js";
@@ -6,7 +6,7 @@ import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js"
 import { generateConduce } from "../utils/generateConduce.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td, StatusBadge, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, isMobile }) {
+export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, invoices, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({});
@@ -19,6 +19,15 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const [filterTruck, setFilterTruck] = useState("all");
   const [rateMsg, setRateMsg] = useState("");
   const [formError, setFormError] = useState("");
+
+  const invoicedTripMap = useMemo(() => {
+    const m = new Map();
+    (invoices || []).forEach(inv => {
+      if (inv.status === "cancelled") return;
+      (inv.tripIds || []).forEach(tid => m.set(Number(tid), inv));
+    });
+    return m;
+  }, [invoices]);
 
   const emptyForm = { date: today(), province: "", municipality: "", truckId: "", driverId: "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [], tarifaOverride: null };
 
@@ -396,6 +405,12 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                     <StatusBadge status={tr.status} t={t} />
                     <div style={{ fontSize: 16, fontWeight: 800, color: colors.green }}>{fmt(tr.revenue)}</div>
+                    {(() => {
+                      const inv = invoicedTripMap.get(tr.id);
+                      if (inv) return <span style={{ fontSize: 9, fontWeight: 600, color: colors.green, background: colors.green+"18", padding: "1px 7px", borderRadius: 8, display: "inline-flex", alignItems: "center", gap: 2 }}><FileText size={8} /> {inv.invoiceNumber}</span>;
+                      if ((tr.revenue || 0) > 0) return <span style={{ fontSize: 9, color: colors.textMuted, background: colors.border+"44", padding: "1px 7px", borderRadius: 8 }}>Sin facturar</span>;
+                      return null;
+                    })()}
                   </div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 11, color: colors.textMuted, marginBottom: 10 }}>
@@ -458,6 +473,13 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                     <Td align="right" bold color={colors.green}>
                       {fmt(tr.revenue)}
                       {tr.tarifaOverride && <><br /><span style={{ fontSize: 11, fontWeight: 700, color: colors.orange, background: colors.orange+"15", padding: "1px 6px", borderRadius: 5, display: "inline-flex", alignItems: "center", gap: 2 }}><Zap size={9} /> {tr.tarifaOverride}</span></>}
+                      <br />
+                      {(() => {
+                        const inv = invoicedTripMap.get(tr.id);
+                        if (inv) return <span style={{ fontSize: 9, fontWeight: 600, color: colors.green, background: colors.green+"18", padding: "1px 6px", borderRadius: 8, display: "inline-flex", alignItems: "center", gap: 2 }}><FileText size={8} /> {inv.invoiceNumber}</span>;
+                        if ((tr.revenue || 0) === 0) return null;
+                        return <span style={{ fontSize: 9, color: colors.textMuted, background: colors.border+"44", padding: "1px 6px", borderRadius: 8 }}>Sin facturar</span>;
+                      })()}
                     </Td>
                     <Td align="right">
                       <div style={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>

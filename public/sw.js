@@ -1,4 +1,4 @@
-const CACHE_NAME = 'blogix-1778192243282';
+const CACHE_NAME = 'blogix-1778861847073';
 const STATIC_ASSETS = [
   '/',
     '/index.html',
