@@ -209,7 +209,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const clientMap = new Map(clients.map(c => [c.id, c]));
   const driverMap = new Map(drivers.map(d => [d.id, d]));
   const truckMap  = new Map(trucks.map(tk => [tk.id, tk]));
-  const tripExpMap = expenses.reduce((m, e) => { if (e.tripId) m.set(e.tripId, (m.get(e.tripId) || 0) + e.amount); return m; }, new Map());
+  const tripExpMap = expenses.reduce((m, e) => { if (e.tripId && e.category !== "adelanto_conductor") m.set(e.tripId, (m.get(e.tripId) || 0) + e.amount); return m; }, new Map());
 
   if (search) {
     const s = search.toLowerCase();
