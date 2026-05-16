@@ -67,10 +67,11 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
   const [editingId, setEditingId] = useState(null);
   const [editingTotal, setEditingTotal] = useState(false);
 
+  const periodTripIds = new Set(exps.filter(e => e.tripId).map(e => e.tripId));
   const adelantoExps = (allExpenses||[]).filter(e =>
     e.category === "adelanto_conductor" &&
     (e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name))) &&
-    e.date >= periodDateFrom && e.date <= periodDateTo
+    ((e.date >= periodDateFrom && e.date <= periodDateTo) || (e.tripId && periodTripIds.has(e.tripId)))
   );
   const adelantos = adelantoExps.reduce((s, e) => s + e.amount, 0);
 
