@@ -494,6 +494,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
   const periods = genPeriods([
     ...expenses.filter(e => e.category === "driverPay").map(e => e.date),
     ...expenses.filter(e => e.category === "nominaTotalOverride" && fixedDrivers.some(d => d.id === e.driverId)).map(e => e.date),
+    ...expenses.filter(e => e.category === "adelanto_conductor").map(e => e.date),
   ]);
   const periodGroups = periods.map(pd => {
     const pdExps = expenses.filter(e => e.category === "driverPay" && e.date >= pd.dateFrom && e.date <= pd.dateTo);
@@ -515,7 +516,11 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
           paidTotal:    isPaid ? fixedAmt : 0 };
       }
       const exps = pdExps.filter(e => e.driverId === driver.id);
-      if (exps.length === 0) return null;
+      const hasAdelantos = expenses.some(e =>
+        e.category === "adelanto_conductor" && e.driverId === driver.id &&
+        e.date >= pd.dateFrom && e.date <= pd.dateTo
+      );
+      if (exps.length === 0 && !hasAdelantos) return null;
       const pending = exps.filter(e => !e.status || e.status === "pending");
       const paid    = exps.filter(e => e.status === "paid");
       return { driver, exps, pending, paid,
