@@ -517,10 +517,12 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
           paidTotal:    isPaid ? fixedAmt : 0 };
       }
       const exps = pdExps.filter(e => e.driverId === driver.id);
-      const hasAdelantos = expenses.some(e =>
-        e.category === "adelanto_conductor" && e.driverId === driver.id &&
-        e.date >= pd.dateFrom && e.date <= pd.dateTo
-      );
+      const driverPeriodTripIds = new Set(exps.filter(e => e.tripId).map(e => e.tripId));
+      const hasAdelantos = expenses.some(e => {
+        if (e.category !== "adelanto_conductor" || e.driverId !== driver.id) return false;
+        if (e.tripId) return driverPeriodTripIds.has(e.tripId);
+        return e.date >= pd.dateFrom && e.date <= pd.dateTo;
+      });
       if (exps.length === 0 && !hasAdelantos) return null;
       const pending = exps.filter(e => !e.status || e.status === "pending");
       const paid    = exps.filter(e => e.status === "paid");
