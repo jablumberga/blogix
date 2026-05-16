@@ -68,11 +68,12 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
   const [editingTotal, setEditingTotal] = useState(false);
 
   const periodTripIds = new Set(exps.filter(e => e.tripId).map(e => e.tripId));
-  const adelantoExps = (allExpenses||[]).filter(e =>
-    e.category === "adelanto_conductor" &&
-    (e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name))) &&
-    ((e.date >= periodDateFrom && e.date <= periodDateTo) || (e.tripId && periodTripIds.has(e.tripId)))
-  );
+  const adelantoExps = (allExpenses||[]).filter(e => {
+    if (e.category !== "adelanto_conductor") return false;
+    if (!(e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name)))) return false;
+    if (e.tripId) return periodTripIds.has(e.tripId);
+    return e.date >= periodDateFrom && e.date <= periodDateTo;
+  });
   const adelantos = adelantoExps.reduce((s, e) => s + e.amount, 0);
 
   // Total override: a special expense entry that replaces the sum of all individual entries
