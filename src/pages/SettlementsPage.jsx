@@ -50,7 +50,7 @@ function IngresosTable({ pTrips, clients, trucks, t }) {
               </tr>
             </thead>
             <tbody>
-              {[...pTrips].sort((a, b) => a.date.localeCompare(b.date)).map(tr => {
+              {[...pTrips].sort((a, b) => (a.date || "").localeCompare(b.date || "")).map(tr => {
                 const cl = clients.find(c => c.id === tr.clientId);
                 const tk = trucks.find(tk => tk.id === tr.truckId);
                 return (
@@ -125,7 +125,7 @@ function GastosTable({ allExps, supplierMap, driverMap, brokerMap, t }) {
 }
 
 // ── SettlementCard ───────────────────────────────────────────────────────────
-function SettlementCard({ card, partner, periodLabel, clients, trucks, supplierMap, driverMap, brokerMap, t, isPartnerView, onToggle }) {
+function SettlementCard({ card, partner, periodLabel, clients, trucks, supplierMap, driverMap, brokerMap, t, isPartnerView, onToggle, isMobile }) {
   const {
     pTrips,
     comisionExps, paidGastoExps, cxpExps, nominaExps,
@@ -140,8 +140,8 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, supplierM
   return (
     <Card style={{ marginBottom: 16 }}>
       {/* ── Header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, paddingBottom: 14, borderBottom: `1px solid ${colors.border}` }}>
-        <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, paddingBottom: 14, borderBottom: `1px solid ${colors.border}`, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 16 }}>{isPartnerView ? "Mi Liquidación" : partner.name}</div>
           <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
             {periodLabel} • {pTrips.length} viaje{pTrips.length !== 1 ? "s" : ""}
@@ -149,7 +149,7 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, supplierM
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, color: colors.textMuted }}>A TRANSFERIR</div>
+            <div style={{ fontSize: 11, color: colors.textMuted }}>{isPartnerView ? "LO QUE RECIBES" : "A TRANSFERIR"}</div>
             <div style={{ fontSize: 24, fontWeight: 800, color: isPaid ? colors.green : colors.orange }}>{fmt(toTransfer)}</div>
           </div>
           {!isPartnerView && (
@@ -181,8 +181,8 @@ function SettlementCard({ card, partner, periodLabel, clients, trucks, supplierM
         <>
           {/* ── Resumen Financiero — always visible when detail is open ── */}
           <div style={{ background: colors.inputBg, borderRadius: 10, padding: "14px 16px", border: `1px solid ${colors.border}`, marginTop: 14 }}>
-            <h4 style={{ margin: "0 0 10px", fontSize: 13 }}>Resumen Financiero</h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13 }}>
+            <h4 style={{ margin: "0 0 10px", fontSize: isMobile ? 15 : 13 }}>Resumen Financiero</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: isMobile ? 15 : 13 }}>
 
               <FRow label="Ingreso Bruto (tarifas)" value={grossRev} plus valueColor={colors.green} />
 
@@ -371,12 +371,12 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
     };
   };
 
-  const periods = genPeriods(trips.map(tr => tr.date));
+  const periods = genPeriods((trips || []).map(tr => tr.date));
 
   // ── Partner view ─────────────────────────────────────────────────────────
   if (isPartnerView) {
     const periodCards = periods.map(pd => {
-      const myTrips = trips.filter(tr => (partnerTruckIds || []).includes(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo && tr.status !== "cancelled");
+      const myTrips = (trips || []).filter(tr => (partnerTruckIds || []).includes(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo && tr.status !== "cancelled");
       if (myTrips.length === 0) return null;
       const key = `${partner?.id}-${pd.mStr}-${pd.half}`;
       return { pd, card: buildCard(partner || {}, myTrips, pd, key) };
@@ -386,7 +386,13 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
       <div>
         <PageHeader title={t.settlements} />
         {periodCards.length === 0 && (
-          <Card><div style={{ textAlign: "center", padding: 40, color: colors.textMuted }}>Sin liquidaciones registradas aún.</div></Card>
+          <Card>
+            <div style={{ textAlign: "center", padding: 40, color: colors.textMuted }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: colors.text, marginBottom: 6 }}>No hay liquidaciones disponibles</div>
+              <div style={{ fontSize: 13 }}>Tus liquidaciones aparecen aquí al cerrar cada quincena. Si tienes viajes recientes, el administrador los procesará al cierre del período.</div>
+            </div>
+          </Card>
         )}
         {periodCards.map(({ pd, card }) => (
           <SettlementCard
@@ -402,6 +408,7 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
             t={t}
             isPartnerView={true}
             onToggle={() => toggleStatus(card.key)}
+            isMobile={isMobile}
           />
         ))}
       </div>
@@ -410,9 +417,9 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
 
   // ── Admin view ───────────────────────────────────────────────────────────
   const periodGroups = periods.map(pd => {
-    const partnerCards = partners.map(p => {
-      const pTruckSet = new Set(trucks.filter(tk => tk.partnerId === p.id).map(tk => tk.id));
-      const pTrips    = trips.filter(tr => pTruckSet.has(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo && tr.status !== "cancelled");
+    const partnerCards = (partners || []).map(p => {
+      const pTruckSet = new Set((trucks || []).filter(tk => tk.partnerId === p.id).map(tk => tk.id));
+      const pTrips    = (trips || []).filter(tr => pTruckSet.has(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo && tr.status !== "cancelled");
       if (pTrips.length === 0) return null;
       const key = `${p.id}-${pd.mStr}-${pd.half}`;
       return { p, card: buildCard(p, pTrips, pd, key) };
@@ -430,7 +437,7 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
       )}
       {periodGroups.map(({ pd, partnerCards, periodTotal }) => (
         <div key={`${pd.mStr}-${pd.half}`} style={{ marginBottom: 28 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 4px", marginBottom: 10, borderBottom: `2px solid ${colors.border}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, padding: "10px 4px", marginBottom: 10, borderBottom: `2px solid ${colors.border}` }}>
             <div>
               <span style={{ fontWeight: 700, fontSize: 15 }}>{pd.label}</span>
               <span style={{ marginLeft: 12, fontSize: 12, color: colors.textMuted }}>
@@ -456,6 +463,7 @@ export default function SettlementsPage({ t, trips, trucks, expenses, clients, p
               t={t}
               isPartnerView={false}
               onToggle={() => toggleStatus(card.key)}
+              isMobile={isMobile}
             />
           ))}
         </div>

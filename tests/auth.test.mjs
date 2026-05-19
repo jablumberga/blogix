@@ -9,6 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import bcrypt from "bcryptjs";
 
 // ── Load .env manually (no dotenv dependency) ─────────────────────────────────
 const envPath = resolve(new URL(".", import.meta.url).pathname, "../.env");
@@ -22,6 +23,15 @@ try {
 } catch {
   // .env not present – rely on whatever env is already set
 }
+
+// Generate a self-contained test hash so the test never depends on what's stored in .env.
+// The test injects its own credentials so auth.mjs will accept TEST_PASSWORD without needing
+// real production env vars.
+const TEST_PASSWORD = "test-admin-pw-b-logix-2026";
+const TEST_HASH = await bcrypt.hash(TEST_PASSWORD, 10);
+process.env.ADMIN_PASSWORD_HASH = TEST_HASH;
+// Ensure BLOGIX_SECRET is set so signToken/verifyToken work without a real .env
+if (!process.env.BLOGIX_SECRET) process.env.BLOGIX_SECRET = "test-secret-for-auth-tests-only";
 
 // Import the auth handler AFTER env vars are set
 const { default: authHandler } = await import("../netlify/functions/auth.mjs");
@@ -44,7 +54,7 @@ function makeRequest(pathname, body = null) {
 test("login with valid admin credentials returns ok:true and a token", async () => {
   const req = makeRequest("/api/auth/login", {
     username: "admin",
-    password: process.env.ADMIN_PASSWORD_HASH, // plaintext stored in .env for dev
+    password: TEST_PASSWORD,
   });
 
   const res = await authHandler(req);

@@ -108,6 +108,13 @@ function applyRLS(data, user) {
         (e.driverId && myDriverIds.has(e.driverId) && !e.tripId)
       )
     );
+    // Brokers: expose ONLY those referenced by this partner's trips, and ONLY the
+    // fields needed to compute pass-through deductions on the partner's settlement
+    // view. Sensitive fields (contactPerson, phone, email, notes) are stripped.
+    const myBrokerIds = new Set(myTrips.map(tr => tr.brokerId).filter(Boolean));
+    const myBrokers = (data.brokers || [])
+      .filter(b => myBrokerIds.has(b.id))
+      .map(b => ({ id: b.id, name: b.name, commissionPct: b.commissionPct }));
     return {
       partners:         [partner],
       trucks:           myTrucks,
@@ -115,8 +122,10 @@ function applyRLS(data, user) {
       expenses:         myExp,
       clients:          (data.clients || []).filter(c => myClientIds.has(c.id)),
       drivers:          (data.drivers || []).filter(d => myDriverIds.has(d.id)),
-      settlementStatus: data.settlementStatus || {},
-      brokers:          (data.brokers || []).filter(b => new Set(myTrips.map(tr => tr.brokerId).filter(Boolean)).has(b.id)).map(({ id, name, commissionPct }) => ({ id, name, commissionPct })),
+      settlementStatus: Object.fromEntries(
+        Object.entries(data.settlementStatus || {}).filter(([k]) => k.startsWith(`${partner.id}-`))
+      ),
+      brokers:          myBrokers,
       suppliers:        [],
       fixedTemplates:   [],
       cobros:           [],

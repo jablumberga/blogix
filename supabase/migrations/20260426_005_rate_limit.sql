@@ -2,6 +2,8 @@
 -- Tracks login attempts per IP and per username across serverless cold starts.
 -- Limits: 30 attempts / 15 min per IP, 10 attempts / 15 min per username.
 
+BEGIN;
+
 CREATE TABLE IF NOT EXISTS bl_rate_limits (
   scope       text        NOT NULL,
   key         text        NOT NULL,
@@ -68,3 +70,5 @@ BEGIN
   DELETE FROM bl_rate_limits WHERE scope = p_scope AND key = p_key;
 END;
 $$;
+
+COMMIT;
