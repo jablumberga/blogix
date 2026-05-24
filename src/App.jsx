@@ -342,6 +342,11 @@ export default function App() {
             </button>
           </div>
         )}
+        {isDriver && syncStatus === "offline" && (
+          <div style={{ position: "sticky", top: 0, zIndex: 100, background: colors.orange, color: "#fff", padding: "8px 16px", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 8, marginBottom: 12 }}>
+            <span>Sin conexión — los cambios se guardan localmente</span>
+          </div>
+        )}
 
         {page === "dashboard"   && isAdmin   && <AdminDashboard   {...ctx} setPage={setPage} />}
         {page === "partnerDash" && isPartner  && <PartnerDashboard {...ctx} />}
