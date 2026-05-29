@@ -104,7 +104,8 @@ function applyRLS(data, user) {
     const myDriverIds = new Set(myTrips.map(tr => tr.driverId).filter(Boolean));
     const myExp = (data.expenses || []).filter(e =>
       myTripIds.has(e.tripId) ||
-      (e.driverId && myDriverIds.has(e.driverId) && !e.tripId)
+      (e.driverId && myDriverIds.has(e.driverId) && !e.tripId) ||
+      (e.truckId && myTruckIds.has(e.truckId))
     );
     // Brokers: expose ONLY those referenced by this partner's trips, and ONLY the
     // fields needed to compute pass-through deductions on the partner's settlement
