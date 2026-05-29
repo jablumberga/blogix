@@ -210,6 +210,11 @@ export function AppProvider({ children }) {
   const logout = () => {
     try { localStorage.removeItem("blogix_session"); } catch {}
     clearToken();
+    setClients([]); setPartners([]); setTrucks([]); setDrivers([]);
+    setTrips([]); setExpenses([]); setBrokers([]); setSuppliers([]);
+    setFixedTemplates([]); setSettlementStatus({}); setCobros([]); setInvoices([]);
+    versionRef.current = 0;
+    dataLoadedRef.current = false;
     setUser(null);
   };
 

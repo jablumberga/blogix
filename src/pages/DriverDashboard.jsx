@@ -4,7 +4,7 @@ import { colors } from "../constants/theme.js";
 import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Inp, Sel, Btn, Th, Td, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function DriverDashboard({ t, user, trips, trucks, expenses, clients, drivers, driverObj, setTrips, setExpenses, brokers, isMobile }) {
+export default function DriverDashboard({ t, user, trips = [], trucks = [], expenses = [], clients = [], drivers = [], driverObj, setTrips, setExpenses, brokers = [], isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [rateMsg, setRateMsg] = useState("");
@@ -99,8 +99,25 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
 
   const allMyTrips = trips.filter(tr => tr.driverId === driverObj?.id);
 
-  const allPeriods = genPeriods(allMyTrips.map(tr => tr.date));
-  const activePeriods = allPeriods.filter(pd => allMyTrips.some(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo));
+  const adelantoExps = (expenses || []).filter(e =>
+    e.category === "adelanto_conductor" &&
+    (e.driverId === driverObj?.id || allMyTrips.some(tr => tr.id === e.tripId))
+  );
+  const overrideExps = (expenses || []).filter(e =>
+    e.category === "nominaTotalOverride" && e.driverId === driverObj?.id
+  );
+
+  const periodSeedDates = [
+    ...allMyTrips.map(tr => tr.date),
+    ...adelantoExps.map(e => e.date).filter(Boolean),
+    ...overrideExps.map(e => e.date).filter(Boolean),
+  ];
+  const allPeriods = genPeriods(periodSeedDates);
+  const activePeriods = allPeriods.filter(pd =>
+    allMyTrips.some(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo) ||
+    adelantoExps.some(e => e.date >= pd.dateFrom && e.date <= pd.dateTo) ||
+    overrideExps.some(e => e.date >= pd.dateFrom && e.date <= pd.dateTo)
+  );
 
   const pendingDocs = allMyTrips.filter(tr => tr.docStatus === "pending").length;
   const completed = allMyTrips.filter(tr => tr.status === "delivered").length;
@@ -147,7 +164,7 @@ export default function DriverDashboard({ t, user, trips, trucks, expenses, clie
       <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 14, padding: 24, width: "min(560px, calc(100vw - 24px))", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${colors.border}`, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}><Route size={18} color={colors.accent} /> {t.newTrip}</h3>
-          <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", color: colors.textMuted, cursor: "pointer", padding: 4 }}><X size={18} /></button>
+          <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", color: colors.textMuted, cursor: "pointer", padding: 10, minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={18} /></button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr", gap: 12, marginBottom: 10 }}>
           <Inp label={t.date} type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
@@ -271,13 +288,23 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                   const trRate = driverObj?.salaryType === "perTrip" ? (driverObj.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality) : null;
                   const trTk = trucks.find(t2 => t2.id === tr.truckId);
                   const trSize = (tr.tarifaOverride && tr.tarifaOverride !== "custom") ? tr.tarifaOverride : (trTk?.size || "T1");
-                  const basePay = trRate ? (trSize === "T2" ? (trRate.priceT2 ?? trRate.priceT1 ?? 0) : (trRate.priceT1 ?? 0)) : calcDriverPay(tr);
+                  const basePay = trRate
+                    ? (trSize === "T2" ? (trRate.priceT2 ?? trRate.priceT1 ?? 0) : (trRate.priceT1 ?? 0))
+                    : ((expenses || []).find(e => e.category === "driverPay" && e.tripId === tr.id)?.amount ?? 0);
                   const dieta = trRate ? (trSize === "T2" ? (trRate.dietaT2 || 0) : (trRate.dietaT1 || 0)) : 0;
                   const ayudanteRef = trRate ? (trSize === "T2" ? (trRate.helperT2 || 0) * 2 : (trRate.helperT1 || 0)) : 0;
                   const tripHelpers = (tr.helpers || []).reduce((s, x) => s + (x.pay || 0), 0);
                   const tripDiscounts = (tr.discounts || []).reduce((s, x) => s + (x.amount || 0), 0);
                   const stColor = tr.status === "delivered" ? colors.green : tr.status === "in_transit" ? colors.yellow : colors.accent;
                   const nextStatus = { pending: "in_transit", in_transit: "delivered" };
+                  const handleStatusAdvance = (trip) => {
+                    const next = nextStatus[trip.status];
+                    if (!next) return;
+                    if (next === "delivered") {
+                      if (!window.confirm("¿Confirmar entrega? Esta acción no se puede deshacer.")) return;
+                    }
+                    setTrips(allTrips.map(x => x.id === trip.id ? { ...x, status: next } : x));
+                  };
                   return <Fragment key={tr.id}>
                     <tr style={{ borderBottom: `1px solid ${colors.border}11` }}>
                       <Td>{tr.date}</Td>
@@ -300,8 +327,8 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                         </Td>;
                       })()}
                       <Td align="center">
-                        <button onClick={() => setTrips(allTrips.map(x => x.id === tr.id ? { ...x, status: nextStatus[x.status] || x.status } : x))}
-                          style={{ padding: "3px 8px", borderRadius: 10, border: "none", fontSize: 10, fontWeight: 600, cursor: "pointer", background: stColor + "18", color: stColor }}>
+                        <button onClick={() => handleStatusAdvance(tr)}
+                          style={{ padding: "10px 14px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 600, minHeight: 44, minWidth: 88, cursor: "pointer", background: stColor + "22", color: stColor }}>
                           {tr.status === "delivered" ? t.delivered : tr.status === "in_transit" ? t.inTransit : t.pending}
                         </button>
                       </Td>

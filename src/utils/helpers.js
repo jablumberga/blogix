@@ -1,6 +1,8 @@
 // ─── Formatting Utilities ─────────────────────────────────────────────────────
 export const fmt = (n) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "DOP", minimumFractionDigits: 0 }).format(n);
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "DOP", minimumFractionDigits: 0 })
+    .format(Number(n) || 0)
+    .replace(/DOP\s?/, "RD$");
 
 export const pct = (n) => (n * 100).toFixed(1) + "%";
 

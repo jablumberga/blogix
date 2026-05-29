@@ -127,7 +127,7 @@ export default function ClientsPage({ t, clients, setClients, brokers, setTrips,
               {c.rules?.defaultBrokerId && <Badge label={`B ${brokers.find(b => b.id === c.rules.defaultBrokerId)?.commissionPct || ""}%`} color={colors.yellow} />}
             </div>
           </Td>
-          <Td align="center"><Badge label={`${c.rates.length}`} color={colors.green} /></Td>
+          <Td align="center"><Badge label={`${c.rates?.length ?? 0}`} color={colors.green} /></Td>
           <Td align="center"><Badge label={c.status === "active" ? t.active : t.inactive} color={c.status === "active" ? colors.green : colors.red} /></Td>
           <Td align="right">
             <button onClick={() => openEdit(c)} style={{ padding: "8px 10px", borderRadius: 4, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>

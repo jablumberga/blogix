@@ -67,11 +67,13 @@ function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal
   const [editingId, setEditingId] = useState(null);
   const [editingTotal, setEditingTotal] = useState(false);
 
-  const adelantoExps = (allExpenses||[]).filter(e =>
-    e.category === "adelanto_conductor" &&
-    (e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name))) &&
-    e.date >= periodDateFrom && e.date <= periodDateTo
-  );
+  const periodTripIds = new Set(exps.filter(e => e.tripId).map(e => e.tripId));
+  const adelantoExps = (allExpenses||[]).filter(e => {
+    if (e.category !== "adelanto_conductor") return false;
+    if (!(e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name)))) return false;
+    if (e.tripId) return periodTripIds.has(e.tripId);
+    return e.date >= periodDateFrom && e.date <= periodDateTo;
+  });
   const adelantos = adelantoExps.reduce((s, e) => s + e.amount, 0);
 
   // Total override: a special expense entry that replaces the sum of all individual entries
@@ -493,6 +495,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
   const periods = genPeriods([
     ...expenses.filter(e => e.category === "driverPay").map(e => e.date),
     ...expenses.filter(e => e.category === "nominaTotalOverride" && fixedDrivers.some(d => d.id === e.driverId)).map(e => e.date),
+    ...expenses.filter(e => e.category === "adelanto_conductor").map(e => e.date),
   ]);
   const periodGroups = periods.map(pd => {
     const pdExps = expenses.filter(e => e.category === "driverPay" && e.date >= pd.dateFrom && e.date <= pd.dateTo);
@@ -514,7 +517,13 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
           paidTotal:    isPaid ? fixedAmt : 0 };
       }
       const exps = pdExps.filter(e => e.driverId === driver.id);
-      if (exps.length === 0) return null;
+      const driverPeriodTripIds = new Set(exps.filter(e => e.tripId).map(e => e.tripId));
+      const hasAdelantos = expenses.some(e => {
+        if (e.category !== "adelanto_conductor" || e.driverId !== driver.id) return false;
+        if (e.tripId) return driverPeriodTripIds.has(e.tripId);
+        return e.date >= pd.dateFrom && e.date <= pd.dateTo;
+      });
+      if (exps.length === 0 && !hasAdelantos) return null;
       const pending = exps.filter(e => !e.status || e.status === "pending");
       const paid    = exps.filter(e => e.status === "paid");
       return { driver, exps, pending, paid,
