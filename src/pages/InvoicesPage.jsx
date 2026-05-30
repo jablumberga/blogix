@@ -70,6 +70,7 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
           <span style={{ fontSize: 11, color: colors.textMuted }}>{trip.date}</span>
           {truck && <span style={{ fontSize: 10, color: colors.textMuted }}>{truck.plate}</span>}
           {driver && <span style={{ fontSize: 10, color: colors.textMuted }}>· {driver.name}</span>}
+          {trip.invoiceRef && <span style={{ fontSize: 10, color: colors.accent, fontWeight: 600 }}>· Ref. {trip.invoiceRef}</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: colors.green }}>
