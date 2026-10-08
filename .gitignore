@@ -10,3 +10,9 @@ dist/
 # Local Netlify folder
 .netlify
 supabase/.temp
+
+# Entorno local
+local-db/db.json
+local-db/ACCESO-LOCAL.txt
+npm-*.log
+local-db/*.log
