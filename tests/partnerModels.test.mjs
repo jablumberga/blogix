@@ -48,6 +48,9 @@ test("modelo 3: reparto de utilidad, el % es la parte del socio", () => {
   assert.equal(s.companyShare, 12300);
   assert.equal(s.toTransfer, 8200);
   assert.equal(s.fixedTotal, 0);
+  assert.equal(s.reimbursement, 9500);
+  assert.equal(s.companyReceives, 9500 + 12300);
+  assert.equal(s.toTransfer + s.companyReceives, s.netRevenue, "ingreso = socio + empresa (reembolso + parte)");
 });
 
 test("modelo 3 con broker pass-through histórico descuenta el 10%", () => {

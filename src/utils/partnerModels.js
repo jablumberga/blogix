@@ -142,20 +142,25 @@ export function computeSettlement({ partner, period, trips, expenses, trucks, cl
   const fixedLines = p.model === "profit_share" ? [] : fixedChargesForPeriod(p, period);
   const fixedTotal = fixedLines.reduce((s, c) => s + c.amount, 0);
 
+  // En los tres modelos, los gastos que pagó la empresa se reembolsan PRIMERO del ingreso
+  // del camión (reimbursement). Lo que queda es lo que se comisiona/reparte.
+  const reimbursement = expensesTotal;
   let commission = 0, partnerShare = 0, companyShare = 0, net = 0, toTransfer = 0;
   if (p.model === "profit_share") {
-    net = netRevenue - expensesTotal;
+    net = netRevenue - reimbursement;                      // utilidad a repartir
     const pct = Number(p.partnerSharePct) || 0;
     partnerShare = Math.round(net * pct / 100);
     companyShare = net - partnerShare;
     toTransfer = partnerShare;
   } else {
     commission = Math.round(grossRevenue * (Number(p.companyPct) || 0) / 100);
-    net = netRevenue - commission - expensesTotal - fixedTotal;
+    net = netRevenue - commission - reimbursement - fixedTotal;
     partnerShare = net;
     companyShare = commission + fixedTotal;
     toTransfer = net;
   }
+  // Lo que la empresa retiene de esta quincena: reembolso + su parte (comisión/cargos o % de utilidad)
+  const companyReceives = reimbursement + companyShare;
 
   return {
     partnerId: p.id, model: p.model, period,
@@ -165,7 +170,8 @@ export function computeSettlement({ partner, period, trips, expenses, trucks, cl
     commission, commissionPct: Number(p.companyPct) || 0,
     expenseLines, expensesTotal,
     fixedLines, fixedTotal,
-    net, partnerSharePct: Number(p.partnerSharePct) || 0, partnerShare, companyShare,
+    reimbursement,
+    net, partnerSharePct: Number(p.partnerSharePct) || 0, partnerShare, companyShare, companyReceives,
     toTransfer,
   };
 }

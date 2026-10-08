@@ -42,8 +42,8 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
     const p = partnerOfExpense(e);
     return !!p && expenseChargedToPartner(e, p);
   };
-  // Reembolso solo en modelos de comisión; en reparto es gasto de operación que entra antes del reparto
-  const isReimbursable = (e) => isChargedToPartner(e) && partnerOfExpense(e)?.model !== "profit_share";
+  // En los tres modelos la empresa paga el gasto y se lo reembolsa del ingreso del camión en la liquidación
+  const isReimbursable = (e) => isChargedToPartner(e);
   const isSettled = (e) => { const p = partnerOfExpense(e); return !!p && settlementStatus[settlementKey(p.id, e.date)] === "paid"; };
 
   // Exclude nominaTotalOverride from Gastos — it's an internal NominaPage marker, not a payable expense
@@ -166,12 +166,12 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
       {formPartner && form.category !== "adelanto_conductor" && (() => {
         const m = PARTNER_MODELS[formPartner.model] || PARTNER_MODELS.profit_share;
         return <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 8, background: formCharge ? colors.orange + "12" : colors.inputBg, border: `1px solid ${formCharge ? colors.orange + "55" : colors.border}` }}>
-          <Chk label={formPartner.model === "profit_share" ? `Gasto de operación del camión de ${formPartner.name} (entra antes del reparto)` : `Cargar al socio ${formPartner.name} (modelo: ${m.label})`} checked={formCharge} onChange={() => setForm({ ...form, chargeToPartner: !formCharge })} />
+          <Chk label={`Reembolsar de la liquidación de ${formPartner.name} (modelo: ${m.label})`} checked={formCharge} onChange={() => setForm({ ...form, chargeToPartner: !formCharge })} />
           <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4, marginLeft: 22 }}>
             {formPartner.model === "profit_share"
               ? (formCharge
-                  ? `Se resta del ingreso del camión y el beneficio que queda se reparte ${formPartner.partnerSharePct}/${100 - formPartner.partnerSharePct}.`
-                  : "Desmarcado: lo absorbe la empresa al 100% y no afecta el reparto.")
+                  ? `Lo paga la empresa y se reembolsa primero del ingreso del camión; el beneficio que queda se reparte ${formPartner.partnerSharePct}/${100 - formPartner.partnerSharePct}.`
+                  : "Desmarcado: lo absorbe la empresa al 100% y no se descuenta antes del reparto.")
               : formCharge
                 ? `Lo paga la empresa y se descuenta en la liquidación de ${formPartner.name}: es un reembolso, no un gasto tuyo.`
                 : formPartner.model === "commission"
@@ -334,7 +334,6 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
                 if (!p) return <span style={{ color: colors.textMuted, fontSize: 11 }}>—</span>;
                 if (!isChargedToPartner(e)) return <span style={{ fontSize: 10, color: colors.textMuted }} title={`Camión de ${p.name}, lo absorbe la empresa`}>Empresa</span>;
                 const settled = isSettled(e);
-                if (p.model === "profit_share") return <span title={settled ? "Ya entró en la liquidación" : "Entra en el cálculo del reparto"} style={{ fontSize: 10, fontWeight: 600, color: settled ? colors.green : colors.accent }}>Reparto {p.name.split(" ")[0]}{settled ? " ✓" : ""}</span>;
                 return <span title={settled ? "Ya descontado en la liquidación" : "Pendiente de descontar en la liquidación"} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 600, color: settled ? colors.green : colors.purple }}><HandCoins size={10} /> {p.name.split(" ")[0]}{settled ? " ✓" : ""}</span>;
               })()}</Td>
               <Td align="right">
