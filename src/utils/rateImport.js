@@ -76,16 +76,35 @@ export function parseMoney(v) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// Columnas de precio por tipo de tarifario
+export const RATE_COLUMNS = {
+  client: [
+    { key: "priceT1", tests: [/^(tarifa|precio|price)?\s*t1$/, /^tarifa$/, /^precio$/, /^price$/, /t1/] },
+    { key: "priceT2", tests: [/t2/] },
+  ],
+  driver: [
+    { key: "priceT1",  tests: [/chofer.*t1/, /pago.*t1/, /^t1$/, /driver.*t1/] },
+    { key: "dietaT1",  tests: [/dieta.*t1/] },
+    { key: "helperT1", tests: [/ayud.*t1/, /helper.*t1/] },
+    { key: "priceT2",  tests: [/chofer.*t2/, /pago.*t2/, /^t2$/, /driver.*t2/] },
+    { key: "dietaT2",  tests: [/dieta.*t2/] },
+    { key: "helperT2", tests: [/ayud.*t2/, /helper.*t2/] },
+  ],
+};
+
 // Encuentra la columna que corresponde a cada campo a partir de los encabezados.
-function mapHeaders(headers) {
+function mapHeaders(headers, kind = "client") {
   const h = headers.map(norm);
-  const find = (...tests) => h.findIndex(x => tests.some(t => t.test(x)));
-  return {
-    province:     find(/^provincia$/, /^prov/, /^province$/),
-    municipality: find(/^municipio$/, /^muni/, /^destino$/, /^ciudad$/, /^municipality$/),
-    priceT1:      find(/t1/, /^tarifa$/, /^precio$/, /^price$/),
-    priceT2:      find(/t2/),
+  const used = new Set();
+  const find = (tests) => { const i = h.findIndex((x, idx) => !used.has(idx) && tests.some(t => t.test(x))); if (i >= 0) used.add(i); return i; };
+  const col = {
+    province:     find([/^provincia$/, /^prov/, /^province$/]),
+    municipality: find([/^municipio$/, /^muni/, /^destino$/, /^ciudad$/, /^municipality$/]),
   };
+  // Las columnas específicas (dieta/ayudante) se buscan antes que las genéricas (t1/t2)
+  const specs = [...RATE_COLUMNS[kind]].sort((a, b) => (a.key.startsWith("price") ? 1 : 0) - (b.key.startsWith("price") ? 1 : 0));
+  for (const c of specs) col[c.key] = find(c.tests);
+  return col;
 }
 
 /**
@@ -93,12 +112,13 @@ function mapHeaders(headers) {
  * XLSX.utils.sheet_to_json(sheet, { header: 1 }).
  * Devuelve { rates: [{province, municipality, priceT1, priceT2}], errors: [{row, msg}] }
  */
-export function parseRateRows(rows) {
+export function parseRateRows(rows, kind = "client") {
   const rates = [], errors = [];
   if (!rows || rows.length < 2) return { rates, errors: [{ row: 1, msg: "El archivo está vacío o solo tiene encabezados" }] };
-  const col = mapHeaders(rows[0]);
+  const col = mapHeaders(rows[0], kind);
   if (col.municipality < 0) return { rates, errors: [{ row: 1, msg: "No encuentro la columna «Municipio»" }] };
-  if (col.priceT1 < 0 && col.priceT2 < 0) return { rates, errors: [{ row: 1, msg: "No encuentro las columnas «Tarifa T1» / «Tarifa T2»" }] };
+  if (col.priceT1 < 0 && col.priceT2 < 0) return { rates, errors: [{ row: 1, msg: kind === "driver" ? "No encuentro las columnas «Chofer T1» / «Chofer T2»" : "No encuentro las columnas «Tarifa T1» / «Tarifa T2»" }] };
+  const extraKeys = RATE_COLUMNS[kind].map(c => c.key).filter(k => k !== "priceT1" && k !== "priceT2");
 
   const seen = new Set();
   rows.slice(1).forEach((r, i) => {
@@ -130,7 +150,13 @@ export function parseRateRows(rows) {
     const key = `${prov}|${municipality}`;
     if (seen.has(key)) { errors.push({ row: rowNum, msg: `${municipality} aparece dos veces; se usa la primera` }); return; }
     seen.add(key);
-    rates.push({ province: prov, municipality, priceT1, priceT2 });
+    const rate = { province: prov, municipality, priceT1, priceT2 };
+    for (const k of extraKeys) {
+      const v = col[k] >= 0 ? parseMoney(r[col[k]]) : 0;
+      if (Number.isNaN(v) || v < 0) { errors.push({ row: rowNum, msg: `${municipality}: valor inválido en ${k}` }); return; }
+      rate[k] = v;
+    }
+    rates.push(rate);
   });
   return { rates, errors };
 }
@@ -149,7 +175,9 @@ export function mergeRates(existing, incoming) {
     const idx = out.findIndex(r => r.province === inc.province && r.municipality === inc.municipality);
     if (idx >= 0) {
       const cur = out[idx];
-      if (cur.priceT1 !== inc.priceT1 || cur.priceT2 !== inc.priceT2) { out[idx] = { ...cur, priceT1: inc.priceT1, priceT2: inc.priceT2 }; updated++; }
+      const { id: _i, province: _p, municipality: _m, ...vals } = inc;
+      const changed = Object.keys(vals).some(k => (cur[k] ?? 0) !== vals[k]);
+      if (changed) { out[idx] = { ...cur, ...vals }; updated++; }
     } else {
       out.push({ id: nextId++, ...inc }); added++;
     }
@@ -162,4 +190,10 @@ export const TEMPLATE_EXAMPLE_ROWS = [
   ["Santiago", "Santiago de los Caballeros", 5500, 9000],
   ["Dajabón", "Dajabón", 13400, 20000],
   ["Valverde", "Mao", 9240, 13000],
+];
+export const DRIVER_TEMPLATE_HEADERS = ["Provincia", "Municipio", "Chofer T1", "Dieta T1", "Ayudante T1", "Chofer T2", "Dieta T2", "Ayudante T2"];
+export const DRIVER_TEMPLATE_EXAMPLE_ROWS = [
+  ["Santiago", "Santiago de los Caballeros", 900, 0, 700, 1200, 0, 750],
+  ["Dajabón", "Dajabón", 2000, 500, 1000, 2500, 600, 1200],
+  ["Independencia", "Jimaní", 0, 0, 0, 4000, 1000, 1500],
 ];
