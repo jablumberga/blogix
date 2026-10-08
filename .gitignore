@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.env
+.env.*
+*.keystore
+*.jks
+
+# Local Netlify folder
+.netlify
+supabase/.temp

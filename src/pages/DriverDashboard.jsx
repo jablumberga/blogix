@@ -1,0 +1,399 @@
+import { useState, Fragment } from "react";
+import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown } from "lucide-react";
+import { colors } from "../constants/theme.js";
+import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
+import { Card, StatCard, PageHeader, Inp, Sel, Btn, Th, Td, DestinationSelect } from "../components/ui/index.jsx";
+
+export default function DriverDashboard({ t, user, trips = [], trucks = [], expenses = [], clients = [], drivers = [], driverObj, setTrips, setExpenses, brokers = [], isMobile }) {
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({});
+  const [rateMsg, setRateMsg] = useState("");
+  const [formError, setFormError] = useState("");
+
+  const emptyForm = { date: today(), province: "", municipality: "", truckId: driverObj?.truckId || trucks[0]?.id || "", driverId: driverObj?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [] };
+
+  const openNew = () => { setForm({ ...emptyForm, createdBy: user?.name || driverObj?.name || "" }); setShowForm(true); setRateMsg(""); setFormError(""); };
+
+  const handleClientChange = (cid) => {
+    const cl = clients.find(c => c.id === Number(cid));
+    const f = { ...form, clientId: Number(cid) || "" };
+    if (cl) {
+      if (cl.rules?.defaultBrokerId) f.brokerId = cl.rules.defaultBrokerId;
+      tryApplyRate(f, cl);
+    }
+    setForm(f);
+  };
+
+  const tryApplyRate = (f, cl) => {
+    if (!cl) cl = clients.find(c => c.id === Number(f.clientId));
+    if (cl && f.province && f.municipality) {
+      const rate = (cl.rates || []).find(r => r.province === f.province && r.municipality === f.municipality);
+      if (rate) {
+        const tk = trucks.find(t2 => t2.id === Number(f.truckId));
+        const size = tk?.size || "T1";
+        const price = size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
+        f.revenue = price; setRateMsg(`${t.rateApplied} (${size}): ${fmt(price)}`); return;
+      }
+    }
+    setRateMsg("");
+  };
+
+  const handleDestChange = (field, val) => {
+    const f = { ...form, [field]: val };
+    if (field === "province") { f.municipality = ""; setRateMsg(""); }
+    else tryApplyRate(f, null);
+    setForm(f);
+  };
+
+  const saveTrip = () => {
+    if (!form.clientId) { setFormError(t.clientRequired || "Cliente requerido"); return; }
+    if (!form.province || !form.municipality) { setFormError(t.destinationRequired || "Destino requerido"); return; }
+    const cl = clients.find(c => c.id === Number(form.clientId));
+    if (cl?.rules?.requiresInvoiceRef && !form.invoiceRef) { setFormError(t.invoiceRefRequired); return; }
+    setFormError("");
+    const helpersPay = Number(form.helperPayEach) || 0;
+    const helpersArr = Array.from({ length: Number(form.numHelpers) || 0 }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
+    const data = { ...form, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr };
+    const newId = nxId(trips);
+    setTrips([...trips, { ...data, id: newId }]);
+    const newExpenses = [];
+    const tripClient = clients.find(c => c.id === Number(data.clientId));
+    const broker = data.brokerId ? brokers.find(b => b.id === data.brokerId) : null;
+    // For pass-through clients the broker deducts before paying — no outgoing expense to record
+    if (broker && data.revenue > 0 && !tripClient?.rules?.brokerPassThrough) {
+      const fee = Math.round(data.revenue * broker.commissionPct / 100);
+      newExpenses.push({ category: "broker_commission", amount: fee, description: `${t.brokerAutoDeducted}: ${broker.name} (${broker.commissionPct}%)`, paymentMethod: "transfer", brokerId: data.brokerId, status: "paid" });
+    }
+    if (driverObj && driverObj.salaryType !== "fixed") {
+      let driverPay = 0;
+      if (driverObj.salaryType === "porcentaje") {
+        driverPay = Math.round((data.revenue || 0) * (driverObj.percentageAmount ?? 20) / 100);
+      } else if (driverObj.salaryType === "perTrip") {
+        const rate = (driverObj.rates || []).find(r => r.province === data.province && r.municipality === data.municipality);
+        if (rate) {
+          const tk = trucks.find(t2 => t2.id === Number(data.truckId));
+          const size = tk?.size || "T1";
+          driverPay = size === "T2"
+            ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) + (rate.helperT2 || 0) * 2
+            : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0) + (rate.helperT1 || 0);
+        }
+      } else {
+        driverPay = Math.round((data.revenue || 0) * 0.20);
+      }
+      const discountTotal = (data.discounts || []).reduce((s, d) => s + (Number(d?.amount) || 0), 0);
+      driverPay = Math.max(0, driverPay - discountTotal);
+      if (driverPay > 0) {
+        const desc = driverObj.salaryType === "perTrip" ? `Pago por viaje: ${driverObj.name}` : `Nómina ${driverObj.salaryType === "porcentaje" ? (driverObj.percentageAmount || 0) : 20}%: ${driverObj.name}`;
+        newExpenses.push({ category: "driverPay", amount: driverPay, description: desc, paymentMethod: "transfer", driverId: driverObj.id, status: "pending" });
+      }
+    }
+    if (newExpenses.length > 0) {
+      setExpenses(prev => {
+        let next = [...prev];
+        newExpenses.forEach(exp => { next = [...next, { id: nxId(next), tripId: newId, date: data.date, supplierId: null, ...exp }]; });
+        return next;
+      });
+    }
+    setShowForm(false);
+  };
+
+  const allMyTrips = trips.filter(tr => tr.driverId === driverObj?.id);
+
+  const adelantoExps = (expenses || []).filter(e =>
+    e.category === "adelanto_conductor" &&
+    (e.driverId === driverObj?.id || allMyTrips.some(tr => tr.id === e.tripId))
+  );
+  const overrideExps = (expenses || []).filter(e =>
+    e.category === "nominaTotalOverride" && e.driverId === driverObj?.id
+  );
+
+  const periodSeedDates = [
+    ...allMyTrips.map(tr => tr.date),
+    ...adelantoExps.map(e => e.date).filter(Boolean),
+    ...overrideExps.map(e => e.date).filter(Boolean),
+  ];
+  const allPeriods = genPeriods(periodSeedDates);
+  const activePeriods = allPeriods.filter(pd =>
+    allMyTrips.some(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo) ||
+    adelantoExps.some(e => e.date >= pd.dateFrom && e.date <= pd.dateTo) ||
+    overrideExps.some(e => e.date >= pd.dateFrom && e.date <= pd.dateTo)
+  );
+
+  const pendingDocs = allMyTrips.filter(tr => tr.docStatus === "pending").length;
+  const completed = allMyTrips.filter(tr => tr.status === "delivered").length;
+  const selectedClient = clients.find(c => c.id === Number(form.clientId));
+
+  // Read stored driverPay expense — avoids retroactive changes if salaryType is updated
+  const calcPay = (tr) =>
+    (expenses || []).find(e => e.category === "driverPay" && e.tripId === tr.id)?.amount ?? 0;
+  const totalBruto = activePeriods.reduce((sum, pd) => {
+    const override = (expenses || []).find(e =>
+      e.category === "nominaTotalOverride" && e.driverId === driverObj?.id &&
+      e.date >= pd.dateFrom && e.date <= pd.dateTo
+    );
+    if (override) return sum + override.amount;
+    if (driverObj?.salaryType === "fixed") return sum + (driverObj.fixedAmount || 0);
+    return sum + allMyTrips.filter(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo).reduce((s, tr) => s + calcPay(tr), 0);
+  }, 0);
+  const totalHelpers = driverObj?.salaryType === "perTrip" ? 0 : allMyTrips.reduce((s, tr) => s + (tr.helpers || []).reduce((h, x) => h + (x.pay || 0), 0), 0);
+  const totalDescuentos = allMyTrips.reduce((s, tr) => s + (tr.discounts || []).reduce((d, x) => d + (x.amount || 0), 0), 0);
+  const totalAdelantos = (expenses || []).filter(e => e.category === "adelanto_conductor" && (e.driverId === driverObj?.id || (e.tripId && allMyTrips.some(tr => tr.id === e.tripId)))).reduce((s, e) => s + (e.amount || 0), 0);
+  const totalNeto = Math.max(0, totalBruto - totalHelpers - totalDescuentos - totalAdelantos);
+
+  return <div>
+    <PageHeader title={`${t.dashboard} — ${driverObj?.name || ""}`} action={<Btn onClick={openNew}><Plus size={14} /> {t.newTrip}</Btn>} />
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, margin: "16px 0" }}>
+      <StatCard icon={Route} label={t.totalTrips} value={allMyTrips.length} color={colors.accent} />
+      <StatCard icon={CheckCircle2} label={t.delivered} value={completed} color={colors.green} />
+      <StatCard icon={Clock} label={t.pending} value={allMyTrips.filter(tr => tr.status === "pending" || tr.status === "in_transit").length} color={colors.yellow} />
+      <StatCard icon={FileText} label={t.pendingDocs} value={pendingDocs} color={colors.orange} />
+    </div>
+
+    <Card style={{ marginBottom: 16 }}>
+      <h3 style={{ margin: "0 0 12px", fontSize: 15, display: "flex", alignItems: "center", gap: 6 }}><Banknote size={16} color={colors.green} /> {t.payrollSummary}</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12 }}>
+        <div><div style={{ fontSize: 11, color: colors.textMuted }}>{driverObj?.salaryType === "fixed" ? "Salario Fijo" : driverObj?.salaryType === "porcentaje" ? `Comisión (${driverObj.percentageAmount || 0}%)` : "Pago por Viaje"}</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.green }}>{fmt(totalBruto)}</div></div>
+        {totalHelpers > 0 && <div><div style={{ fontSize: 11, color: colors.textMuted }}>Ayudantes</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.orange }}>− {fmt(totalHelpers)}</div></div>}
+        {totalAdelantos > 0 && <div><div style={{ fontSize: 11, color: colors.textMuted }}>Adelantos</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.red }}>− {fmt(totalAdelantos)}</div></div>}
+        {totalDescuentos > 0 && <div><div style={{ fontSize: 11, color: colors.textMuted }}>Descuentos</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.red }}>− {fmt(totalDescuentos)}</div></div>}
+        <div><div style={{ fontSize: 11, color: colors.textMuted }}>{t.netPay}</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.cyan }}>{fmt(totalNeto)}</div></div>
+      </div>
+    </Card>
+
+    {showForm && <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowForm(false)}>
+      <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 14, padding: 24, width: "min(560px, calc(100vw - 24px))", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${colors.border}`, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}><Route size={18} color={colors.accent} /> {t.newTrip}</h3>
+          <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", color: colors.textMuted, cursor: "pointer", padding: 10, minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={18} /></button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr", gap: 12, marginBottom: 10 }}>
+          <Inp label={t.date} type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+          <Sel label={t.client} value={form.clientId} onChange={e => handleClientChange(e.target.value)}>
+            <option value="">{t.selectClient}</option>
+            {clients.filter(c => c.status === "active").map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
+          </Sel>
+        </div>
+        <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} />
+        <div style={{ marginTop: 10 }}>
+          <Sel label={t.truck} value={form.truckId} onChange={e => setForm({ ...form, truckId: e.target.value })}>
+            {trucks.length === 0
+              ? <option value="">— Sin camión asignado (contacta al admin) —</option>
+              : (() => {
+                  const assigned = trucks.filter(tk => tk.id === driverObj?.truckId || tk.driverId === driverObj?.id);
+                  const opts = assigned.length > 0 ? assigned : trucks;
+                  return opts.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>);
+                })()
+            }
+          </Sel>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginTop: 10 }}>
+          <Sel label={t.status} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+            <option value="pending">{t.pending}</option>
+            <option value="in_transit">{t.inTransit}</option>
+            <option value="delivered">{t.delivered}</option>
+          </Sel>
+          {selectedClient?.rules?.requiresInvoiceRef && <Inp label={t.invoiceRef + " *"} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: !form.invoiceRef ? colors.red : colors.border }} />}
+        </div>
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22`, display: "grid", gridTemplateColumns: Number(form.numHelpers) > 0 ? "1fr 1fr" : "1fr", gap: 10 }}>
+          <Sel label={t.numHelpers} value={form.numHelpers ?? 0} onChange={e => setForm({ ...form, numHelpers: Number(e.target.value) })}>
+            {[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n === 0 ? "0 — " + t.none : `${n} ayudante${n > 1 ? "s" : ""}`}</option>)}
+          </Sel>
+          {Number(form.numHelpers) > 0 && <Inp label="Pago por ayudante" type="number" value={form.helperPayEach} onChange={e => setForm({ ...form, helperPayEach: e.target.value })} placeholder="0.00" />}
+        </div>
+        {formError && <div style={{ color: colors.red, fontSize: 12, marginTop: 8, padding: "6px 10px", background: colors.red + "12", borderRadius: 6, border: `1px solid ${colors.red}33` }}>{formError}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${colors.border}33` }}>
+          <Btn onClick={saveTrip} style={{ flex: 1, justifyContent: "center" }}>{t.save}</Btn>
+          <Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn>
+        </div>
+      </div>
+    </div>}
+
+    {activePeriods.length === 0
+      ? <Card><div style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", padding: 32 }}>{t.noTrips}</div></Card>
+      : activePeriods.map((pd, idx) => (
+        <DriverCorteCard key={`${pd.mStr}-${pd.half}`} pd={pd} driverObj={driverObj} myTrips={allMyTrips} expenses={expenses} trucks={trucks} clients={clients} t={t} defaultOpen={idx === 0} setTrips={setTrips} allTrips={trips} />
+      ))
+    }
+  </div>;
+}
+
+function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t, defaultOpen, setTrips, allTrips }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const periodTrips = myTrips.filter(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo);
+
+  // Read stored driverPay expense — avoids retroactive changes if salaryType is updated
+  const calcBruto = driverObj?.salaryType === "fixed"
+    ? (driverObj.fixedAmount || 0)
+    : periodTrips.reduce((s, tr) => s + ((expenses || []).find(e => e.category === "driverPay" && e.tripId === tr.id)?.amount ?? 0), 0);
+
+  const totalOverrideExp = (expenses || []).find(e =>
+    e.category === "nominaTotalOverride" &&
+    e.driverId === driverObj?.id &&
+    e.date >= pd.dateFrom && e.date <= pd.dateTo
+  );
+  const brutoPay = totalOverrideExp ? totalOverrideExp.amount : calcBruto;
+
+  const helperPay = driverObj?.salaryType === "perTrip" ? 0 : periodTrips.reduce((s, tr) => s + (tr.helpers || []).reduce((h, x) => h + (x.pay || 0), 0), 0);
+  const discountsTotal = periodTrips.reduce((s, tr) => s + (tr.discounts || []).reduce((d, x) => d + (x.amount || 0), 0), 0);
+
+  const adelantoExps = (expenses || []).filter(e =>
+    e.category === "adelanto_conductor" &&
+    (e.driverId === driverObj?.id || (e.tripId && periodTrips.some(tr => tr.id === e.tripId))) &&
+    e.date >= pd.dateFrom && e.date <= pd.dateTo
+  );
+  const adelantos = adelantoExps.reduce((s, e) => s + (e.amount || 0), 0);
+
+  const isPaid = (expenses || []).some(e =>
+    (e.category === "driverPay" || e.category === "nominaTotalOverride") &&
+    e.driverId === driverObj?.id &&
+    e.date >= pd.dateFrom && e.date <= pd.dateTo &&
+    e.status === "paid"
+  );
+
+  const netoAPagar = Math.max(0, brutoPay - helperPay - adelantos - discountsTotal);
+  const statusColor = isPaid ? colors.green : colors.yellow;
+  const statusLabel = isPaid ? "Pagado" : "Pendiente";
+
+  return (
+    <Card style={{ marginBottom: 12 }}>
+      <div onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <ChevronDown size={16} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", color: colors.textMuted }} />
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{pd.label}</div>
+            <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>{periodTrips.length} viaje{periodTrips.length !== 1 ? "s" : ""}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: colors.cyan }}>{fmt(netoAPagar)}</div>
+            <div style={{ fontSize: 10, color: colors.textMuted }}>Neto a recibir</div>
+          </div>
+          <span style={{ padding: "3px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: statusColor + "22", color: statusColor }}>{statusLabel}</span>
+        </div>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${colors.border}33` }}>
+          {periodTrips.length > 0 && <>
+            <div style={{ fontSize: 11, fontWeight: 600, color: colors.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Viajes</div>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 14 }}>
+              <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                <Th>{t.date}</Th><Th>{t.destination}</Th><Th>{t.client}</Th><Th align="right">Chofer</Th><Th align="right">Dieta</Th><Th align="right">Ayudante*</Th><Th align="right">Descuentos</Th><Th align="center">{t.status}</Th>
+              </tr></thead>
+              <tbody>
+                {periodTrips.slice().sort((a, b) => a.date.localeCompare(b.date)).map(tr => {
+                  const cl = clients.find(c => c.id === tr.clientId);
+                  const trRate = driverObj?.salaryType === "perTrip" ? (driverObj.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality) : null;
+                  const trTk = trucks.find(t2 => t2.id === tr.truckId);
+                  const trSize = (tr.tarifaOverride && tr.tarifaOverride !== "custom") ? tr.tarifaOverride : (trTk?.size || "T1");
+                  const basePay = trRate
+                    ? (trSize === "T2" ? (trRate.priceT2 ?? trRate.priceT1 ?? 0) : (trRate.priceT1 ?? 0))
+                    : ((expenses || []).find(e => e.category === "driverPay" && e.tripId === tr.id)?.amount ?? 0);
+                  const dieta = trRate ? (trSize === "T2" ? (trRate.dietaT2 || 0) : (trRate.dietaT1 || 0)) : 0;
+                  const ayudanteRef = trRate ? (trSize === "T2" ? (trRate.helperT2 || 0) * 2 : (trRate.helperT1 || 0)) : 0;
+                  const tripHelpers = (tr.helpers || []).reduce((s, x) => s + (x.pay || 0), 0);
+                  const tripDiscounts = (tr.discounts || []).reduce((s, x) => s + (x.amount || 0), 0);
+                  const stColor = tr.status === "delivered" ? colors.green : tr.status === "in_transit" ? colors.yellow : colors.accent;
+                  const nextStatus = { pending: "in_transit", in_transit: "delivered" };
+                  const handleStatusAdvance = (trip) => {
+                    const next = nextStatus[trip.status];
+                    if (!next) return;
+                    if (next === "delivered") {
+                      if (!window.confirm("¿Confirmar entrega? Esta acción no se puede deshacer.")) return;
+                    }
+                    setTrips(allTrips.map(x => x.id === trip.id ? { ...x, status: next } : x));
+                  };
+                  return <Fragment key={tr.id}>
+                    <tr style={{ borderBottom: `1px solid ${colors.border}11` }}>
+                      <Td>{tr.date}</Td>
+                      <Td>{tr.municipality}, {tr.province}</Td>
+                      <Td>{cl?.companyName || "—"}</Td>
+                      <Td align="right" bold color={colors.green}>
+                        {driverObj?.salaryType === "fixed" ? <span style={{ fontSize: 10, color: colors.textMuted }}>Fijo</span> : basePay > 0 ? fmt(basePay) : <span style={{ fontSize: 10, color: colors.orange }}>—</span>}
+                      </Td>
+                      <Td align="right" color={dieta > 0 ? colors.accent : colors.textMuted}>{dieta > 0 ? fmt(dieta) : "—"}</Td>
+                      <Td align="right" color={ayudanteRef > 0 ? colors.cyan : colors.textMuted}>{ayudanteRef > 0 ? fmt(ayudanteRef) : "—"}</Td>
+                      {(() => {
+                        const linkedAdel = adelantoExps.find(e => e.tripId === tr.id);
+                        const adelAmt = linkedAdel ? linkedAdel.amount : 0;
+                        const showHelpers = driverObj?.salaryType !== "perTrip" && tripHelpers > 0;
+                        if (!showHelpers && tripDiscounts === 0 && adelAmt === 0) return <Td align="right" color={colors.textMuted}>—</Td>;
+                        return <Td align="right" style={{ lineHeight: 1.4, verticalAlign: "top" }}>
+                          {showHelpers && <div style={{ color: colors.orange, fontWeight: 600 }}>− {fmt(tripHelpers)}</div>}
+                          {tripDiscounts > 0 && <div style={{ color: colors.red, fontWeight: 600 }}>− {fmt(tripDiscounts)}</div>}
+                          {adelAmt > 0 && <div style={{ fontSize: 10, color: colors.orange }}>↳ Adel − {fmt(adelAmt)}</div>}
+                        </Td>;
+                      })()}
+                      <Td align="center">
+                        <button onClick={() => handleStatusAdvance(tr)}
+                          style={{ padding: "10px 14px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 600, minHeight: 44, minWidth: 88, cursor: "pointer", background: stColor + "22", color: stColor }}>
+                          {tr.status === "delivered" ? t.delivered : tr.status === "in_transit" ? t.inTransit : t.pending}
+                        </button>
+                      </Td>
+                    </tr>
+                    {(tr.discounts || []).filter(d => d.amount > 0).map((d, i) => (
+                      <tr key={`disc-${tr.id}-${i}`} style={{ background: colors.red + "08" }}>
+                        <Td></Td><Td colSpan={5} style={{ fontSize: 11, color: colors.red, paddingLeft: 20 }}>↳ Descuento: {d.desc || "—"}</Td>
+                        <Td align="right" style={{ fontSize: 11, color: colors.red }}>− {fmt(d.amount)}</Td><Td></Td>
+                      </tr>
+                    ))}
+                    {(() => {
+                      const linkedAdel = adelantoExps.find(e => e.tripId === tr.id);
+                      if (!linkedAdel) return null;
+                      return <tr key={`adv-${tr.id}`} style={{ background: colors.orange + "08" }}>
+                        <Td></Td><Td colSpan={5} style={{ fontSize: 11, color: colors.orange, paddingLeft: 20 }}>↳ Adelanto vinculado</Td>
+                        <Td align="right" style={{ fontSize: 11, color: colors.orange }}>− {fmt(linkedAdel.amount)}</Td><Td></Td>
+                      </tr>;
+                    })()}
+                  </Fragment>;
+                })}
+              </tbody>
+            </table>
+            </div>
+          </>}
+
+          {adelantoExps.length > 0 && <>
+            <div style={{ fontSize: 11, fontWeight: 600, color: colors.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Adelantos Recibidos</div>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 14 }}>
+              <tbody>
+                {adelantoExps.map(e => {
+                  const linkedTrip = e.tripId ? myTrips.find(tr => tr.id === e.tripId) : null;
+                  return (
+                    <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+                      <Td>{e.date}</Td>
+                      <Td>
+                        <span>{e.description || "Adelanto"}</span>
+                        {linkedTrip && <><br /><span style={{ fontSize: 10, color: colors.textMuted }}>↳ Viaje {linkedTrip.date}: {linkedTrip.municipality}, {linkedTrip.province}</span></>}
+                      </Td>
+                      <Td align="right" bold color={colors.red}>− {fmt(e.amount)}</Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            </div>
+          </>}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${colors.border}33`, paddingTop: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <span style={{ color: colors.textMuted }}>{totalOverrideExp ? "✏️ Override (ajuste admin)" : driverObj?.salaryType === "fixed" ? "Salario Fijo" : driverObj?.salaryType === "porcentaje" ? `Comisión (${driverObj.percentageAmount || 0}%)` : "Pago por Viajes"}</span>
+              <div style={{ textAlign: "right" }}>
+                {totalOverrideExp && <div style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(calcBruto)}</div>}
+                <span style={{ color: totalOverrideExp ? "#9b7fe8" : colors.green, fontWeight: 600 }}>{fmt(brutoPay)}</span>
+              </div>
+            </div>
+            {helperPay > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Ayudantes</span><span style={{ color: colors.orange, fontWeight: 600 }}>− {fmt(helperPay)}</span></div>}
+            {adelantos > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Adelantos</span><span style={{ color: colors.red, fontWeight: 600 }}>− {fmt(adelantos)}</span></div>}
+            {discountsTotal > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Descuentos</span><span style={{ color: colors.red, fontWeight: 600 }}>− {fmt(discountsTotal)}</span></div>}
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, borderTop: `1px solid ${colors.border}44`, paddingTop: 8, marginTop: 2 }}>
+              <span>Neto a Recibir</span><span style={{ color: colors.cyan }}>{fmt(netoAPagar)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+          }

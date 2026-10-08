@@ -1,0 +1,658 @@
+import { useState, useMemo } from "react";
+import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote, FileText, ChevronRight } from "lucide-react";
+import { colors } from "../constants/theme.js";
+import { fmt, monthStr, getPeriodInfo, expenseTruckId } from "../utils/helpers.js";
+import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
+
+// ── Mini stat block ─────────────────────────────────────────────────────────
+function Stat({ label, value, color, sub, onClick }) {
+  return (
+    <div onClick={onClick}
+      style={{ background: colors.card, borderRadius: 10, padding: "14px 16px", border: `1px solid ${colors.border}`, cursor: onClick ? "pointer" : "default", transition: "border-color 0.15s" }}
+      onMouseEnter={e => onClick && (e.currentTarget.style.borderColor = color || colors.accent)}
+      onMouseLeave={e => onClick && (e.currentTarget.style.borderColor = colors.border)}>
+      <div style={{ fontSize: 10, color: color || colors.textMuted, fontWeight: 700, marginBottom: 4, letterSpacing: "0.04em" }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: color || colors.text, lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
+
+// ── Row in a mini table ─────────────────────────────────────────────────────
+function MiniRow({ label, value, color, pct, bar }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${colors.border}11` }}>
+      <div style={{ flex: 1, fontSize: 12, color: colors.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
+      {bar !== undefined && (
+        <div style={{ width: 90, height: 4, background: colors.border, borderRadius: 2, flexShrink: 0 }}>
+          <div style={{ width: `${Math.min(100, bar)}%`, height: "100%", background: color || colors.accent, borderRadius: 2 }} />
+        </div>
+      )}
+      {pct !== undefined && <div style={{ fontSize: 10, color: colors.textMuted, width: 32, textAlign: "right", flexShrink: 0 }}>{pct.toFixed(0)}%</div>}
+      <div style={{ fontSize: 12, fontWeight: 700, color: color || colors.text, flexShrink: 0 }}>{value}</div>
+    </div>
+  );
+}
+function SectionTitle({ label, color }) {
+  return (
+    <div style={{ fontSize: 11, fontWeight: 700, color: color || colors.textMuted, letterSpacing: "0.06em", marginBottom: 10, textTransform: "uppercase" }}>{label}</div>
+  );
+}
+
+export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, isMobile }) {
+  // brokers is used in the revenue useMemo for pass-through deduction
+  const cm = monthStr();
+  const today = new Date().toISOString().slice(0, 10);
+  const [dateFrom, setDateFrom] = useState(`${cm}-01`);
+  const [dateTo,   setDateTo]   = useState(() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(new Date(n.getFullYear(),n.getMonth()+1,0).getDate()).padStart(2,"0")}`; });
+
+  const lastDay = (year, month) => String(new Date(year, month, 0).getDate()).padStart(2, "0");
+
+  const setPreset = (preset) => {
+    const now = new Date();
+    const y = now.getFullYear(), mn = now.getMonth() + 1;
+    const mo = String(mn).padStart(2, "0"), d = String(now.getDate()).padStart(2, "0");
+    if (preset === "thisMonth")  { setDateFrom(`${y}-${mo}-01`); setDateTo(`${y}-${mo}-${lastDay(y, mn)}`); }
+    else if (preset === "lastMonth") {
+      const lm = new Date(y, mn - 2, 1);
+      const ly = lm.getFullYear(), lmn = lm.getMonth() + 1, lmo = String(lmn).padStart(2, "0");
+      setDateFrom(`${ly}-${lmo}-01`); setDateTo(`${ly}-${lmo}-${lastDay(ly, lmn)}`);
+    } else if (preset === "quincena") {
+      if (now.getDate() <= 15) { setDateFrom(`${y}-${mo}-01`); setDateTo(`${y}-${mo}-15`); }
+      else { setDateFrom(`${y}-${mo}-16`); setDateTo(`${y}-${mo}-${lastDay(y, mn)}`); }
+    } else if (preset === "last30") {
+      const from = new Date(now); from.setDate(from.getDate() - 30);
+      setDateFrom(from.toISOString().slice(0, 10)); setDateTo(`${y}-${mo}-${d}`);
+    } else if (preset === "year") { setDateFrom(`${y}-01-01`); setDateTo(`${y}-12-31`); }
+  };
+
+  // ── Period trips + earned revenue ────────────────────────────────────────
+  // revenue = only DELIVERED trips (service performed = earned).
+  // pipelineAmt = pending+in_transit (expected but not yet earned).
+  // passThruDeduction = broker commissions for pass-through clients (deducted
+  //   before payment arrives — contra-revenue, not a separate expense).
+  const { mt, revenue, pipelineAmt, pipelineCount, passThruDeduction, netRevenue } = useMemo(() => {
+    const clientMap = new Map(clients.map(c => [c.id, c]));
+    const brokerMap = new Map(brokers.map(b => [b.id, b]));
+    const mt = trips.filter(tr => tr.date >= dateFrom && tr.date <= dateTo && tr.status !== "cancelled");
+    const delivered = mt.filter(tr => tr.status === "delivered");
+    const pipeline  = mt.filter(tr => tr.status !== "delivered");
+    const grossRevenue = delivered.reduce((s, tr) => s + (tr.revenue || 0), 0);
+    const passThru = delivered.reduce((s, tr) => {
+      const cl = clientMap.get(tr.clientId);
+      if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return s;
+      const br = brokerMap.get(tr.brokerId);
+      return s + (br ? Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100) : 0);
+    }, 0);
+    return {
+      mt,
+      revenue:            grossRevenue,
+      pipelineAmt:        pipeline.reduce((s, tr) => s + (tr.revenue || 0), 0),
+      pipelineCount:      pipeline.length,
+      passThruDeduction:  passThru,
+      netRevenue:         grossRevenue - passThru,
+    };
+  }, [trips, clients, brokers, dateFrom, dateTo]);
+
+  // ── Expenses in period ────────────────────────────────────────────────────
+  const { periodExpenses, nomina, brokerFees, operExp, totalExp, grossProfit, margin } = useMemo(() => {
+    const periodTripIds = new Set(mt.map(tr => tr.id));
+    const periodExpenses = expenses.filter(e =>
+      (e.tripId && periodTripIds.has(e.tripId)) ||
+      (!e.tripId && e.date >= dateFrom && e.date <= dateTo)
+    );
+    // Exclude driverPay for any driver+period that has a nominaTotalOverride (prevents double-count)
+    const pKey = (e) => e.driverId ? `${e.driverId}-${(e.date||"").slice(0,7)}-${parseInt((e.date||"").slice(8)||0,10)<=15?1:2}` : null;
+    const overridePKeys = new Set(periodExpenses.filter(e => e.category === "nominaTotalOverride").map(pKey).filter(Boolean));
+    const nomina     = periodExpenses.filter(e => {
+      if (e.category === "nominaTotalOverride") return true;
+      if (e.category === "driverPay") return !overridePKeys.has(pKey(e));
+      return false;
+    }).reduce((s,e) => s + e.amount, 0);
+    const brokerFees = periodExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s + e.amount, 0);
+    const operExp    = periodExpenses.filter(e => !["driverPay","nominaTotalOverride","broker_commission","adelanto_conductor"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
+    const totalExp   = nomina + brokerFees + operExp;
+    // grossProfit uses netRevenue: broker pass-through deductions are contra-revenue,
+    // and since syncAll doesn't generate broker_commission expenses for pass-through clients,
+    // totalExp already excludes those commissions — using netRevenue keeps the P&L correct.
+    return { periodExpenses, nomina, brokerFees, operExp, totalExp, grossProfit: netRevenue - totalExp, margin: netRevenue > 0 ? (netRevenue - totalExp) / netRevenue * 100 : 0 };
+  }, [expenses, mt, dateFrom, dateTo, netRevenue]);
+
+  // ── CxC (accounts receivable — delivered trips only, all-time) ────────────
+  const { cxcPending, cxcOverdue, cxcUpcoming, totalCxC, totalOverdue, totalCollected, nextDue, cobroMap, getCobro } = useMemo(() => {
+    const clientMap2 = new Map(clients.map(c => [c.id, c]));
+    const brokerMap2 = new Map((brokers || []).map(b => [b.id, b]));
+    const tripNet = (tr) => {
+      const cl = clientMap2.get(tr.clientId);
+      if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return tr.revenue || 0;
+      const br = brokerMap2.get(tr.brokerId);
+      if (!br) return tr.revenue || 0;
+      return (tr.revenue || 0) - Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
+    };
+    const cxcGrouped = {};
+    trips.forEach(tr => {
+      if (!tr.clientId || !(tr.revenue > 0) || tr.status !== "delivered") return;
+      const client = clientMap2.get(tr.clientId);
+      if (!client) return;
+      const { key, expectedDate } = getPeriodInfo(tr.date, client);
+      const gKey = `${tr.clientId}::${key}`;
+      if (!cxcGrouped[gKey]) cxcGrouped[gKey] = { clientId: tr.clientId, periodKey: key, expectedDate, revenue: 0 };
+      cxcGrouped[gKey].revenue += tripNet(tr);
+    });
+    const cobroMap   = new Map(cobros.map(c => [`${c.clientId}::${c.periodKey}`, c]));
+    const getCobro   = (cid, pk) => cobroMap.get(`${cid}::${pk}`);
+    const cxcPeriods = Object.values(cxcGrouped);
+    const cxcCollected = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status === "collected");
+    const cxcPending   = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status !== "collected");
+    const cxcOverdue   = cxcPending.filter(p => p.expectedDate < today);
+    const cxcUpcoming  = cxcPending.filter(p => p.expectedDate >= today).sort((a,b) => a.expectedDate.localeCompare(b.expectedDate));
+    return {
+      cxcPending, cxcOverdue, cxcUpcoming, cobroMap, getCobro,
+      totalCxC:       cxcPending.reduce((s, p) => s + p.revenue, 0),
+      totalOverdue:   cxcOverdue.reduce((s, p) => s + p.revenue, 0),
+      totalCollected: cxcCollected.reduce((s, p) => s + (getCobro(p.clientId, p.periodKey)?.amount ?? p.revenue), 0),
+      nextDue:        cxcUpcoming[0],
+    };
+  }, [trips, clients, cobros, brokers, today]);
+
+  // ── CxP (accounts payable — all pending expenses) ──────────────────────
+  const { cxpNomina, cxpSupplier, cxpFijos, totalCxP } = useMemo(() => {
+    const cancelledTripIds = new Set(trips.filter(tr => tr.status === "cancelled").map(tr => tr.id));
+    const allPending  = expenses.filter(e =>
+      (!e.status || e.status === "pending") &&
+      !(e.category === "driverPay" && e.tripId && cancelledTripIds.has(e.tripId))
+    );
+    // Same override-aware exclusion for CxP: exclude driverPay for periods with a nominaTotalOverride
+    const cxpPKey = (e) => e.driverId ? `${e.driverId}-${(e.date||"").slice(0,7)}-${parseInt((e.date||"").slice(8)||0,10)<=15?1:2}` : null;
+    const cxpOverridePKeys = new Set(expenses.filter(e => e.category === "nominaTotalOverride").map(cxpPKey).filter(Boolean));
+    const cxpNomina   = allPending.filter(e => {
+      if (e.category === "nominaTotalOverride") return true;
+      if (e.category === "driverPay") return !cxpOverridePKeys.has(cxpPKey(e));
+      return false;
+    }).reduce((s,e) => s + e.amount, 0);
+    const cxpSupplier = allPending.filter(e => ["fuel","repair","maintenance","tire","helper","other","toll","salary"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
+    const cxpFijos    = allPending.filter(e => ["loan","insurance"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
+    return { cxpNomina, cxpSupplier, cxpFijos, totalCxP: cxpNomina + cxpSupplier + cxpFijos };
+  }, [expenses, trips]);
+
+  const cashPosition = totalCxC - totalCxP;
+
+  // ── CFO Billing Pipeline ──────────────────────────────────────────────────
+  const { invoicedAmt, outstandingAmt, collectedAmt, draftAmt, readyToInvoiceAmt, pendingDocsAmt } = useMemo(() => {
+    const tripRevMap = new Map(trips.map(t => [t.id, t.revenue || 0]));
+    // Prefer stored inv.amount (net after broker deduction) — fall back to gross recompute for old invoices
+    const invAmt = (inv) => inv.amount != null ? inv.amount : (inv.tripIds || []).reduce((s, tid) => s + (tripRevMap.get(tid) || 0), 0);
+    const periodInv = (invoices || []).filter(inv => inv.date >= dateFrom && inv.date <= dateTo && inv.status !== "cancelled");
+    const allInvoicedIds = new Set();
+    (invoices || []).forEach(inv => { if (inv.status !== "cancelled") (inv.tripIds || []).forEach(id => allInvoicedIds.add(id)); });
+    // readyToInvoice = delivered trips with docs, not yet invoiced, net of pass-through broker
+    const cMap = new Map(clients.map(c => [c.id, c]));
+    const bMap = new Map(brokers.map(b => [b.id, b]));
+    const readyToInvoice = mt.filter(tr => tr.status === "delivered" && tr.docStatus === "delivered" && (tr.revenue || 0) > 0 && !allInvoicedIds.has(tr.id));
+    const readyAmt = readyToInvoice.reduce((s, tr) => {
+      const cl = cMap.get(tr.clientId);
+      if (cl?.rules?.brokerPassThrough && tr.brokerId) {
+        const br = bMap.get(tr.brokerId);
+        const ded = br ? Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100) : 0;
+        return s + (tr.revenue || 0) - ded;
+      }
+      return s + (tr.revenue || 0);
+    }, 0);
+    return {
+      invoicedAmt:      periodInv.reduce((s, inv) => s + invAmt(inv), 0),
+      outstandingAmt:   periodInv.filter(i => i.status === "sent").reduce((s, i) => s + invAmt(i), 0),
+      collectedAmt:     periodInv.filter(i => i.status === "paid").reduce((s, i) => s + invAmt(i), 0),
+      draftAmt:         periodInv.filter(i => i.status === "draft").reduce((s, i) => s + invAmt(i), 0),
+      readyToInvoiceAmt: readyAmt,
+      pendingDocsAmt:   mt.filter(tr => tr.status === "delivered" && (tr.revenue || 0) > 0 && tr.docStatus !== "delivered" && !allInvoicedIds.has(tr.id))
+                          .reduce((s, tr) => {
+                            const cl = cMap.get(tr.clientId);
+                            if (cl?.rules?.brokerPassThrough && tr.brokerId) {
+                              const br = bMap.get(tr.brokerId);
+                              const ded = br ? Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100) : 0;
+                              return s + (tr.revenue || 0) - ded;
+                            }
+                            return s + (tr.revenue || 0);
+                          }, 0),
+    };
+  }, [invoices, mt, trips, clients, brokers, dateFrom, dateTo]);
+
+  // ── Broker commissions in period ────────────────────────────────────────
+  const brokerBreakdown = useMemo(() => {
+    const clientMap = new Map(clients.map(c => [c.id, c]));
+    return brokers.map(br => {
+      const brTrips   = mt.filter(tr => tr.brokerId === br.id);
+      const brRev     = brTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
+      const brTripSet = new Set(brTrips.map(tr => tr.id));
+      const brFee     = periodExpenses.filter(e => e.category === "broker_commission" && brTripSet.has(e.tripId)).reduce((s,e) => s + e.amount, 0);
+      // Pass-through: no expense exists, but broker kept this amount as contra-revenue
+      const brPassThru = brTrips.reduce((s, tr) => {
+        const cl = clientMap.get(tr.clientId);
+        if (!cl?.rules?.brokerPassThrough) return s;
+        return s + Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
+      }, 0);
+      return { broker: br, trips: brTrips.length, revenue: brRev, fee: brFee, passThru: brPassThru };
+    }).filter(b => b.trips > 0 || b.fee > 0 || b.passThru > 0).sort((a,b) => (b.fee + b.passThru) - (a.fee + a.passThru));
+  }, [brokers, clients, mt, periodExpenses]);
+
+  // ── Rentabilidad por camion (period) ────────────────────────────────────
+  const { truckStats, totalPartnerComm, realProfit, realMargin, maxTruckRev } = useMemo(() => {
+    const tripMap = new Map(trips.map(tr => [tr.id, tr]));
+    const stats = trucks.map(tk => {
+      const tkTrips   = mt.filter(tr => tr.truckId === tk.id);
+      const tkRev     = tkTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
+      const tkExp     = periodExpenses.filter(e => expenseTruckId(e, tripMap) === tk.id).reduce((s,e) => s + e.amount, 0);
+      const tkNet     = tkRev - tkExp;
+      const partner     = tk.owner === "partner" ? partners.find(p => p.id === tk.partnerId) : null;
+      const partnerComm = partner ? Math.max(0, tkNet) * ((partner.commissionPct || 0) / 100) : 0;
+      const adminNet    = tkNet - partnerComm;
+      return { truck: tk, trips: tkTrips.length, revenue: tkRev, expenses: tkExp, net: tkNet, margin: tkRev > 0 ? tkNet / tkRev * 100 : 0, partner, partnerComm, adminNet, adminMargin: tkRev > 0 ? adminNet / tkRev * 100 : 0 };
+    }).filter(t => t.trips > 0).sort((a,b) => b.revenue - a.revenue);
+    const totalPartnerComm = stats.reduce((s, ts) => s + ts.partnerComm, 0);
+    return { truckStats: stats, totalPartnerComm, maxTruckRev: stats[0]?.revenue || 1, realProfit: grossProfit - totalPartnerComm, realMargin: netRevenue > 0 ? (grossProfit - totalPartnerComm) / netRevenue * 100 : 0 };
+  }, [trucks, mt, periodExpenses, partners, trips, grossProfit, netRevenue]);
+
+  // ── Top clientes (period) ───────────────────────────────────────────────
+  const { clientStats, maxClientRev } = useMemo(() => {
+    const stats = clients.map(cl => {
+      const clTrips = mt.filter(tr => tr.clientId === cl.id);
+      return { client: cl, trips: clTrips.length, revenue: clTrips.reduce((s, tr) => s + (tr.revenue || 0), 0) };
+    }).filter(c => c.trips > 0).sort((a,b) => b.revenue - a.revenue);
+    return { clientStats: stats, maxClientRev: stats[0]?.revenue || 1 };
+  }, [clients, mt]);
+
+  // ── Trip pipeline ───────────────────────────────────────────────────────
+  const { allActive, pending_trips, transit_trips, delivered_trips } = useMemo(() => {
+    const allActive = trips.filter(tr => tr.status !== "cancelled");
+    return { allActive, pending_trips: allActive.filter(tr => tr.status === "pending").length, transit_trips: allActive.filter(tr => tr.status === "in_transit").length, delivered_trips: allActive.filter(tr => tr.status === "delivered").length };
+  }, [trips]);
+
+  // ── Alerts ──────────────────────────────────────────────────────────────
+  const errCount  = alerts.filter(a => a.severity === "error").length;
+  const warnCount = alerts.filter(a => a.severity === "warning").length;
+  const infoCount = alerts.filter(a => a.severity === "info").length;
+
+  return (
+    <div>
+      <PageHeader title="Dashboard — B-Logix" />
+
+      {/* ── Date filter ── */}
+      <Card style={{ marginBottom: 16, padding: "10px 14px" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <Calendar size={14} color={colors.textMuted} />
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            style={{ padding: "5px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 16 }} />
+          <span style={{ fontSize: 12, color: colors.textMuted }}>—</span>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            style={{ padding: "5px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 16 }} />
+          {[
+            { key: "thisMonth", label: "Este mes" },
+            { key: "lastMonth", label: "Mes anterior" },
+            { key: "quincena", label: "Quincena" },
+            { key: "last30",   label: "Ultimos 30d" },
+            { key: "year",     label: "Este año" },
+          ].map(p => (
+            <button key={p.key} onClick={() => setPreset(p.key)}
+              style={{ padding: "4px 10px", borderRadius: 14, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 11, whiteSpace: "nowrap" }}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* ── Hero KPI: Beneficio Real ── */}
+      <div style={{ background: `linear-gradient(135deg, ${colors.card}, ${colors.cardHover})`, borderRadius: 12, border: `1px solid ${realProfit >= 0 ? colors.green + "40" : colors.red + "40"}`, padding: "20px 24px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>Beneficio Real del Periodo</div>
+          <div style={{ fontSize: 36, fontWeight: 800, color: realProfit >= 0 ? colors.green : colors.red, lineHeight: 1 }}>{fmt(realProfit)}</div>
+          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
+            {realMargin.toFixed(1)}% margen · {mt.filter(tr => tr.status === "delivered").length} entregado{mt.filter(tr => tr.status === "delivered").length !== 1 ? "s" : ""}
+            {pipelineCount > 0 && <span style={{ color: colors.yellow }}> · {pipelineCount} en proceso ({fmt(pipelineAmt)})</span>}
+            {" · tras liquidaciones de socios"}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+          <div style={{ textAlign: "right" }}>
+            {passThruDeduction > 0 ? (
+              <>
+                <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 1 }}>Ingresos Brutos</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: colors.textMuted }}>{fmt(revenue)}</div>
+                <div style={{ fontSize: 10, color: colors.red }}>−{fmt(passThruDeduction)} broker</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: colors.green }}>{fmt(netRevenue)} <span style={{ fontSize: 9, fontWeight: 400 }}>neto</span></div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Ingresos Devengados</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: colors.green }}>{fmt(revenue)}</div>
+              </>
+            )}
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Gastos Totales</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: colors.red }}>{fmt(totalExp)}</div>
+          </div>
+          {totalPartnerComm > 0 && (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Liquidaciones Socios</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: colors.purple }}>−{fmt(totalPartnerComm)}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── CFO: Pipeline de Facturación ── */}
+      <Card style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => setPage("invoices")}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <FileText size={14} color={colors.accent} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: colors.accent, letterSpacing: "0.06em", textTransform: "uppercase" }}>Pipeline de Facturación</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            {readyToInvoiceAmt > 0 && (
+              <div style={{ background: colors.orange+"18", border: `1px solid ${colors.orange}40`, borderRadius: 8, padding: "4px 10px", fontSize: 11, color: colors.orange, fontWeight: 700 }}>
+                {fmt(readyToInvoiceAmt)} listo p/facturar
+              </div>
+            )}
+            <ChevronRight size={14} color={colors.textMuted} />
+          </div>
+        </div>
+
+        {/* 5-metric grid */}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: 8, marginBottom: 10 }}>
+          {[
+            { label: "Cobrado",        value: collectedAmt,     color: colors.green,    sub: "pagado" },
+            { label: "Por Cobrar",     value: outstandingAmt,   color: colors.cyan,     sub: "enviado" },
+            { label: "Borrador",       value: draftAmt,         color: colors.textMuted, sub: "sin enviar" },
+            { label: "Listo Facturar", value: readyToInvoiceAmt, color: colors.orange,  sub: "docs OK" },
+            { label: "Docs Pendientes",value: pendingDocsAmt,   color: colors.yellow,   sub: "sin docs" },
+          ].map(({ label, value, color, sub }) => (
+            <div key={label} style={{ background: colors.inputBg, borderRadius: 8, padding: "9px 11px", border: `1px solid ${colors.border}` }}>
+              <div style={{ fontSize: 9, color, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color }}>{fmt(value)}</div>
+              <div style={{ fontSize: 9, color: colors.textMuted, marginTop: 2 }}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Stacked progress bar — denominator is netRevenue (what you'll actually collect) */}
+        {netRevenue > 0 && (
+          <>
+            <div style={{ display: "flex", height: 7, borderRadius: 4, overflow: "hidden", gap: 1 }}>
+              {[
+                { value: collectedAmt,      color: colors.green },
+                { value: outstandingAmt,    color: colors.cyan },
+                { value: draftAmt,          color: colors.textMuted + "88" },
+                { value: readyToInvoiceAmt, color: colors.orange + "88" },
+                { value: pendingDocsAmt,    color: colors.yellow + "55" },
+              ].map(({ value, color }, i) => value > 0
+                ? <div key={i} style={{ width: `${value / netRevenue * 100}%`, background: color, minWidth: 2 }} />
+                : null
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 5, flexWrap: "wrap" }}>
+              {[
+                { label: "Cobrado",      color: colors.green },
+                { label: "Por Cobrar",   color: colors.cyan },
+                { label: "Borrador",     color: colors.textMuted },
+                { label: "Listo",        color: colors.orange },
+                { label: "Docs Pend.",   color: colors.yellow },
+              ].map(({ label, color }) => (
+                <span key={label} style={{ fontSize: 9, color: colors.textMuted, display: "flex", alignItems: "center", gap: 3 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 2, background: color, display: "inline-block", flexShrink: 0 }} />
+                  {label}
+                </span>
+              ))}
+              <span style={{ fontSize: 9, color: colors.textMuted, marginLeft: "auto" }}>
+                {netRevenue > 0 ? ((invoicedAmt / netRevenue) * 100).toFixed(0) : 0}% del periodo facturado
+              </span>
+            </div>
+          </>
+        )}
+      </Card>
+
+      {/* ── Row 1: KPIs financieros ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 16 }}>
+        <Stat label="CxC POR COBRAR" value={fmt(totalCxC)} color={colors.orange}
+          sub={`${cxcPending.length} periodo${cxcPending.length !== 1 ? "s" : ""} pendiente${cxcPending.length !== 1 ? "s" : ""} (historico)`}
+          onClick={() => setPage("cxc")} />
+        <Stat label="CxP PENDIENTE" value={fmt(totalCxP)} color={colors.red}
+          sub={`Nomina + suplidores + fijos`}
+          onClick={() => setPage("cxp")} />
+        <Stat label="POSICION DE CAJA" value={fmt(cashPosition)} color={cashPosition >= 0 ? colors.cyan : colors.red}
+          sub={cashPosition >= 0 ? "CxC supera CxP ok" : "CxP supera CxC alerta"} />
+        <Stat label="MARGEN BRUTO" value={`${margin.toFixed(1)}%`} color={margin >= 20 ? colors.green : margin >= 10 ? colors.yellow : colors.red}
+          sub={`Antes de socios`} />
+      </div>
+
+      {/* ── Row 2: CxC · CxP · Brokers ── */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+
+        {/* CxC */}
+        <Card style={{ cursor: "pointer" }} onClick={() => setPage("cxc")}>
+          <SectionTitle label="Cuentas por Cobrar" color={colors.orange} />
+          <MiniRow label="Vencido" value={fmt(totalOverdue)} color={totalOverdue > 0 ? colors.red : colors.textMuted} />
+          <MiniRow label="Pendiente total" value={fmt(totalCxC)} color={colors.orange} />
+          {nextDue && (
+            <MiniRow
+              label={`Prox: ${clients.find(c => c.id === nextDue.clientId)?.companyName?.split(" ")[0] || "—"} (${nextDue.expectedDate})`}
+              value={fmt(nextDue.revenue)} color={colors.cyan} />
+          )}
+          <MiniRow label="Cobrado" value={fmt(totalCollected)} color={colors.green} />
+          <div style={{ marginTop: 10, fontSize: 10, color: colors.accent, textAlign: "right" }}>Ver Cuentas x Cobrar</div>
+        </Card>
+
+        {/* CxP */}
+        <Card style={{ cursor: "pointer" }} onClick={() => setPage("cxp")}>
+          <SectionTitle label="Cuentas por Pagar" color={colors.red} />
+          <MiniRow label="Nomina conductores" value={fmt(cxpNomina)} color={colors.accent} />
+          <MiniRow label="Suplidores / Oper." value={fmt(cxpSupplier)} color={colors.orange} />
+          <MiniRow label="Fijos (prestamos+seg.)" value={fmt(cxpFijos)} color={colors.red} />
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${colors.border}`, display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted }}>TOTAL PENDIENTE</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: colors.red }}>{fmt(totalCxP)}</span>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 10, color: colors.accent, textAlign: "right" }}>Ver Cuentas x Pagar</div>
+        </Card>
+
+        {/* Brokers */}
+        <Card>
+          <SectionTitle label="Comisiones Brokers" color={colors.yellow} />
+          {brokerBreakdown.length === 0
+            ? <div style={{ fontSize: 12, color: colors.textMuted, padding: "10px 0" }}>Sin viajes con broker en el periodo</div>
+            : brokerBreakdown.map(b => (
+                <MiniRow key={b.broker.id}
+                  label={`${b.broker.name} (${b.broker.commissionPct}%) · ${b.trips} v.${b.passThru > 0 ? " · pass-through" : ""}`}
+                  value={b.passThru > 0 ? fmt(b.passThru) : fmt(b.fee)}
+                  color={b.passThru > 0 ? colors.orange : colors.yellow} />
+              ))
+          }
+          {(brokerFees > 0 || passThruDeduction > 0) && (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${colors.border}`, display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted }}>TOTAL COMISIONES</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: colors.yellow }}>{fmt(brokerFees + passThruDeduction)}</span>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* ── Row 3: P&L desglose · Rentabilidad camiones ── */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 12, marginBottom: 16 }}>
+
+        {/* P&L desglose */}
+        <Card>
+          <SectionTitle label="Desglose de Gastos del Periodo" color={colors.red} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {[
+              { label: "Ingresos brutos", value: revenue, color: colors.green, icon: "up" },
+              { label: `Nomina conductores (${netRevenue > 0 ? (nomina/netRevenue*100).toFixed(0) : 0}%)`, value: -nomina, color: colors.accent, icon: "dn" },
+              { label: `Comisiones brokers (${netRevenue > 0 ? (brokerFees/netRevenue*100).toFixed(0) : 0}%)`, value: -brokerFees, color: colors.yellow, icon: "dn" },
+              { label: `Gastos operativos (${netRevenue > 0 ? (operExp/netRevenue*100).toFixed(0) : 0}%)`, value: -operExp, color: colors.orange, icon: "dn" },
+              ...(totalPartnerComm > 0 ? [{ label: `Liquidaciones socios (${netRevenue > 0 ? (totalPartnerComm/netRevenue*100).toFixed(0) : 0}%)`, value: -totalPartnerComm, color: colors.purple, icon: "dn" }] : []),
+            ].map(({ label, value, color, icon }) => (
+              <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: `1px solid ${colors.border}11` }}>
+                <span style={{ fontSize: 12, color: colors.textMuted }}>{icon === "up" ? "+" : "-"} {label}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color }}>{fmt(Math.abs(value))}</span>
+              </div>
+            ))}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0 0", marginTop: 4, borderTop: `2px solid ${colors.border}` }}>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Beneficio real admin</span>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontSize: 18, fontWeight: 800, color: realProfit >= 0 ? colors.green : colors.red }}>{fmt(realProfit)}</span>
+                <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 8 }}>{realMargin.toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Rentabilidad por camion */}
+        <Card>
+          <SectionTitle label="Rentabilidad por Camion" color={colors.accent} />
+          {truckStats.length === 0
+            ? <div style={{ fontSize: 12, color: colors.textMuted, padding: "10px 0" }}>Sin viajes en el periodo</div>
+            : truckStats.map(ts => {
+                const isPartner = !!ts.partner;
+                const dispNet    = isPartner ? ts.adminNet    : ts.net;
+                const dispMargin = isPartner ? ts.adminMargin : ts.margin;
+                return (
+                  <div key={ts.truck.id} style={{ padding: "7px 0", borderBottom: `1px solid ${colors.border}11` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600 }}>
+                        {ts.truck.plate}
+                        <span style={{ fontSize: 10, color: colors.textMuted, marginLeft: 5 }}>{ts.truck.size || "T1"} · {ts.trips} v.</span>
+                        {isPartner && <span style={{ fontSize: 9, background: colors.purple+"22", color: colors.purple, borderRadius: 4, padding: "1px 5px", marginLeft: 5 }}>{ts.partner.name.split(" ")[0]} {ts.partner.commissionPct}%</span>}
+                      </span>
+                      <div style={{ textAlign: "right" }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: dispNet >= 0 ? colors.green : colors.red }}>{fmt(dispNet)}</span>
+                        <span style={{ fontSize: 10, color: colors.textMuted, marginLeft: 6 }}>{dispMargin.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                    {isPartner && (
+                      <div style={{ fontSize: 10, color: colors.textMuted, marginBottom: 3 }}>
+                        Bruto: <span style={{ color: colors.accent }}>{fmt(ts.net)}</span>
+                        {" · "}Socio: <span style={{ color: colors.purple }}>−{fmt(ts.partnerComm)}</span>
+                        {" · "}Tu parte: <span style={{ color: colors.green, fontWeight: 600 }}>{fmt(ts.adminNet)}</span>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <div style={{ flex: 1, height: 4, background: colors.border, borderRadius: 2 }}>
+                        <div style={{ width: `${ts.revenue / maxTruckRev * 100}%`, height: "100%", background: dispNet >= 0 ? colors.green : colors.red, borderRadius: 2 }} />
+                      </div>
+                      <span style={{ fontSize: 10, color: colors.textMuted, width: 70, textAlign: "right" }}>Rev: {fmt(ts.revenue)}</span>
+                    </div>
+                  </div>
+                );
+              })
+          }
+        </Card>
+      </div>
+
+      {/* ── Row 4: Top clientes · Pipeline · Alertas ── */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+
+        {/* Top clientes */}
+        <Card>
+          <SectionTitle label="Top Clientes (Periodo)" color={colors.purple} />
+          {clientStats.length === 0
+            ? <div style={{ fontSize: 12, color: colors.textMuted, padding: "10px 0" }}>Sin datos en el periodo</div>
+            : clientStats.slice(0, 8).map(cs => (
+                <MiniRow key={cs.client.id}
+                  label={`${cs.client.companyName} · ${cs.trips}v`}
+                  value={fmt(cs.revenue)}
+                  color={colors.purple}
+                  bar={cs.revenue / maxClientRev * 100}
+                  pct={revenue > 0 ? cs.revenue / revenue * 100 : 0} />
+              ))
+          }
+        </Card>
+
+        {/* Pipeline de viajes */}
+        <Card>
+          <SectionTitle label="Pipeline de Viajes" color={colors.cyan} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 12 }}>
+            {[
+              { label: "Pendientes", count: pending_trips, color: colors.textMuted },
+              { label: "En transito", count: transit_trips, color: colors.cyan },
+              { label: "Entregados", count: delivered_trips, color: colors.green },
+              { label: "Total activos", count: allActive.length, color: colors.accent },
+            ].map(({ label, count, color }) => (
+              <div key={label} style={{ background: colors.inputBg, borderRadius: 8, padding: "10px 12px", cursor: "pointer" }} onClick={() => setPage("trips")}>
+                <div style={{ fontSize: 10, color, fontWeight: 700, marginBottom: 2 }}>{label.toUpperCase()}</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color }}>{count}</div>
+              </div>
+            ))}
+          </div>
+          <SectionTitle label="Ultimos viajes" color={colors.textMuted} />
+          {[...trips].sort((a,b) => b.date.localeCompare(a.date)).slice(0,4).map(tr => {
+            const cl = clients.find(c => c.id === tr.clientId);
+            return (
+              <div key={tr.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid ${colors.border}11`, fontSize: 11 }}>
+                <span style={{ color: colors.textMuted }}>{tr.date}</span>
+                <span style={{ fontWeight: 600, flex: 1, marginLeft: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl?.companyName || "—"}</span>
+                <span style={{ color: colors.green, fontWeight: 700 }}>{fmt(tr.revenue)}</span>
+              </div>
+            );
+          })}
+          <div style={{ marginTop: 8, fontSize: 10, color: colors.accent, textAlign: "right", cursor: "pointer" }} onClick={() => setPage("trips")}>Ver todos los viajes</div>
+        </Card>
+
+        {/* Alertas */}
+        <Card style={{ cursor: "pointer" }} onClick={() => setPage("agents")}>
+          <SectionTitle label="Alertas del Sistema" color={colors.red} />
+          {alerts.length === 0
+            ? <div style={{ display: "flex", alignItems: "center", gap: 8, color: colors.green, fontSize: 13, padding: "10px 0" }}>
+                <CheckCircle2 size={16} /> Todo en orden
+              </div>
+            : <>
+                {errCount > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: colors.red+"12", borderRadius: 8, border: `1px solid ${colors.red}30`, marginBottom: 8 }}>
+                    <AlertCircle size={15} color={colors.red} />
+                    <span style={{ fontWeight: 700, color: colors.red, fontSize: 18 }}>{errCount}</span>
+                    <span style={{ color: colors.red, fontSize: 12 }}>error{errCount !== 1 ? "s" : ""} critico{errCount !== 1 ? "s" : ""}</span>
+                  </div>
+                )}
+                {warnCount > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: colors.orange+"12", borderRadius: 8, border: `1px solid ${colors.orange}30`, marginBottom: 8 }}>
+                    <AlertTriangle size={15} color={colors.orange} />
+                    <span style={{ fontWeight: 700, color: colors.orange, fontSize: 18 }}>{warnCount}</span>
+                    <span style={{ color: colors.orange, fontSize: 12 }}>advertencia{warnCount !== 1 ? "s" : ""}</span>
+                  </div>
+                )}
+                {infoCount > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: colors.accent+"12", borderRadius: 8, border: `1px solid ${colors.accent}30`, marginBottom: 8 }}>
+                    <Bell size={15} color={colors.accent} />
+                    <span style={{ fontWeight: 700, color: colors.accent, fontSize: 18 }}>{infoCount}</span>
+                    <span style={{ color: colors.accent, fontSize: 12 }}>notificacion{infoCount !== 1 ? "es" : ""}</span>
+                  </div>
+                )}
+                {alerts.filter(a => a.severity === "error").slice(0,2).map(a => (
+                  <div key={a.id} style={{ fontSize: 10, color: colors.red, padding: "3px 0", borderBottom: `1px solid ${colors.border}11` }}>
+                    {a.msg}
+                  </div>
+                ))}
+              </>
+          }
+          <div style={{ marginTop: 10, fontSize: 10, color: colors.accent, textAlign: "right" }}>Ver Agentes</div>
+        </Card>
+      </div>
+
+      {/* ── Nomina pendiente banner ── */}
+      {cxpNomina > 0 && (
+        <Card style={{ background: `linear-gradient(135deg, ${colors.accent}10, ${colors.green}08)`, cursor: "pointer", marginBottom: 0 }} onClick={() => setPage("nomina")}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <Banknote size={20} color={colors.accent} />
+              <div>
+                <div style={{ fontSize: 11, color: colors.accent, fontWeight: 700 }}>NOMINA PENDIENTE DE PAGO</div>
+                <div style={{ fontSize: 11, color: colors.textMuted }}>Conductores con pagos por procesar</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: colors.orange }}>{fmt(cxpNomina)}</div>
+              <span style={{ fontSize: 11, color: colors.accent }}>Ir a Nomina</span>
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
