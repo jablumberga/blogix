@@ -1,25 +1,48 @@
 import { useState, useMemo } from "react";
-import { Plus, X, Pencil, Trash2, Landmark, ChevronDown, ChevronRight, Receipt, Clock, CheckCircle2, Truck } from "lucide-react";
+import { Plus, X, Pencil, Trash2, Landmark, ChevronDown, ChevronRight, Receipt, Clock, CheckCircle2, Truck, HandCoins } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, nxId, expenseTruckId, getSupplierDueDate } from "../utils/helpers.js";
+import { fmt, nxId, expenseTruckId, getSupplierDueDate, today } from "../utils/helpers.js";
+import { normalizePartner, expenseChargedToPartner, PARTNER_MODELS } from "../utils/partnerModels.js";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
-import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../components/ui/index.jsx";
+import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td, Chk } from "../components/ui/index.jsx";
+
+// Métodos que se pagan en el momento: el gasto nace como pagado
+const INSTANT_METHODS = ["cash", "credit_card"];
+// Clave de quincena de liquidación de socio (misma que usa Liquidaciones)
+const settlementKey = (partnerId, date) => `${partnerId}-${(date || "").slice(0, 7)}-${parseInt((date || "").slice(8, 10) || "0", 10) <= 15 ? 1 : 2}`;
 
 // Categories where a direct truck link makes sense
 const TRUCK_CATEGORIES = ["fuel", "repair", "maintenance", "insurance", "tire", "loan", "other", "toll", "salary"];
 
-export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers, fixedTemplates, setFixedTemplates, isMobile }) {
+export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers, partners = [], settlementStatus = {}, fixedTemplates, setFixedTemplates, isMobile }) {
 
   const [filterCat, setFilterCat] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterTruck, setFilterTruck] = useState("all");
+  const [filterPartner, setFilterPartner] = useState(false); // solo gastos reembolsables por socios
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [showTemplates, setShowTemplates] = useState(false);
-  const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "", truckId: null, supplierId: null, status: "pending", driverId: null });
+  const [form, setForm] = useState({ date: today(), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "", truckId: null, supplierId: null, status: "pending", driverId: null });
   const [tplForm, setTplForm] = useState({ name: "", category: "loan", amount: "", paymentMethod: "transfer", truckId: null });
 
   const tripMap = useMemo(() => new Map((trips||[]).map(tr => [tr.id, tr])), [trips]);
+  const truckMap = useMemo(() => new Map((trucks||[]).map(tk => [tk.id, tk])), [trucks]);
+  const partnerMap = useMemo(() => new Map((partners||[]).map(p => [p.id, normalizePartner(p)])), [partners]);
+
+  // Socio dueño del camión de un gasto (directo o vía viaje), o null si es camión propio
+  const partnerOfExpense = (e) => {
+    const tid = expenseTruckId(e, tripMap);
+    const tk = tid ? truckMap.get(tid) : null;
+    return tk?.partnerId ? partnerMap.get(tk.partnerId) || null : null;
+  };
+  // ¿Este gasto se le descuenta al socio en su liquidación (reembolso a la empresa)?
+  const isReimbursable = (e) => {
+    if (["driverPay", "nominaTotalOverride", "adelanto_conductor", "broker_commission"].includes(e.category)) return false;
+    const p = partnerOfExpense(e);
+    return !!p && expenseChargedToPartner(e, p);
+  };
+  const isSettled = (e) => { const p = partnerOfExpense(e); return !!p && settlementStatus[settlementKey(p.id, e.date)] === "paid"; };
 
   // Exclude nominaTotalOverride from Gastos — it's an internal NominaPage marker, not a payable expense
   const visibleExp   = expenses.filter(e => e.category !== "nominaTotalOverride");
@@ -27,23 +50,35 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   const total        = visibleExp.reduce((s, e) => s + e.amount, 0);
   const pendingTotal = visibleExp.filter(e => !e.status || e.status === "pending").reduce((s, e) => s + e.amount, 0);
   const paidTotal    = visibleExp.filter(e => e.status === "paid").reduce((s, e) => s + e.amount, 0);
+  const reimbursable = visibleExp.filter(isReimbursable);
+  const reimbPending = reimbursable.filter(e => !isSettled(e)).reduce((s, e) => s + e.amount, 0);
 
   let filtered = filterCat === "all" ? visibleExp : visibleExp.filter(e => e.category === filterCat);
   if (filterStatus !== "all") filtered = filtered.filter(e => filterStatus === "pending" ? (!e.status || e.status === "pending") : e.status === filterStatus);
   if (filterTruck !== "all") filtered = filtered.filter(e => expenseTruckId(e, tripMap) === Number(filterTruck));
+  if (filterPartner) filtered = filtered.filter(isReimbursable);
 
-  const openNew = () => { setForm({ date: new Date().toISOString().slice(0,10), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "", truckId: null, supplierId: null, status: "pending", driverId: null }); setEditId(null); setShowForm(true); };
+  // Socio del camión elegido en el formulario (para la casilla «cargar al socio»)
+  const formTruckId = form.truckId || (form.tripId ? tripMap.get(Number(form.tripId))?.truckId : null);
+  const formPartner = formTruckId ? (truckMap.get(Number(formTruckId))?.partnerId ? partnerMap.get(truckMap.get(Number(formTruckId)).partnerId) : null) : null;
+  const formCharge = formPartner ? expenseChargedToPartner(form, formPartner) : false;
+
+  const openNew = () => { setForm({ date: today(), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "", truckId: null, supplierId: null, status: "pending", driverId: null }); setEditId(null); setShowForm(true); };
   const openEdit = (e) => { setForm({ ...e, amount: String(e.amount), tripId: e.tripId ? String(e.tripId) : "", truckId: e.truckId || null, supplierId: e.supplierId || null }); setEditId(e.id); setShowForm(true); };
   const deleteExpense = (id) => { if (!window.confirm("¿Eliminar este gasto?")) return; setExpenses(prev => prev.filter(e => e.id !== id)); };
 
   const save = () => {
     if (!form.amount || !form.date) return;
     if (form.category === "adelanto_conductor" && !form.driverId) { alert("Selecciona el conductor para el adelanto."); return; }
-    const status = form.category === "adelanto_conductor" ? "paid" : form.status;
+    const instant = INSTANT_METHODS.includes(form.paymentMethod);
+    const status = form.category === "adelanto_conductor" || instant ? "paid" : form.status;
     const supplierId = form.supplierId ? Number(form.supplierId) : null;
     const sup = supplierId ? (suppliers || []).find(s => s.id === supplierId) : null;
     const dueDate = getSupplierDueDate(form.date, sup);
-    const data = { ...form, amount: Number(form.amount), tripId: form.tripId ? Number(form.tripId) : null, truckId: form.truckId ? Number(form.truckId) : null, driverId: form.driverId || null, supplierId, dueDate, status };
+    const data = { ...form, amount: Number(form.amount), tripId: form.tripId ? Number(form.tripId) : null, truckId: form.truckId ? Number(form.truckId) : null, driverId: form.driverId || null, supplierId, dueDate, status,
+      ...(status === "paid" && !form.paidDate ? { paidDate: form.date } : {}) };
+    // La casilla solo tiene sentido en camiones de socios; en los demás se limpia
+    if (formPartner) data.chargeToPartner = formCharge; else delete data.chargeToPartner;
     if (editId !== null) {
       setExpenses(prev => prev.map(e => e.id === editId ? { ...e, ...data } : e));
     } else {
@@ -52,7 +87,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
     setShowForm(false); setEditId(null);
   };
 
-  const togglePaid = (id) => setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: e.status === "paid" ? "pending" : "paid", paidDate: e.status === "paid" ? null : new Date().toISOString().slice(0,10) } : e));
+  const togglePaid = (id) => setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: e.status === "paid" ? "pending" : "paid", paidDate: e.status === "paid" ? null : today() } : e));
 
   const saveTpl = () => {
     if (!tplForm.name || !tplForm.amount) return;
@@ -61,7 +96,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   };
 
   const genFromTemplates = () => {
-    const today = new Date().toISOString().slice(0,10);
+    const today = today();
     const newExps = (fixedTemplates || []).map(tpl => ({ id: null, date: today, category: tpl.category, amount: tpl.amount, paymentMethod: tpl.paymentMethod, description: tpl.name, tripId: null, truckId: tpl.truckId || null, supplierId: null, status: "pending" }));
     if (newExps.length === 0) return;
     setExpenses(prev => { let next = [...prev]; newExps.forEach(e => next.push({ ...e, id: nxId(next) })); return next; });
@@ -124,6 +159,21 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
         )}
         <Inp label={t.expenseDesc} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder={form.category === "adelanto_conductor" ? "Ej: Dieta + ayudantes Dajabón" : ""} />
       </div>
+
+      {/* Cargar al socio (camión de socio) */}
+      {formPartner && form.category !== "adelanto_conductor" && (() => {
+        const m = PARTNER_MODELS[formPartner.model] || PARTNER_MODELS.profit_share;
+        return <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 8, background: formCharge ? colors.orange + "12" : colors.inputBg, border: `1px solid ${formCharge ? colors.orange + "55" : colors.border}` }}>
+          <Chk label={`Cargar al socio ${formPartner.name} (modelo: ${m.label})`} checked={formCharge} onChange={() => setForm({ ...form, chargeToPartner: !formCharge })} />
+          <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4, marginLeft: 22 }}>
+            {formCharge
+              ? `Lo paga la empresa y se descuenta en la liquidación de ${formPartner.name}: es un reembolso, no un gasto tuyo.`
+              : formPartner.model === "commission"
+                ? "En «solo comisión» el socio corre con sus gastos; márcalo solo si pagaste algo por él y quieres descontárselo."
+                : "Este gasto lo absorbe la empresa; no se le descuenta al socio."}
+          </div>
+        </div>;
+      })()}
 
       {/* Supplier row — always visible, full width */}
       {form.category !== "adelanto_conductor" && (() => {
@@ -221,6 +271,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
       <StatCard icon={Receipt} label={t.totalExpenses} value={fmt(total)} color={colors.red} />
       <StatCard icon={Clock} label="Pendiente de Pago" value={fmt(pendingTotal)} color={colors.orange} />
       <StatCard icon={CheckCircle2} label="Pagado" value={fmt(paidTotal)} color={colors.green} />
+      <StatCard icon={HandCoins} label="Por reembolsar de socios" value={fmt(reimbPending)} color={colors.purple} />
     </div>
 
     {/* Filters */}
@@ -231,6 +282,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
       </div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         {["all","pending","paid"].map(s => <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: "3px 10px", borderRadius: 12, border: `1px solid ${filterStatus===s ? colors.orange : colors.border}`, background: filterStatus===s ? colors.orange+"18" : "transparent", color: filterStatus===s ? colors.orange : colors.textMuted, cursor: "pointer", fontSize: 10 }}>{s==="all"?"Todos":s==="pending"?"Pendientes":"Pagados"}</button>)}
+        <button onClick={() => setFilterPartner(v => !v)} style={{ padding: "3px 10px", borderRadius: 12, border: `1px solid ${filterPartner ? colors.purple : colors.border}`, background: filterPartner ? colors.purple+"18" : "transparent", color: filterPartner ? colors.purple : colors.textMuted, cursor: "pointer", fontSize: 10 }}>Reembolsables por socios ({reimbursable.length})</button>
         <select value={filterTruck} onChange={e => setFilterTruck(e.target.value)} style={{ marginLeft: 6, fontSize: 11, padding: "3px 8px", borderRadius: 8, border: `1px solid ${filterTruck !== "all" ? colors.accent : colors.border}`, background: colors.inputBg, color: filterTruck !== "all" ? colors.accent : colors.textMuted, cursor: "pointer" }}>
           <option value="all">Todos los camiones</option>
           {(trucks||[]).map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}
@@ -248,6 +300,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
             <Th style={{ display: isMobile ? "none" : undefined }}>{t.paymentMethod}</Th>
             <Th>Viaje</Th>
             <Th style={{ display: isMobile ? "none" : undefined }}>Camión</Th>
+            <Th>Socio</Th>
             <Th align="right">Estado</Th>
             <Th align="right">{t.expenseAmount}</Th>
             <Th></Th>
@@ -270,6 +323,13 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
                     </span>
                   : <span style={{ color: colors.textMuted, fontSize: 11 }}>—</span>}
               </Td>
+              <Td>{(() => {
+                const p = partnerOfExpense(e);
+                if (!p) return <span style={{ color: colors.textMuted, fontSize: 11 }}>—</span>;
+                if (!isReimbursable(e)) return <span style={{ fontSize: 10, color: colors.textMuted }} title={`Camión de ${p.name}, lo absorbe la empresa`}>Empresa</span>;
+                const settled = isSettled(e);
+                return <span title={settled ? "Ya descontado en la liquidación" : "Pendiente de descontar en la liquidación"} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 600, color: settled ? colors.green : colors.purple }}><HandCoins size={10} /> {p.name.split(" ")[0]}{settled ? " ✓" : ""}</span>;
+              })()}</Td>
               <Td align="right">
                 <button onClick={() => togglePaid(e.id)} title={isPaid ? "Marcar pendiente" : "Marcar pagado"} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 10, border: `1px solid ${isPaid ? colors.green : colors.orange}`, background: isPaid ? colors.green+"18" : colors.orange+"18", color: isPaid ? colors.green : colors.orange, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
                   {isPaid ? <><CheckCircle2 size={10}/> Pagado</> : <><Clock size={10}/> Pendiente</>}
