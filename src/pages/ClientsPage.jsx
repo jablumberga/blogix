@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { Plus, X, Pencil, Trash2, Building2, DollarSign, ClipboardList } from "lucide-react";
+import { useState, useRef } from "react";
+import { Plus, X, Pencil, Trash2, Building2, DollarSign, ClipboardList, Upload, Download } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId } from "../utils/helpers.js";
 import { DR_PROVINCES } from "../constants/destinations.js";
+import { parseRateRows, mergeRates, TEMPLATE_HEADERS, TEMPLATE_EXAMPLE_ROWS } from "../utils/rateImport.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Chk, Th, Td } from "../components/ui/index.jsx";
 
 export default function ClientsPage({ t, clients, setClients, brokers, setTrips, isMobile }) {
@@ -11,11 +12,56 @@ export default function ClientsPage({ t, clients, setClients, brokers, setTrips,
   const emptyRules = { paymentTerms: 30, billingCycle: "net", period1PayDay: 30, period2PayDay: 15, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null, brokerPassThrough: false };
   const [form, setForm] = useState({ companyName: "", contactPerson: "", phone: "", email: "", notes: "", status: "active", rules: emptyRules, rates: [] });
   const [rForm, setRForm] = useState({ province: "", municipality: "", priceT1: "", priceT2: "" });
+  const [importMsg, setImportMsg] = useState(null); // { ok, text, errors[] }
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef(null);
+
+  // ── Importar tarifario desde Excel / CSV ──────────────────────────────────
+  const importRatesFile = async (file) => {
+    if (!file) return;
+    setImporting(true); setImportMsg(null);
+    try {
+      const XLSX = await import("xlsx");
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+      const { rates, errors } = parseRateRows(rows);
+      if (rates.length === 0) {
+        setImportMsg({ ok: false, text: "No se importó ninguna tarifa.", errors });
+      } else {
+        const { rates: merged, updated, added } = mergeRates(form.rates || [], rates);
+        setForm(f => ({ ...f, rates: merged }));
+        setImportMsg({ ok: true, text: `${added} destino(s) nuevo(s), ${updated} actualizado(s), ${rates.length - added - updated} sin cambios.` + (errors.length ? ` ${errors.length} fila(s) con error:` : ""), errors });
+      }
+    } catch (err) {
+      setImportMsg({ ok: false, text: `No se pudo leer el archivo: ${err.message}`, errors: [] });
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const downloadTemplate = async () => {
+    const XLSX = await import("xlsx");
+    const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...TEMPLATE_EXAMPLE_ROWS]);
+    ws["!cols"] = [{ wch: 26 }, { wch: 30 }, { wch: 12 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Tarifas");
+    const name = form.companyName ? `tarifas-${form.companyName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.xlsx` : "plantilla-tarifas.xlsx";
+    XLSX.writeFile(wb, name);
+  };
 
   const openNew = () => { setForm({ companyName: "", contactPerson: "", phone: "", email: "", notes: "", status: "active", rules: emptyRules, rates: [] }); setEditId(null); setShowForm(true); };
   const openEdit = (c) => { setForm({ ...c }); setEditId(c.id); setShowForm(true); };
   const save = () => { if (!form.companyName) return; if (editId) setClients(clients.map(c => c.id === editId ? { ...form, id: editId } : c)); else setClients([...clients, { ...form, id: nxId(clients) }]); setShowForm(false); };
-  const addRate = () => { if (!rForm.province || !rForm.municipality || !rForm.priceT1) return; setForm({ ...form, rates: [...form.rates, { id: nxId(form.rates), province: rForm.province, municipality: rForm.municipality, priceT1: Number(rForm.priceT1), priceT2: Number(rForm.priceT2) || 0 }] }); setRForm({ province: "", municipality: "", priceT1: "", priceT2: "" }); };
+  const addRate = () => {
+    const priceT1 = Number(rForm.priceT1) || 0, priceT2 = Number(rForm.priceT2) || 0;
+    if (!rForm.province || !rForm.municipality || (priceT1 <= 0 && priceT2 <= 0)) return;
+    const { rates } = mergeRates(form.rates || [], [{ province: rForm.province, municipality: rForm.municipality, priceT1, priceT2 }]);
+    setForm({ ...form, rates });
+    setRForm({ province: "", municipality: "", priceT1: "", priceT2: "" });
+  };
 
   return <div>
     <PageHeader title={t.clients} action={<Btn onClick={openNew}><Plus size={14} /> {t.addClient}</Btn>} />
@@ -75,7 +121,18 @@ export default function ClientsPage({ t, clients, setClients, brokers, setTrips,
       </div>
 
       <div style={{ background: colors.inputBg, borderRadius: 8, padding: 12, marginBottom: 12, border: `1px solid ${colors.border}` }}>
-        <h4 style={{ margin: "0 0 10px", fontSize: 13, color: colors.green }}><DollarSign size={14} /> {t.clientRates} — {t.province} / {t.municipality} / T1 / T2</h4>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+          <h4 style={{ margin: 0, fontSize: 13, color: colors.green }}><DollarSign size={14} /> {t.clientRates} — {t.province} / {t.municipality} / T1 / T2</h4>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={e => importRatesFile(e.target.files?.[0])} />
+            <Btn variant="ghost" onClick={downloadTemplate} style={{ padding: "6px 10px", fontSize: 11 }}><Download size={12} /> Descargar plantilla</Btn>
+            <Btn onClick={() => fileRef.current?.click()} disabled={importing} style={{ padding: "6px 10px", fontSize: 11 }}><Upload size={12} /> {importing ? "Importando…" : "Importar Excel"}</Btn>
+          </div>
+        </div>
+        {importMsg && <div style={{ fontSize: 11, padding: "8px 10px", borderRadius: 6, marginBottom: 8, background: importMsg.ok ? `${colors.green}22` : `${colors.red}22`, color: importMsg.ok ? colors.green : colors.red, border: `1px solid ${importMsg.ok ? colors.green : colors.red}55` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span>{importMsg.text}</span><button onClick={() => setImportMsg(null)} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer" }}><X size={10} /></button></div>
+          {importMsg.errors?.length > 0 && <ul style={{ margin: "6px 0 0", paddingLeft: 18, color: colors.textMuted }}>{importMsg.errors.slice(0, 15).map((e, i) => <li key={i}>Fila {e.row}: {e.msg}</li>)}{importMsg.errors.length > 15 && <li>… y {importMsg.errors.length - 15} más</li>}</ul>}
+        </div>}
         {form.rates.length > 0 && <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}><table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 8 }}>
           <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
             <td style={{ fontSize: 11, color: colors.textMuted, padding: "2px 0" }}>{t.province}</td>
