@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2, Calendar, FileCheck, FileText, Handshake, Hash, Zap, RotateCw } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today } from "../utils/helpers.js";
@@ -6,11 +6,13 @@ import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js"
 import { calcDriverPay, describeDriverPay, normalizeDriver, tripSize, DEFAULT_HELPERS } from "../utils/driverPay.js";
 import { TRIP_DOCS, docsComplete } from "../utils/payroll.js";
 import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
-import { buildCompanionTrip, applyReceived } from "../utils/jointTrip.js";
+import { buildCompanionTrip, applyReceived, jointIds } from "../utils/jointTrip.js";
+import { tripPassThrough } from "../utils/profitFirst.js";
+import { checkRef } from "../api.js";
 import { generateConduce } from "../utils/generateConduce.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td, StatusBadge, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, invoices, cobros = [], isMobile }) {
+export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, invoices, cobros = [], partners = [], isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({});
@@ -18,6 +20,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const [expForm, setExpForm] = useState({ date: today(), category: "fuel", amount: "", paymentMethod: "cash", description: "" });
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterExtra, setFilterExtra] = useState("all");   // all | nodocs | uninvoiced
+  const [refInfo, setRefInfo] = useState(null);           // verificación de referencia en vivo (servidor)
   const [filterClient, setFilterClient] = useState("all");
   const [filterDriver, setFilterDriver] = useState("all");
   const [filterTruck, setFilterTruck] = useState("all");
@@ -38,6 +42,15 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   // Viajes ya cobrados (en algún cobro registrado): no se pueden borrar ni cambiar de monto
   const collectedTripIds = useMemo(() => new Set((cobros || []).flatMap(c => (c.collectedTripIds || []).map(Number))), [cobros]);
   const isLocked = (id) => invoicedTripMap.has(Number(id)) || collectedTripIds.has(Number(id));
+  // Explica exactamente qué hay que anular primero (factura y/o cobro de qué quincena)
+  const lockReason = (id) => {
+    const parts = [];
+    const inv = invoicedTripMap.get(Number(id));
+    if (inv) parts.push(`la factura ${inv.invoiceNumber || "#" + inv.id} (${inv.status === "paid" ? "cobrada" : inv.status === "sent" ? "enviada" : "borrador"})`);
+    const cobro = (cobros || []).find(c => (c.collectedTripIds || []).map(Number).includes(Number(id)));
+    if (cobro) parts.push(`el cobro del período ${cobro.periodKey}${cobro.pf ? " (ya repartido con Profit First)" : ""}`);
+    return parts.length ? `Este viaje está en ${parts.join(" y en ")}. Anula primero ${parts.length > 1 ? "ambos" : "eso"} en ${inv ? "Facturas" : ""}${inv && cobro ? " / " : ""}${cobro ? "CxC" : ""}.` : null;
+  };
 
   // Pago del chofer calculado en vivo con la función única (misma que usa Nómina y Oficina)
   const payPreview = useMemo(() => {
@@ -48,6 +61,22 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     return calcDriverPay({ driver, trip, truck, clientId: Number(form.clientId) || null });
   }, [form, drivers, trucks]);
 
+  // Referencia de factura: verificación en vivo contra el servidor (misma que ve el chofer)
+  useEffect(() => {
+    const ref = String(form.invoiceRef || "").trim(), clientId = Number(form.clientId), truckId = Number(form.truckId);
+    if (!showForm || !ref || !clientId) { setRefInfo(null); return; }
+    let alive = true;
+    setRefInfo(r => ({ ...(r || {}), checking: true }));
+    const h = setTimeout(async () => { const info = await checkRef({ clientId, ref, truckId, tripId: editId }); if (alive) setRefInfo({ ...info, checking: false }); }, 400);
+    return () => { alive = false; clearTimeout(h); };
+  }, [form.invoiceRef, form.clientId, form.truckId, showForm, editId]);
+
+  const stamp = (obj, action) => {
+    const at = new Date().toISOString();
+    const history = [...(obj.history || []), { at, by: user?.name || "", action }].slice(-20);
+    return action === "creado" ? { ...obj, createdBy: obj.createdBy || user?.name, createdAt: obj.createdAt || at, history }
+      : { ...obj, updatedBy: user?.name, updatedAt: at, history };
+  };
   const openNew = () => { setForm({ ...emptyForm, createdBy: user.name }); setEditId(null); setShowForm(true); setRateMsg(""); setFormError(""); };
   const openEdit = (tr) => { setForm({ ...tr }); setEditId(tr.id); setShowForm(true); setRateMsg(""); setFormError(""); };
 
@@ -187,17 +216,26 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     };
     if (editId) {
       const prevTrip = trips.find(tr => tr.id === editId);
+      // Viaje conjunto: al cancelar uno, preguntar por la pareja
+      let cancelPair = false;
+      if (cancelled && prevTrip && prevTrip.status !== "cancelled") {
+        const pairIds = jointIds(editId, trips).filter(id => id !== editId);
+        if (pairIds.length && window.confirm(`Este viaje es conjunto con #${pairIds.join(", #")}. ¿Cancelar también la pareja?`)) cancelPair = true;
+      }
       if (isLocked(editId) && prevTrip && (prevTrip.revenue !== data.revenue || prevTrip.clientId !== data.clientId || prevTrip.province !== data.province || prevTrip.municipality !== data.municipality)) {
-        setFormError("Este viaje ya está facturado o cobrado: no se puede cambiar cliente, destino ni tarifa. Anula la factura o el cobro primero."); return;
+        setFormError(`No se puede cambiar cliente, destino ni tarifa. ${lockReason(editId)}`); return;
       }
       let saved = { ...data, id: editId }, linked = null;
       if (refCheck.linkWith) { const l = linkJoint(saved, refCheck.linkWith); saved = l.trip; linked = l.other; }
-      const c = makeCompanion(saved, trips.map(tr => tr.id === editId ? saved : (linked && tr.id === linked.id ? linked : tr)));
+      saved = stamp(saved, "editado");
+      const pairIds = cancelPair ? jointIds(editId, trips).filter(id => id !== editId) : [];
+      const c = makeCompanion(saved, trips.map(tr => tr.id === editId ? saved : (linked && tr.id === linked.id ? linked : (pairIds.includes(tr.id) ? stamp({ ...tr, status: "cancelled" }, "cancelado (pareja)") : tr))));
       setTrips(c.list.map(tr => tr.id === editId ? c.saved : tr));
       syncTripExpenses(editId, data, prevTrip);
+      pairIds.forEach(id => { const o = trips.find(x => x.id === id); if (o) syncTripExpenses(id, { ...o, status: "cancelled" }, o); });
     } else {
       const newId = nxId(trips);
-      let saved = { ...data, id: newId }, linked = null;
+      let saved = stamp({ ...data, id: newId }, "creado"), linked = null;
       if (refCheck.linkWith) { const l = linkJoint(saved, refCheck.linkWith); saved = l.trip; linked = l.other; }
       const c = makeCompanion(saved, [...trips.map(tr => linked && tr.id === linked.id ? linked : tr), saved]);
       setTrips(c.list.map(tr => tr.id === newId ? c.saved : tr));
@@ -207,7 +245,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   };
 
   const deleteTrip = (tr) => {
-    if (isLocked(tr.id)) { window.alert("Este viaje está facturado o cobrado y no se puede eliminar. Márcalo como cancelado o anula la factura/cobro primero."); return; }
+    if (isLocked(tr.id)) { window.alert(`No se puede eliminar. ${lockReason(tr.id)}`); return; }
     const paid = expenses.filter(e => e.tripId === tr.id && e.status === "paid");
     const msg = `¿Eliminar viaje del ${tr.date} a ${tr.municipality}?` + (paid.length ? `\n\nOJO: tiene ${paid.length} gasto(s) ya PAGADOS que se conservarán sin viaje.` : "\nSe eliminarán también sus gastos pendientes.");
     if (!window.confirm(msg)) return;
@@ -235,7 +273,33 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const clientMap = new Map(clients.map(c => [c.id, c]));
   const driverMap = new Map(drivers.map(d => [d.id, d]));
   const truckMap  = new Map(trucks.map(tk => [tk.id, tk]));
-  const tripExpMap = expenses.reduce((m, e) => { if (e.tripId && e.category !== "adelanto_conductor") m.set(e.tripId, (m.get(e.tripId) || 0) + e.amount); return m; }, new Map());
+  const tripExpMap = expenses.reduce((m, e) => { if (e.tripId && !["adelanto_conductor", "nominaTotalOverride", "partner_settlement"].includes(e.category)) m.set(e.tripId, (m.get(e.tripId) || 0) + e.amount); return m; }, new Map());
+  if (filterExtra === "nodocs") filtered = filtered.filter(tr => tr.status !== "cancelled" && !docsComplete(tr, clientMap.get(tr.clientId)));
+  if (filterExtra === "uninvoiced") filtered = filtered.filter(tr => tr.status !== "cancelled" && (tr.revenue || 0) > 0 && !invoicedTripMap.has(tr.id));
+  // Margen por viaje: tarifa − chofer − ayudantes − gastos del viaje; en camión de socio, lo que le toca al socio
+  const partnerMap = new Map(partners.map(p => [p.id, p]));
+  const brokerMap = new Map((brokers || []).map(b => [b.id, b]));
+  const marginOf = (tr) => {
+    if (tr.status === "cancelled") return null;
+    const tk = truckMap.get(tr.truckId); const revenue = Number(tr.revenue) || 0;
+    const costs = tripExpMap.get(tr.id) || 0;
+    const partner = tk?.partnerId ? partnerMap.get(tk.partnerId) : null;
+    const pt = tripPassThrough({ trip: tr, truck: tk, partner, broker: tr.brokerId ? brokerMap.get(tr.brokerId) : null, brokerPassThrough: clientMap.get(tr.clientId)?.rules?.brokerPassThrough === true });
+    const mine = revenue - pt.total;                     // ingreso real de la empresa
+    const net = mine - costs;                             // lo que queda después de la operación pagada por la empresa
+    return { revenue, costs, partnerPart: pt.partner, brokerPart: pt.broker, mine, net, pct: revenue > 0 ? net / revenue * 100 : 0, partner };
+  };
+  const summary = filtered.reduce((a, tr) => {
+    const m = marginOf(tr); const cl = clientMap.get(tr.clientId);
+    a.trips += 1; a.revenue += Number(tr.revenue) || 0;
+    if (tr.status !== "cancelled") {
+      if (invoicedTripMap.has(tr.id)) { a.invoiced += 1; a.invoicedAmt += Number(tr.revenue) || 0; } else if ((tr.revenue || 0) > 0) { a.uninvoiced += 1; a.uninvoicedAmt += Number(tr.revenue) || 0; }
+      if (collectedTripIds.has(tr.id)) { a.collected += 1; a.collectedAmt += Number(tr.revenue) || 0; }
+      if (!docsComplete(tr, cl)) a.nodocs += 1;
+      if (m) { a.net += m.net; a.partner += m.partnerPart; }
+    }
+    return a;
+  }, { trips: 0, revenue: 0, invoiced: 0, invoicedAmt: 0, uninvoiced: 0, uninvoicedAmt: 0, collected: 0, collectedAmt: 0, nodocs: 0, net: 0, partner: 0 });
 
   if (search) {
     const s = search.toLowerCase();
@@ -257,10 +321,14 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: colors.textMuted }} />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.searchPlaceholder} style={{ width: "100%", padding: "7px 10px 7px 30px", borderRadius: 7, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 16, outline: "none" }} />
       </div>
-      {["all", "pending", "in_transit", "delivered", "cancelled"].map(s => (
+      {["all", "pending", "delivered", "cancelled"].map(s => (
         <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: "5px 12px", borderRadius: 16, border: `1px solid ${filterStatus === s ? colors.accent : colors.border}`, background: filterStatus === s ? colors.accent + "18" : "transparent", color: filterStatus === s ? colors.accentLight : colors.textMuted, cursor: "pointer", fontSize: 11 }}>
           {s === "all" ? t.all : s === "in_transit" ? t.inTransit : t[s]}
         </button>
+      ))}
+      <span style={{ width: 1, height: 22, background: colors.border }} />
+      {[["all", "Todos"], ["nodocs", "Sin documentos"], ["uninvoiced", "Sin facturar"]].map(([k, label]) => (
+        <button key={k} onClick={() => setFilterExtra(k)} style={{ padding: "5px 12px", borderRadius: 16, border: `1px solid ${filterExtra === k ? colors.orange : colors.border}`, background: filterExtra === k ? colors.orange + "18" : "transparent", color: filterExtra === k ? colors.orange : colors.textMuted, cursor: "pointer", fontSize: 11, fontWeight: filterExtra === k ? 700 : 400 }}>{label}</button>
       ))}
       <Sel value={filterClient} onChange={e => setFilterClient(e.target.value)} style={{ fontSize: 11 }}>
         <option value="all">{t.all} {t.clients}</option>
@@ -274,6 +342,22 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         <option value="all">{t.all} {t.fleet || "Camiones"}</option>
         {trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}
       </Sel>
+    </div>
+
+    {/* Resumen del filtro activo */}
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(6, 1fr)", gap: 8, marginBottom: 14 }}>
+      {[
+        ["Viajes", summary.trips, fmt(summary.revenue), colors.text],
+        ["Facturados", summary.invoiced, fmt(summary.invoicedAmt), colors.green],
+        ["Cobrados", summary.collected, fmt(summary.collectedAmt), colors.cyan],
+        ["Sin facturar", summary.uninvoiced, fmt(summary.uninvoicedAmt), colors.orange],
+        ["Sin documentos", summary.nodocs, "no entran en nómina ni factura", colors.red],
+        ["Margen", fmt(summary.net), summary.partner > 0 ? `socios ${fmt(summary.partner)}` : "tarifa − operación", summary.net >= 0 ? colors.green : colors.red],
+      ].map(([k, v, sub, c]) => <div key={k} style={{ background: colors.card, border: `1px solid ${colors.border}`, borderRadius: 10, padding: "8px 12px" }}>
+        <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>{k.toUpperCase()}</div>
+        <div style={{ fontSize: 18, fontWeight: 800, color: c }}>{v}</div>
+        <div style={{ fontSize: 10, color: colors.textMuted }}>{sub}</div>
+      </div>)}
     </div>
 
     {/* Trip Modal */}
@@ -290,7 +374,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
             {clients.filter(c => c.status === "active").map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
           </Sel>
           <Sel label={t.status} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-            <option value="pending">{t.pending}</option><option value="in_transit">{t.inTransit}</option><option value="delivered">{t.delivered}</option><option value="cancelled">{t.cancelled}</option>
+            <option value="pending">{t.pending}</option>{form.status === "in_transit" && <option value="in_transit">{t.inTransit}</option>}<option value="delivered">{t.delivered}</option><option value="cancelled">{t.cancelled}</option>
           </Sel>
         </div>
         <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} />
@@ -360,7 +444,11 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
               </Sel>
               <span style={{ fontSize: 11, color: colors.textMuted, maxWidth: 340 }}>Se crea el viaje del compañero con la misma referencia, la tarifa del cliente para su camión y su pago según su tarifario.</span>
             </div>}
-            {form.jointWith && <span style={{ color: colors.purple }}>Enlazado con el viaje #{form.jointWith}.</span>}
+            {form.jointWith && <span style={{ color: colors.purple, display: "flex", alignItems: "center", gap: 6 }}>Enlazado con el viaje #{form.jointWith}{form.jointAuto ? " (este se creó automáticamente)" : ""}.
+              <button type="button" onClick={() => { const o = trips.find(x => x.id === form.jointWith); if (o) openEdit(o); }} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${colors.purple}60`, background: "transparent", color: colors.purple, cursor: "pointer", fontSize: 11 }}>Ir al viaje #{form.jointWith}</button></span>}
+            {refInfo?.checking && <span style={{ color: colors.textMuted }}>Verificando referencia…</span>}
+            {!refInfo?.checking && refInfo && !refInfo.found && !refInfo.offline && others.length === 0 && <span style={{ color: colors.green }}>Referencia disponible ✓</span>}
+            {!refInfo?.checking && refInfo?.found && others.length === 0 && refInfo.found.id !== form.jointWith && <span style={{ color: colors.orange }}>El servidor ya tiene esta referencia en el viaje #{refInfo.found.id} ({refInfo.found.date}{refInfo.found.plate ? `, ${refInfo.found.plate}` : ""}{refInfo.found.driverName ? `, ${refInfo.found.driverName}` : ""}). Pulsa Sincronizar para traerlo.</span>}
             {others.length > 0 && <span style={{ color: colors.orange }}>Esta referencia ya está en el viaje #{others[0].id} ({others[0].date}, {trucks.find(x => x.id === others[0].truckId)?.plate || "—"}, {drivers.find(x => x.id === others[0].driverId)?.name || "—"}). {form.joint || others[0].joint ? "Se enlazará como viaje conjunto: la factura paga los dos camiones." : "Marca «Viaje conjunto» si fueron dos camiones; si no, no se puede guardar."}</span>}
           </div>; })()}
         {selectedClient && selectedClient.rules && <div style={{ margin: "10px 0", padding: 10, background: colors.purple + "08", borderRadius: 8, border: `1px solid ${colors.purple}30`, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: 11 }}>
@@ -412,6 +500,9 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           ))}
         </div>
         {formError && <div style={{ color: colors.red, fontSize: 12, marginTop: 8, padding: "6px 10px", background: colors.red + "12", borderRadius: 6, border: `1px solid ${colors.red}33` }}>{formError}</div>}
+        {editId && (form.createdBy || form.updatedBy) && <div style={{ fontSize: 10, color: colors.textMuted, margin: "8px 0" }}>
+          Creado por {form.createdBy || "—"}{form.createdAt ? ` el ${form.createdAt.slice(0, 16).replace("T", " ")}` : ""}{form.updatedBy ? ` · última edición: ${form.updatedBy} el ${(form.updatedAt || "").slice(0, 16).replace("T", " ")}` : ""}{(form.history || []).length > 2 ? ` · ${form.history.length} cambios` : ""}
+        </div>}
         <div style={{ display: "flex", gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${colors.border}33` }}>
           <Btn onClick={saveTrip} style={{ flex: 1, justifyContent: "center" }}>{t.save}</Btn>
           <Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn>
@@ -501,7 +592,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                 <Th>{t.driver}</Th><Th>{t.truck}</Th>
                 <Th align="center">{t.conduce}</Th>
                 <Th align="center">{t.document}</Th>
-                <Th align="center">{t.expenses}</Th><Th align="right">{t.rate}</Th><Th align="right">{t.actions}</Th>
+                <Th align="center">{t.expenses}</Th><Th align="right">{t.rate}</Th><Th align="right">Margen</Th><Th align="right">{t.actions}</Th>
               </tr></thead>
               <tbody>
                 {filtered.map(tr => {
@@ -515,8 +606,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                     <Td>{tr.date}</Td>
                     <Td><span style={{ fontSize: 12 }}>{tr.municipality}</span><br /><span style={{ fontSize: 10, color: colors.textMuted }}>{tr.province}</span></Td>
                     <Td><StatusBadge status={tr.status} t={t} /></Td>
-                    <Td bold>{cl?.companyName || "—"}{tr.invoiceRef && <><br /><span style={{ fontSize: 9, color: colors.textMuted }}>#{tr.invoiceRef}</span></>}{tr.joint && <><br /><span style={{ fontSize: 9, color: colors.purple, fontWeight: 700 }}>⛓ conjunto{tr.jointWith ? ` con #${tr.jointWith}` : ""}</span></>}</Td>
-                    <Td><span style={{ fontSize: 11, color: colors.textMuted }}>{tr.createdBy}</span></Td>
+                    <Td bold>{cl?.companyName || "—"}{tr.invoiceRef && <><br /><span style={{ fontSize: 9, color: colors.textMuted }}>#{tr.invoiceRef}</span></>}{tr.joint && <><br /><span style={{ fontSize: 9, color: colors.purple, fontWeight: 700 }}>⛓ conjunto{tr.jointWith ? ` con #${tr.jointWith}` : ""}{tr.jointAuto ? " · creado automáticamente" : ""}</span></>}</Td>
+                    <Td><span title={`Creado por ${tr.createdBy || "—"}${tr.createdAt ? " el " + tr.createdAt.slice(0, 16).replace("T", " ") : ""}${tr.updatedBy ? `\nÚltima edición: ${tr.updatedBy} el ${(tr.updatedAt || "").slice(0, 16).replace("T", " ")}` : ""}`} style={{ fontSize: 11, color: colors.textMuted, cursor: "help" }}>{tr.createdBy}{tr.updatedBy && <span style={{ color: colors.accent }}> ✎</span>}</span></Td>
                     <Td>{dk?.name || "—"}</Td>
                     <Td>{tk?.plate || "—"}</Td>
                     <Td align="center">
@@ -547,9 +638,17 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                       })()}
                     </Td>
                     <Td align="right">
+                      {(() => { const m = marginOf(tr); if (!m) return <span style={{ color: colors.textMuted }}>—</span>;
+                        const c = m.net < 0 ? colors.red : m.pct < 15 ? colors.orange : colors.green;
+                        return <div title={`Tarifa ${fmt(m.revenue)} − operación ${fmt(m.costs)}${m.partnerPart ? ` − socio ${fmt(m.partnerPart)}` : ""}${m.brokerPart ? ` − broker ${fmt(m.brokerPart)}` : ""}`} style={{ cursor: "help" }}>
+                          <div style={{ fontWeight: 700, color: c }}>{fmt(m.net)}</div>
+                          <div style={{ fontSize: 9, color: colors.textMuted }}>{m.pct.toFixed(0)} %{m.partner ? ` · socio ${fmt(m.partnerPart)}` : ""}</div>
+                        </div>; })()}
+                    </Td>
+                    <Td align="right">
                       <div style={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
                         <button onClick={() => openEdit(tr)} style={{ padding: "10px", borderRadius: 5, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", minHeight: 44, minWidth: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><Pencil size={12} /></button>
-                        <button onClick={() => deleteTrip(tr)} title={isLocked(tr.id) ? "Facturado o cobrado: no se puede eliminar" : "Eliminar"} style={{ opacity: isLocked(tr.id) ? 0.35 : 1, padding: "10px", borderRadius: 5, border: "none", background: "transparent", color: colors.red, cursor: "pointer", minHeight: 44, minWidth: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={12} /></button>
+                        <button onClick={() => deleteTrip(tr)} title={isLocked(tr.id) ? lockReason(tr.id) : "Eliminar"} style={{ opacity: isLocked(tr.id) ? 0.35 : 1, padding: "10px", borderRadius: 5, border: "none", background: "transparent", color: colors.red, cursor: "pointer", minHeight: 44, minWidth: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={12} /></button>
                       </div>
                     </Td>
                   </tr>;

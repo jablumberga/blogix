@@ -87,3 +87,48 @@ export function autoLinkJointPairs(trips = []) {
   }
   return { trips: trips.map(t => byId.get(t.id)), changed };
 }
+
+/**
+ * Escritura de un CHOFER (servidor): nunca borra, solo crea o edita viajes suyos.
+ *  - viajes bloqueados (facturados, cobrados o con documentos recibidos) no se tocan:
+ *    se conserva lo que hay en el servidor
+ *  - viajes nuevos o editados deben tener cliente activo, destino, camión y tarifa > 0
+ *    (salvo cancelados) y fecha válida cercana (±`maxDays` días)
+ *  - se conservan campos que solo pone el servidor/admin (enlace de conjunto, bitácora)
+ * Devuelve { trips, errors:[{tripId, error}], ignored:[ids] }.
+ */
+export function sanitizeDriverTrips({ incoming = [], existing = [], driverId, clients = [], trucks = [], invoices = [], cobros = [], today = new Date(), maxDays = 60 }) {
+  const prevById = new Map(existing.map(t => [t.id, t]));
+  const locked = new Set();
+  for (const inv of invoices) if (inv?.status !== "cancelled") for (const id of inv.tripIds || []) locked.add(Number(id));
+  for (const c of cobros) for (const id of c?.collectedTripIds || []) locked.add(Number(id));
+  const clientMap = new Map(clients.map(c => [c.id, c])), truckMap = new Map(trucks.map(t => [t.id, t]));
+  const t0 = new Date(today); t0.setHours(0, 0, 0, 0);
+  const errors = [], ignored = [], out = [];
+  for (const raw of incoming) {
+    const prev = prevById.get(raw.id);
+    if (prev && (locked.has(Number(raw.id)) || prev.docsReceivedAt)) { ignored.push(raw.id); out.push(prev); continue; }
+    const tr = { ...raw, driverId };
+    if (prev) {
+      for (const k of ["jointWith", "jointAuto", "createdAt", "createdBy", "history"]) if (prev[k] !== undefined && tr[k] === undefined) tr[k] = prev[k];
+      // Sin cambios reales → se conserva tal cual, sin volver a validar (viajes viejos no se bloquean)
+      const strip = (o) => { const c = { ...o }; for (const k of ["history", "updatedAt", "updatedBy"]) delete c[k]; return JSON.stringify(Object.keys(c).sort().map(k => [k, c[k]])); };
+      if (strip(tr) === strip(prev)) { out.push(prev); continue; }
+    }
+    const cancelled = tr.status === "cancelled";
+    const cl = clientMap.get(Number(tr.clientId));
+    const problems = [];
+    if (!cl) problems.push("cliente no existe");
+    else if (cl.status === "inactive") problems.push("cliente inactivo");
+    if (!tr.province || !tr.municipality) problems.push("falta el destino");
+    if (!truckMap.get(Number(tr.truckId))) problems.push("camión no existe");
+    if (!cancelled && !(Number(tr.revenue) > 0)) problems.push("tarifa debe ser mayor que 0");
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(tr.date || "") ? new Date(tr.date + "T00:00:00") : null;
+    if (!d || isNaN(d)) problems.push("fecha inválida");
+    else if (Math.abs((d - t0) / 86400000) > maxDays) problems.push(`fecha fuera de rango (±${maxDays} días)`);
+    if (cl?.rules?.requiresInvoiceRef && !cancelled && !String(tr.invoiceRef || "").trim()) problems.push("este cliente exige referencia de factura");
+    if (problems.length) { errors.push({ tripId: tr.id, error: `Viaje #${tr.id} (${tr.date || "sin fecha"}): ${problems.join("; ")}.` }); continue; }
+    out.push(tr);
+  }
+  return { trips: out, errors, ignored };
+}
