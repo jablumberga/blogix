@@ -184,7 +184,13 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     setForm(prev => ({ ...prev, date: val, dueDate: due }));
   };
 
+  // Cliente que exige referencia: solo se factura lo que la oficina marcó como RECIBIDO (con eso te pagan).
+  // Cliente sin esa regla: se factura normal.
+  const needsRef = (cl) => cl?.rules?.requiresInvoiceRef === true;
+  const isReceived = (tr) => { const cl = clients.find(c => c.id === tr?.clientId); return !needsRef(cl) || tr?.docStatus === "delivered" || !!tr?.docsReceivedAt; };
   const toggleTrip = (tripId) => {
+    const tr = trips.find(t => t.id === tripId);
+    if (tr && !isReceived(tr)) return;
     setForm(prev => {
       const ids = prev.tripIds.includes(tripId)
         ? prev.tripIds.filter(id => id !== tripId)
@@ -212,6 +218,11 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   const save = () => {
     if (!form.clientId || form.tripIds.length === 0) {
       alert("Selecciona un cliente y al menos un viaje.");
+      return;
+    }
+    const notReceived = form.tripIds.map(id => trips.find(t => t.id === id)).filter(tr => tr && !isReceived(tr));
+    if (notReceived.length > 0) {
+      alert(`No se puede facturar: ${notReceived.length} viaje(s) cuya referencia la oficina aún no marcó como recibida (${notReceived.map(tr => `#${tr.id} ${tr.invoiceRef || ""}`).join(", ")}). Este cliente paga por referencia recibida.`);
       return;
     }
     const cl = clients.find(c => c.id === Number(form.clientId));
@@ -485,9 +496,9 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                   <div style={{ border: `1px solid ${colors.border}`, borderRadius: 10, overflow: "hidden", maxHeight: 360, overflowY: "auto" }}>
                     {clientTrips.map(trip => {
                       const isInOther = invoicedTripMap.has(trip.id);
-                      const docsOk = trip.docStatus === "delivered";
+                      const docsOk = isReceived(trip);
                       const ineligible = !docsOk;
-                      const reason = !docsOk ? "Docs pendientes — entrega primero los documentos" : null;
+                      const reason = !docsOk ? "Pendiente: la oficina aún no marcó esta referencia como recibida (este cliente paga por referencia)" : null;
                       return (
                         <TripSelectRow
                           key={trip.id}

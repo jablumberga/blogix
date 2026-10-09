@@ -76,10 +76,10 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
     trips.filter(tr =>
       tr.status !== "cancelled" &&
       (tr.revenue || 0) > 0 &&
-      tr.docStatus === "delivered" &&
+      (clientMap.get(tr.clientId)?.rules?.requiresInvoiceRef !== true || tr.docStatus === "delivered" || !!tr.docsReceivedAt) && // cliente por referencia: solo recibidas
       !invoicedTripIds.has(tr.id)
     ),
-    [trips, invoicedTripIds]
+    [trips, invoicedTripIds, clientMap]
   );
 
   const sinFacturarByClient = useMemo(() => {

@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Printer, FileSpreadsheet, ClipboardCheck, Users, UserCog, AlertTriangle } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { genPeriods, today } from "../utils/helpers.js";
+import { genBillingPeriods, today } from "../utils/helpers.js";
 import { buildPayroll, partnerTripsInPeriod, TRIP_DOCS } from "../utils/payroll.js";
 import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow } from "../utils/printReport.js";
 import { applyReceived } from "../utils/jointTrip.js";
@@ -9,13 +9,13 @@ import { Card, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
 /**
  * Panel de la asistente administrativa:
- *  - choferes y socios con sus viajes del período de nómina (30/31→14, 15→29)
+ *  - choferes y socios con sus viajes de la quincena de facturación (1–15, 16–31)
  *  - checklist de documentos físicos recibidos por viaje
  *  - relación de viajes por chofer (PDF, sin montos)
  *  - nómina del período para contabilidad (PDF y Excel)
  */
 export default function AssistantDashboard({ user, trips, setTrips, drivers = [], partners = [], trucks = [], clients = [], expenses = [], isMobile }) {
-  const periods = useMemo(() => genPeriods([...trips.map(t => t.date), today()]), [trips]);
+  const periods = useMemo(() => genBillingPeriods([...trips.map(t => t.date), today()]), [trips]);   // Oficina: siempre 1–15 y 16–31
   const [pIdx, setPIdx] = useState(0);            // 0 = período en curso
   const period = periods[pIdx] || periods[0];
   const [sel, setSel] = useState(null);            // { kind: "driver"|"partner", id }

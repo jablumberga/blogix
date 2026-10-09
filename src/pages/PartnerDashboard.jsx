@@ -4,9 +4,6 @@ import { colors } from "../constants/theme.js";
 import { fmt, pad, MONTHS_ES } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Sel, Badge, Th, Td, StatusBadge } from "../components/ui/index.jsx";
 import { computeSettlement, normalizePartner, PARTNER_MODELS } from "../utils/partnerModels.js";
-import { settlementHTML } from "./SettlementsPage.jsx";
-import { openPrintWindow } from "../utils/printReport.js";
-import { FileText } from "lucide-react";
 
 const MODES = ["quincena", "mes", "dia", "ano", "custom"];
 const MODE_LABELS = { quincena: "Quincena", mes: "Mes", dia: "Día", ano: "Año", custom: "Personalizado" };
@@ -25,12 +22,8 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
   const [truckFilter, setTruckFilter] = useState("all");
   const [viewMode, setViewMode] = useState("quincena");
 
-  // Quincena state — new cutoffs: half-1 = 1–15, half-2 = 16–30
-  const _initCorte = () => {
-    const day = now.getDate(), y = now.getFullYear(), m = now.getMonth() + 1;
-    if (day > 30) { const nm = m === 12 ? 1 : m + 1, ny = m === 12 ? y + 1 : y; return { year: ny, month: nm, half: 1 }; }
-    return { year: y, month: m, half: day >= 16 ? 2 : 1 };
-  };
+  // Quincena: 1–15 y 16–último día del mes (misma regla que Oficina y Liquidaciones)
+  const _initCorte = () => { const day = now.getDate(); return { year: now.getFullYear(), month: now.getMonth() + 1, half: day <= 15 ? 1 : 2 }; };
   const _init = _initCorte();
   const [qYear, setQYear]   = useState(_init.year);
   const [qMonth, setQMonth] = useState(_init.month);
@@ -53,14 +46,9 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
   const { dateFrom, dateTo, periodLabel } = useMemo(() => {
     if (viewMode === "quincena") {
       const mStr = `${qYear}-${pad(qMonth)}`;
-      const endDay = Math.min(30, lastDayOf(qYear, qMonth));
-      if (qHalf === 1) {
-        const prevM = qMonth === 1 ? 12 : qMonth - 1;
-        const prevY = qMonth === 1 ? qYear - 1 : qYear;
-        const dateFrom = lastDayOf(prevY, prevM) === 31 ? `${prevY}-${pad(prevM)}-31` : `${mStr}-01`;
-        return { dateFrom, dateTo: `${mStr}-15`, periodLabel: `${MONTHS_ES[qMonth-1]} 1–15, ${qYear}` };
-      }
-      return { dateFrom: `${mStr}-16`, dateTo: `${mStr}-${pad(endDay)}`, periodLabel: `${MONTHS_ES[qMonth-1]} 16–${endDay}, ${qYear}` };
+      const last = lastDayOf(qYear, qMonth);
+      if (qHalf === 1) return { dateFrom: `${mStr}-01`, dateTo: `${mStr}-15`, periodLabel: `${MONTHS_ES[qMonth-1]} 1–15, ${qYear}` };
+      return { dateFrom: `${mStr}-16`, dateTo: `${mStr}-${pad(last)}`, periodLabel: `${MONTHS_ES[qMonth-1]} 16–${last}, ${qYear}` };
     }
     if (viewMode === "mes") {
       const mStr = `${mYear}-${pad(mMonth)}`;
@@ -105,7 +93,6 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
   const totalDeducciones = settle.commission + settle.reimbursement + settle.fixedTotal + (settle.model === "profit_share" ? settle.companyShare : 0);
   const toReceive = settle.toTransfer;
   const modelLabel = PARTNER_MODELS[settle.model]?.label || settle.model;
-  const settleStatus = viewMode === "quincena" ? ((settlementStatus || {})[`${p.id}-${qYear}-${pad(qMonth)}-${qHalf}`] || "unpaid") : null;
 
   const inputStyle = { padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 12 };
 
@@ -169,22 +156,22 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
     </div>
 
     <Card style={{ marginBottom: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>Mi liquidación · {periodLabel} <Badge label={modelLabel} color={colors.accent} /></div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{settle.tripCount} viaje{settle.tripCount !== 1 ? "s" : ""} entregado{settle.tripCount !== 1 ? "s" : ""}{settle.expenseLines.length > 0 ? ` · ${settle.expenseLines.length} gasto(s) descontado(s)` : ""}{viewMode === "quincena" ? ` · pago ${settle.payDate}` : ""}</div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, color: colors.textMuted }}>RECIBES</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: settleStatus === "paid" ? colors.green : toReceive < 0 ? colors.red : colors.orange }}>{fmt(Math.max(0, toReceive))}</div>
-          </div>
-          {viewMode === "quincena" && <Badge label={settleStatus === "paid" ? "✓ Recibido" : "Pendiente"} color={settleStatus === "paid" ? colors.green : colors.orange} />}
-          <button onClick={() => openPrintWindow(`Liquidación ${partner?.name || ""} ${periodLabel}`, settlementHTML({ s: settle, partner: p, t, clients, trucks, status: viewMode === "quincena" ? settleStatus : null }))}
-            style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: colors.accent, color: "white", cursor: "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}><FileText size={13} /> Ver detalle</button>
-        </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
+        <h3 style={{ margin: 0, fontSize: 14 }}>Cómo se calcula</h3><Badge label={modelLabel} color={colors.accent} />
       </div>
-      {viewMode !== "quincena" && p.fixedCharges?.length > 0 && <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 6 }}>Los cargos fijos se aplican por quincena.</div>}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "4px 24px", fontSize: 13 }}>
+        <Row label="Ingreso bruto (fletes)" value={settle.grossRevenue} color={colors.green} />
+        {settle.brokerDeduction > 0 && <Row label="Broker (pass-through)" value={-settle.brokerDeduction} color={colors.orange} />}
+        {settle.model !== "profit_share" && <Row label={`Comisión empresa ${settle.commissionPct}% del bruto`} value={-settle.commission} color={colors.purple || "#9b7fe8"} />}
+        {settle.reimbursement > 0 && <Row label={`Gastos pagados por la empresa (${settle.expenseLines.length})`} value={-settle.reimbursement} color={colors.orange} />}
+        {settle.fixedTotal > 0 && <Row label="Cargos fijos" value={-settle.fixedTotal} color={colors.orange} />}
+        {settle.model === "profit_share" && <Row label="Utilidad a repartir" value={settle.net} />}
+        {settle.model === "profit_share" && <Row label={`Tu parte ${settle.partnerSharePct}%`} value={settle.partnerShare} color={colors.green} />}
+        <Row label="A recibir" value={Math.max(0, toReceive)} color={colors.green} bold />
+      </div>
+      {viewMode !== "quincena" && p.fixedCharges?.length > 0 && <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 6 }}>Los cargos fijos se muestran solo en la vista por quincena.</div>}
+      {settle.expenseLines.length > 0 && <details style={{ marginTop: 8, fontSize: 12 }}><summary style={{ cursor: "pointer", color: colors.textMuted }}>Ver gastos descontados</summary>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}><tbody>{settle.expenseLines.map(e => <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11` }}><Td>{e.date}</Td><Td color={colors.textMuted}>{t[e.category] || e.category}</Td><Td>{e.description}</Td><Td align="right" color={colors.orange}>− {fmt(e.amount)}</Td></tr>)}</tbody></table></details>}
     </Card>
 
     <Card>

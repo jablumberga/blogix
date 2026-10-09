@@ -165,30 +165,22 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
 // Generates classic settlement periods: half-1 = 1st–15th, half-2 = 16th–30th.
 // Day 31 of any month is treated as belonging to the NEXT month's half-1
 // (dateFrom is set to the 31st of the previous month when applicable).
-export function genSettlementPeriods(dates = []) {
+/**
+ * Quincenas de FACTURACIÓN / liquidación: 1–15 y 16–último día del mes (31 incluido).
+ * Las usan Oficina (referencias recibidas), Facturas y Liquidaciones de socios.
+ * La nómina de choferes usa otras (genPeriods: 30/31→14 y 15→29).
+ */
+export function genBillingPeriods(dates = []) {
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
   const now = new Date(); const day = now.getDate();
-  let y = now.getFullYear(), m = now.getMonth() + 1, h;
-  if (day <= 15) { h = 1; }
-  else if (day <= 30) { h = 2; }
-  else { h = 1; if (m === 12) { m = 1; y++; } else { m++; } }
-  const earliest = [...dates].sort()[0] || `${y}-${pad(m)}-01`;
+  let y = now.getFullYear(), m = now.getMonth() + 1, h = day <= 15 ? 1 : 2;
+  const earliest = [...dates].filter(Boolean).sort()[0] || `${y}-${pad(m)}-01`;
   const buildPd = (py, pm, ph) => {
     const mStr = `${py}-${pad(pm)}`;
-    if (ph === 2) {
-      return { year: py, month: pm, half: ph, mStr,
-        dateFrom: `${mStr}-16`, dateTo: `${mStr}-30`,
-        label: `${MONTHS_ES[pm-1]} 16–30, ${py}` };
-    }
-    // Half-1: starts on day 1, but if previous month had 31 days include that day too
-    const prevM = pm === 1 ? 12 : pm - 1;
-    const prevY = pm === 1 ? py - 1 : py;
-    const prevMStr = `${prevY}-${pad(prevM)}`;
-    const lastPrev = lastDayOf(prevY, prevM);
-    const dateFrom = lastPrev === 31 ? `${prevMStr}-31` : `${mStr}-01`;
-    return { year: py, month: pm, half: ph, mStr,
-      dateFrom, dateTo: `${mStr}-15`,
-      label: `${MONTHS_ES[pm-1]} 1–15, ${py}` };
+    const last = lastDayOf(py, pm);
+    return ph === 1
+      ? { year: py, month: pm, half: 1, mStr, dateFrom: `${mStr}-01`, dateTo: `${mStr}-15`, label: `${MONTHS_ES[pm-1]} 1–15, ${py}` }
+      : { year: py, month: pm, half: 2, mStr, dateFrom: `${mStr}-16`, dateTo: `${mStr}-${pad(last)}`, label: `${MONTHS_ES[pm-1]} 16–${last}, ${py}` };
   };
   const periods = [];
   for (let i = 0; i < 60; i++) {
@@ -198,8 +190,9 @@ export function genSettlementPeriods(dates = []) {
   }
   return periods;
 }
+/** Alias histórico: las liquidaciones usan las mismas quincenas de facturación. */
+export const genSettlementPeriods = genBillingPeriods;
 
-// ─── Billing / Period Helpers ─────────────────────────────────────────────────
 export const pad = n => String(n).padStart(2, "0");
 
 export const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
