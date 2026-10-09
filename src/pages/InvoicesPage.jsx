@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
-import { Plus, X, Pencil, Trash2, FileText, CheckCircle2, Clock, Send, Ban, AlertCircle, Lock, Eye } from "lucide-react";
+import { Plus, X, Pencil, Trash2, FileText, CheckCircle2, Clock, Send, Ban, AlertCircle, Lock, Eye, FileSpreadsheet } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, getPeriodInfo } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../components/ui/index.jsx";
-import { invoiceHTML, openPrintWindow } from "../utils/printReport.js";
+import { invoiceHTML, invoiceSheet, openPrintWindow } from "../utils/printReport.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function nextInvoiceNumber(invoices) {
@@ -189,9 +189,20 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   // Cliente sin esa regla: se factura normal.
   const needsRef = (cl) => cl?.rules?.requiresInvoiceRef === true;
   const isReceived = (tr) => { const cl = clients.find(c => c.id === tr?.clientId); return !needsRef(cl) || tr?.docStatus === "delivered" || !!tr?.docsReceivedAt; };
+  const exportInvoiceXlsx = async (inv, cl) => {
+    const XLSX = await import("xlsx");
+    const rows = invoiceSheet({ inv, client: cl, trips, trucks, brokers });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"] = [{ wch: 5 }, { wch: 12 }, { wch: 16 }, { wch: 28 }, { wch: 12 }, { wch: 10 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Factura");
+    XLSX.writeFile(wb, `factura-${inv.invoiceNumber || inv.id}.xlsx`);
+  };
+
   const toggleTrip = (tripId) => {
     const tr = trips.find(t => t.id === tripId);
     if (tr && !isReceived(tr)) return;
+    if (invoicedTripMap.has(tripId)) return; // ya facturado en otra factura
     setForm(prev => {
       const ids = prev.tripIds.includes(tripId)
         ? prev.tripIds.filter(id => id !== tripId)
@@ -219,6 +230,12 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   const save = () => {
     if (!form.clientId || form.tripIds.length === 0) {
       alert("Selecciona un cliente y al menos un viaje.");
+      return;
+    }
+    // Regla: un viaje no se factura dos veces (salvo que la otra factura esté anulada)
+    const twice = form.tripIds.filter(id => invoicedTripMap.has(id));
+    if (twice.length > 0) {
+      alert(`No se puede facturar: ${twice.length} viaje(s) ya están en otra factura (${twice.map(id => `#${id} → ${invoicedTripMap.get(id)?.invoiceNumber || "factura " + invoicedTripMap.get(id)?.id}`).join(", ")}). Anula esa factura primero.`);
       return;
     }
     const notReceived = form.tripIds.map(id => trips.find(t => t.id === id)).filter(tr => tr && !isReceived(tr));
@@ -418,6 +435,9 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                       )}
                       <button onClick={() => openPrintWindow(`Factura ${inv.invoiceNumber || inv.id}`, invoiceHTML({ inv, client: cl, trips, trucks, brokers }))} title="Ver factura (PDF)" style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: "transparent", color: colors.text, cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                         <Eye size={11}/> Ver factura
+                      </button>
+                      <button onClick={() => exportInvoiceXlsx(inv, cl)} title="Generar Excel" style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.green}60`, background: "transparent", color: colors.green, cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                        <FileSpreadsheet size={11}/> Excel
                       </button>
                       <button onClick={() => openEdit(inv)} title="Editar" style={{ background: "none", border: "none", color: colors.accent, cursor: "pointer", padding: 4 }}><Pencil size={13}/></button>
                       <button onClick={() => deleteInvoice(inv.id)} title="Eliminar" style={{ background: "none", border: "none", color: colors.red, cursor: "pointer", padding: 4 }}><Trash2 size={13}/></button>
