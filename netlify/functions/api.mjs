@@ -136,7 +136,7 @@ function applyRLS(data, user) {
     // Oficina: ve viajes, choferes, socios, camiones y clientes (sin tarifas ni contactos),
     // y los adelantos (para la nómina). No ve dinero de la empresa: facturas, cobros, banco.
     const slimClient = c => ({ id: c.id, companyName: c.companyName, status: c.status, rules: c.rules || {} });
-    const slimDriver = d => { const { password, phone, license, ...rest } = d; return rest; };
+    const slimDriver = d => { const { password, license, ...rest } = d; return rest; }; // teléfono sí: va en la relación de viajes
     const slimPartner = p => ({ id: p.id, name: p.name, status: p.status, model: p.model });
     return {
       trips:            data.trips || [],
