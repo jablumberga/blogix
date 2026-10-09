@@ -47,7 +47,7 @@ test("el PDF del chofer no contiene montos y escapa HTML; el de nómina sí tien
   const p = buildPayroll({ period, drivers, trips: trips.map(t => t.id === 10 ? { ...t, cargo: "<img src=x onerror=alert(1)>" } : t), trucks, clients, expenses });
   const html = driverPeriodReportHTML({ row: p.drivers[0], period, generatedBy: "Ana" });
   assert.ok(!html.includes("RD$"), "sin montos");
-  assert.ok(!html.includes("<img"), "escapado");
+  assert.ok(!html.includes("onerror=alert"), "escapado");
   assert.ok(html.includes("&lt;img"));
   const pay = payrollReportHTML({ payroll: p, generatedBy: "Ana" });
   assert.ok(pay.includes("Total nómina del período"));
