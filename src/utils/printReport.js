@@ -68,7 +68,7 @@ export function driverPeriodReportHTML({ row, period, generatedBy, minRows = 14 
       <tbody>${lines.join("")}</tbody>
       <tfoot><tr><td colspan="5" class="right"><b>Total :</b></td><td style="text-align:center"><b>${row.tripCount}</b></td><td style="text-align:center">✓</td></tr></tfoot>
     </table>
-    ${row.pendingCount ? `<div class="small muted" style="margin-top:6px">${row.pendingCount} viaje(s) del período pendiente(s) de entrega de documentos: no incluidos en esta relación.</div>` : ""}
+    ${row.pendingCount ? `<div class="small muted" style="margin-top:6px">${row.pendingCount} viaje(s) de este período pendiente(s) de entrega de documentos: no incluidos; se liquidan en la quincena en que se entreguen.</div>` : ""}
     <div class="sig"><div>Entregado por: ${esc(generatedBy || "")}</div><div>Recibí conforme: ${esc(d.name)}</div><div>Fecha</div></div>`;
 }
 
@@ -95,7 +95,7 @@ export function payrollReportHTML({ payroll, company = "B-Logix", generatedBy })
       <tbody>${rows}</tbody>
       <tfoot><tr><td colspan="2">Totales</td><td class="right">${totals.trips}</td><td class="right">${fmt(totals.gross)}</td><td class="right">−${fmt(totals.discounts)}</td><td class="right">−${fmt(totals.advances)}</td><td class="right">${fmt(totals.net)}</td><td></td><td class="right">${fmt(totals.helpers)}</td><td></td></tr></tfoot>
     </table>
-    <div class="small muted" style="margin-top:6px">Solo se pagan viajes con documentos recibidos en oficina. Los pendientes se liquidan cuando se entreguen.</div>
+    <div class="small muted" style="margin-top:6px">Cada viaje se paga en la quincena en que la oficina recibió sus documentos. Los pendientes se liquidan cuando se entreguen.</div>
     <div class="box"><div>Total choferes: <b>${fmt(totals.net)}</b></div><div>Total ayudantes: <b>${fmt(totals.helpers)}</b></div><div style="font-size:15px;margin-top:6px">Total nómina del período: <b>${fmt(totals.total)}</b></div></div>
     <h2>Detalle de ayudantes por viaje</h2>
     <table><thead><tr><th>Fecha</th><th>Viaje</th><th>Chofer</th><th>Ayudantes</th><th class="right">Cant.</th><th class="right">Pago c/u</th><th class="right">Total</th></tr></thead>

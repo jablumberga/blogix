@@ -30,11 +30,19 @@ export function docsComplete(trip, client) {
 
 const inPeriod = (date, pd) => !!date && date >= pd.dateFrom && date <= pd.dateTo;
 
+/** Fecha que decide en qué quincena se paga un viaje: la de recepción de documentos (o la del viaje si no se registró). */
+export function payrollDate(trip, client) {
+  if (!docsComplete(trip, client)) return null;
+  return trip.docsReceivedAt || trip.date;
+}
+
 /**
  * Construye la nómina de un período.
- * Solo entran los viajes con documentos RECIBIDOS (docsOk). Los demás quedan en
- * `pendingTrips` (no se pagan ni salen en la relación) hasta que la oficina los
- * marque recibidos o el admin los cancele.
+ * Regla: un viaje se paga en la quincena en que la oficina RECIBIÓ sus documentos
+ * (docsReceivedAt), no en la del viaje («lo que pasó pasó»). Los viajes sin
+ * documentos quedan en `pendingTrips` bajo el período de su fecha de viaje, para
+ * que la oficina los ubique; no se pagan ni salen en la relación hasta recibirlos
+ * o hasta que el admin los cancele.
  * Devuelve { period, drivers: [{ driver, trips:[{trip, calc, client, truck}], base, dieta, helpers,
  *   discounts, advances, gross, net, helperNames, payType, fixedAmount }], totals }
  */
@@ -46,17 +54,19 @@ export function buildPayroll({ period, drivers = [], trips = [], trucks = [], cl
   for (const raw of drivers) {
     const driver = normalizeDriver(raw);
     if (driver.status === "inactive" && !trips.some(tr => tr.driverId === driver.id && inPeriod(tr.date, period))) continue;
-    const allTrips = trips
-      .filter(tr => tr.driverId === driver.id && tr.status !== "cancelled" && inPeriod(tr.date, period))
-      .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
-      .map(trip => {
-        const truck = truckMap.get(trip.truckId);
-        const client = clientMap.get(trip.clientId);
-        const calc = calcDriverPay({ driver, trip, truck, clientId: trip.clientId });
-        return { trip, calc, client, truck, docsOk: docsComplete(trip, client) };
-      });
-    const dTrips = allTrips.filter(x => x.docsOk);          // entran en nómina
-    const pendingTrips = allTrips.filter(x => !x.docsOk);   // esperan documentos
+    const mine = trips.filter(tr => tr.driverId === driver.id && tr.status !== "cancelled");
+    const enrich = trip => {
+      const truck = truckMap.get(trip.truckId);
+      const client = clientMap.get(trip.clientId);
+      const calc = calcDriverPay({ driver, trip, truck, clientId: trip.clientId });
+      return { trip, calc, client, truck, docsOk: docsComplete(trip, client), payDate: payrollDate(trip, client) };
+    };
+    const byDate = (a, b) => (a.trip.date || "").localeCompare(b.trip.date || "");
+    // Recibidos cuya fecha de recepción cae en el período → se pagan aquí
+    const dTrips = mine.map(enrich).filter(x => x.docsOk && inPeriod(x.payDate, period)).sort(byDate);
+    // Sin documentos, por fecha de viaje → esperan (no se pagan)
+    const pendingTrips = mine.map(enrich).filter(x => !x.docsOk && inPeriod(x.trip.date, period)).sort(byDate);
+    const allTrips = [...dTrips, ...pendingTrips].sort(byDate);
     const advances = expenses.filter(e => e.category === "adelanto_conductor" && e.driverId === driver.id && inPeriod(e.date, period)).reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const base      = dTrips.reduce((s, x) => s + x.calc.base, 0);
     const dieta     = dTrips.reduce((s, x) => s + x.calc.dieta, 0);
