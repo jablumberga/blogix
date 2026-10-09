@@ -3,8 +3,9 @@ import { CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, getSupplierDueDate } from "../utils/helpers.js";
 import { Card, PageHeader, Badge, Th, Td } from "../components/ui/index.jsx";
+import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
 
-export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, suppliers, trips, isMobile }) {
+export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, suppliers, trips, cobros = [], pfSettings, isMobile }) {
   const today = new Date().toISOString().slice(0, 10);
 
   const supplierMap = useMemo(() => new Map((suppliers || []).map(s => [s.id, s])), [suppliers]);
@@ -121,6 +122,8 @@ export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, su
 
   return <div>
     <PageHeader title="Cuentas por Pagar" />
+    <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} compact isMobile={isMobile} />
+    <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 12 }}>Todo lo de esta página se paga desde <b style={{ color: colors.cyan }}>OpEx</b>. Las liquidaciones de socios no están aquí: son pass-through y se pagan en Liquidaciones.</div>
 
     {/* KPI cards */}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 12, marginBottom: 16 }}>

@@ -19,6 +19,9 @@ export const PASS_THROUGH_CATEGORIES = ["partner_settlement", "broker_commission
 /** Categorías que solo son memoria de nómina, no dinero que sale. */
 export const NON_CASH_CATEGORIES = ["nominaTotalOverride"];
 
+/** Un cobro parcial también es dinero que entró: se asigna igual. */
+export const COLLECTED = ["collected", "partial"];
+
 export const isPassThroughExpense = (e) => PASS_THROUGH_CATEGORIES.includes(e?.category);
 export const isOpexExpense = (e) => !!e && !isPassThroughExpense(e) && !NON_CASH_CATEGORIES.includes(e.category);
 
@@ -35,25 +38,70 @@ export function allocateIncome({ amount = 0, passThrough = 0, reimbursement = 0,
 
 /**
  * Parte del ingreso de un viaje que NO es de la empresa (va al socio o al broker).
- * Solo cuenta lo que se transfiere al socio; los gastos reembolsables ya salieron de OpEx y vuelven como reembolso.
+ *  - broker pass-through (cliente con brokerPassThrough): ya venía descontado del cobro → no se aparta
+ *  - broker normal: se aparta su comisión (se le paga aparte, gasto pass-through)
+ *  - socio: lo que nominalmente le toca según el modelo; los gastos que la empresa
+ *    le descuente después vuelven a OpEx en la liquidación (settlementRelease).
  */
-export function tripPassThrough({ trip, truck, partner, broker }) {
+export function tripPassThrough({ trip, truck, partner, broker, brokerPassThrough = false }) {
   const revenue = Number(trip?.revenue) || 0;
   if (!revenue) return { partner: 0, broker: 0, total: 0 };
   let brokerPart = 0;
-  if (broker && !broker.passThrough && Number(broker.commissionPct) > 0) brokerPart = round2(revenue * Number(broker.commissionPct) / 100);
+  if (broker && Number(broker.commissionPct) > 0 && (trip?.brokerId == null || trip.brokerId === broker.id)) brokerPart = Math.round(revenue * Number(broker.commissionPct) / 100);
+  const netRevenue = revenue - brokerPart;          // lo que realmente llega por el viaje
+  const brokerSetAside = brokerPassThrough ? 0 : brokerPart;
   let partnerPart = 0;
   if (partner && truck && truck.partnerId === partner.id) {
-    const base = revenue - brokerPart;
-    if (partner.model === "profit_share") partnerPart = round2(base * (Number(partner.partnerSharePct) || 0) / 100);
-    else partnerPart = round2(base * (100 - (Number(partner.companyPct) || 0)) / 100);
+    if (partner.model === "profit_share") partnerPart = Math.round(netRevenue * (Number(partner.partnerSharePct) || 0) / 100);
+    else partnerPart = Math.max(0, netRevenue - Math.round(revenue * (Number(partner.companyPct) || 0) / 100));
   }
-  return { partner: partnerPart, broker: brokerPart, total: round2(partnerPart + brokerPart) };
+  return { partner: partnerPart, broker: brokerSetAside, total: partnerPart + brokerSetAside };
+}
+
+/** Pass-through total de un cobro (sobre los viajes cobrados). */
+export function cobroPassThrough({ tripIds = [], trips = [], trucks = [], partners = [], clients = [], brokers = [] }) {
+  const tripMap = new Map(trips.map(t => [t.id, t]));
+  const truckMap = new Map(trucks.map(t => [t.id, t]));
+  const partnerMap = new Map(partners.map(p => [p.id, p]));
+  const clientMap = new Map(clients.map(c => [c.id, c]));
+  const brokerMap = new Map(brokers.map(b => [b.id, b]));
+  let partner = 0, broker = 0;
+  for (const id of tripIds) {
+    const trip = tripMap.get(id); if (!trip) continue;
+    const truck = truckMap.get(trip.truckId);
+    const pt = tripPassThrough({ trip, truck, partner: truck?.partnerId ? partnerMap.get(truck.partnerId) : null,
+      broker: trip.brokerId ? brokerMap.get(trip.brokerId) : null, brokerPassThrough: clientMap.get(trip.clientId)?.rules?.brokerPassThrough === true });
+    partner += pt.partner; broker += pt.broker;
+  }
+  return { partner, broker, total: partner + broker };
+}
+
+/** Asigna un cobro completo: devuelve el objeto `pf` que se guarda en el cobro. */
+export function allocateCobro({ amount, tripIds, trips, trucks, partners, clients, brokers, settings = DEFAULT_PF_SETTINGS }) {
+  const pt = cobroPassThrough({ tripIds, trips, trucks, partners, clients, brokers });
+  const a = allocateIncome({ amount, passThrough: pt.total, reservePct: settings.reservePct });
+  return { ...a, passThroughPartner: pt.partner, passThroughBroker: pt.broker, at: new Date().toISOString().slice(0, 10) };
+}
+
+/**
+ * Liquidación de socio: lo apartado como pass-through para esa quincena (pool) vs lo que
+ * realmente se transfiere. La diferencia (gastos reembolsados, cargos fijos) vuelve a OpEx
+ * íntegra, sin 20/80, porque ya había salido de OpEx.
+ */
+export function settlementPool(s) {
+  if (!s) return 0;
+  if (s.model === "profit_share") return Math.round((s.netRevenue || 0) * (Number(s.partnerSharePct) || 0) / 100);
+  return Math.max(0, (s.netRevenue || 0) - (s.commission || 0));
+}
+export function settlementRelease(s) {
+  const pool = settlementPool(s);
+  const transfer = Math.max(0, Number(s?.toTransfer) || 0);
+  return { pool, transfer, releasedToOpex: round2(Math.max(0, pool - transfer)) };
 }
 
 /** Asignación de un cobro ya registrado (usa la guardada; si no existe, estima sin pass-through). */
 export function cobroAllocation(cobro, settings = DEFAULT_PF_SETTINGS) {
-  if (!cobro || cobro.status !== "collected") return null;
+  if (!cobro || !COLLECTED.includes(cobro.status) || !(Number(cobro.amount) > 0)) return null;
   if (cobro.pf && typeof cobro.pf.opex === "number") return cobro.pf;
   return allocateIncome({ amount: cobro.amount, reservePct: settings.reservePct });
 }
@@ -70,22 +118,44 @@ const afterStart = (date, settings) => !settings?.startDate || !date || date >= 
  *  - opexCommitted: gastos pendientes que todavía deben salir de OpEx
  */
 export function accountBalances({ cobros = [], expenses = [], settings = DEFAULT_PF_SETTINGS }) {
-  let income = 0, reserve = 0, opexIn = 0, passThrough = 0;
+  let income = 0, reserve = 0, opexIn = 0, passThrough = 0, real = 0;
   for (const c of cobros) {
-    if (c.status !== "collected" || !afterStart(c.collectedDate, settings)) continue;
+    if (!COLLECTED.includes(c.status) || !afterStart(c.collectedDate || c.pf?.at, settings)) continue;
     const a = cobroAllocation(c, settings);
     if (!a) continue;
-    income += a.total; reserve += a.reserve; opexIn += a.opex; passThrough += a.passThrough;
+    income += a.total; reserve += a.reserve; opexIn += a.opex; passThrough += a.passThrough; real += a.real;
   }
-  let opexOut = 0, opexCommitted = 0;
+  let opexOut = 0, opexCommitted = 0, passThroughOut = 0, passThroughReleased = 0;
   for (const e of expenses) {
-    if (!isOpexExpense(e)) continue;
     const amt = Number(e.amount) || 0;
+    if (e.category === "partner_settlement" && e.status === "paid" && afterStart(e.paidDate || e.date, settings)) {
+      passThroughOut += amt; passThroughReleased += Number(e.releasedToOpex) || 0; opexIn += Number(e.releasedToOpex) || 0;
+    }
+    if (e.category === "broker_commission" && e.status === "paid" && afterStart(e.paidDate || e.date, settings)) passThroughOut += amt;
+    if (!isOpexExpense(e)) continue;
     if (e.status === "paid") { if (afterStart(e.paidDate || e.date, settings)) opexOut += amt; }
     else opexCommitted += amt;
   }
-  return { income: round2(income), reserve: round2(reserve), passThrough: round2(passThrough),
-    opexIn: round2(opexIn), opexOut: round2(opexOut), opexAvailable: round2(opexIn - opexOut), opexCommitted: round2(opexCommitted) };
+  return { income: round2(income), real: round2(real), reserve: round2(reserve), passThrough: round2(passThrough),
+    passThroughOut: round2(passThroughOut), passThroughReleased: round2(passThroughReleased),
+    passThroughPending: round2(passThrough - passThroughOut - passThroughReleased),
+    opexIn: round2(opexIn), opexOut: round2(opexOut), opexAvailable: round2(opexIn - opexOut), opexCommitted: round2(opexCommitted),
+    opexAfterCommitments: round2(opexIn - opexOut - opexCommitted), reservePct: Number(settings?.reservePct) || 0 };
+}
+
+/** Asignaciones por mes (YYYY-MM) para gráficas y comparativos. */
+export function monthlyAllocations({ cobros = [], settings = DEFAULT_PF_SETTINGS }) {
+  const out = new Map();
+  for (const c of cobros) {
+    if (!COLLECTED.includes(c.status)) continue;
+    const date = c.collectedDate || c.pf?.at; if (!date || !afterStart(date, settings)) continue;
+    const a = cobroAllocation(c, settings); if (!a) continue;
+    const m = date.slice(0, 7);
+    const cur = out.get(m) || { month: m, income: 0, real: 0, reserve: 0, opex: 0, passThrough: 0 };
+    cur.income += a.total; cur.real += a.real; cur.reserve += a.reserve; cur.opex += a.opex; cur.passThrough += a.passThrough;
+    out.set(m, cur);
+  }
+  return [...out.values()].sort((a, b) => a.month.localeCompare(b.month));
 }
 
 export function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }

@@ -4,13 +4,14 @@ import { translations } from "../constants/translations.js";
 import { USERS, initSettlementStatus } from "../constants/users.js";
 import { computeAlerts, today } from "../utils/helpers.js";
 import { calcDriverPay } from "../utils/driverPay.js";
+import { DEFAULT_PF_SETTINGS, allocateCobro, COLLECTED } from "../utils/profitFirst.js";
 
 const AppContext = createContext(null);
 
 function applyData(data, setters) {
   const { setClients, setPartners, setTrucks, setDrivers, setTrips,
           setExpenses, setBrokers, setSuppliers, setFixedTemplates,
-          setSettlementStatus, setCobros, setInvoices,
+          setSettlementStatus, setCobros, setInvoices, setPfSettings,
           setBankAccount, setBankReconciliation, setStaff } = setters;
   if (!data || Object.keys(data).length === 0) return;
   const hasAnyData = Object.values(data).some(v =>
@@ -32,6 +33,7 @@ function applyData(data, setters) {
   if (Array.isArray(data.staff))          setStaff(data.staff);
   if (data.bankAccount != null)           setBankAccount(data.bankAccount);
   if (data.bankReconciliation != null)    setBankReconciliation(data.bankReconciliation);
+  if (data.pfSettings != null)            setPfSettings({ ...DEFAULT_PF_SETTINGS, ...data.pfSettings });
 }
 
 export function AppProvider({ children }) {
@@ -74,6 +76,7 @@ export function AppProvider({ children }) {
   const [staff, setStaff] = useState([]); // usuarios de oficina (asistente administrativa)
   const [bankAccount, setBankAccount] = useState({ name: "Cuenta Principal", bank: "", openingBalance: 0, openingDate: today() });
   const [bankReconciliation, setBankReconciliation] = useState({});
+  const [pfSettings, setPfSettings] = useState(DEFAULT_PF_SETTINGS); // Profit First: % a Reserva y fecha de arranque
   const [syncStatus, setSyncStatus] = useState("idle");
 
   const saveTimerRef   = useRef(null);
@@ -87,7 +90,7 @@ export function AppProvider({ children }) {
     setClients, setPartners, setTrucks, setDrivers, setTrips,
     setExpenses, setBrokers, setSuppliers, setFixedTemplates,
     setSettlementStatus, setCobros, setInvoices,
-    setBankAccount, setBankReconciliation, setStaff,
+    setBankAccount, setBankReconciliation, setStaff, setPfSettings,
   };
 
   // ── Load on mount ─────────────────────────────────────────────────────────
@@ -113,9 +116,9 @@ export function AppProvider({ children }) {
     currentDataRef.current = {
       clients, partners, trucks, drivers, trips, expenses,
       brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff,
-      bankAccount, bankReconciliation,
+      bankAccount, bankReconciliation, pfSettings,
     };
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, bankAccount, bankReconciliation]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, bankAccount, bankReconciliation, pfSettings]);
 
   // ── Flush to localStorage on tab close / Android OS kill (admin only) ────
   useEffect(() => {
@@ -142,7 +145,7 @@ export function AppProvider({ children }) {
         ? { trips }
         : { clients, partners, trucks, drivers, trips, expenses,
             brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff,
-            bankAccount, bankReconciliation };
+            bankAccount, bankReconciliation, pfSettings };
       const result = await saveData(payload, versionRef.current);
       if (result.saved === "unauthorized") { setUser(null); return; }
       if (result.saved === "conflict") {
@@ -161,7 +164,7 @@ export function AppProvider({ children }) {
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, bankAccount, bankReconciliation]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, bankAccount, bankReconciliation, pfSettings]);
 
   // ── Dynamic user list ─────────────────────────────────────────────────────
   const allUsers = useMemo(() => [
@@ -221,7 +224,7 @@ export function AppProvider({ children }) {
     setClients([]); setPartners([]); setTrucks([]); setDrivers([]);
     setTrips([]); setExpenses([]); setBrokers([]); setSuppliers([]);
     setFixedTemplates([]); setSettlementStatus({}); setCobros([]); setInvoices([]); setStaff([]);
-    setBankAccount({ name: "Cuenta Principal", bank: "", openingBalance: 0, openingDate: today() }); setBankReconciliation({});
+    setBankAccount({ name: "Cuenta Principal", bank: "", openingBalance: 0, openingDate: today() }); setBankReconciliation({}); setPfSettings(DEFAULT_PF_SETTINGS);
     versionRef.current = 0;
     dataLoadedRef.current = false;
     setUser(null);
@@ -312,6 +315,15 @@ export function AppProvider({ children }) {
       });
     }
 
+    // ── Step 2b: Profit First — cobros viejos sin asignación ────────────────
+    const cobrosToFix = cobros.filter(c => COLLECTED.includes(c.status) && Number(c.amount) > 0 && !(c.pf && typeof c.pf.opex === "number"));
+    if (cobrosToFix.length > 0) {
+      const fixIds = new Set(cobrosToFix.map(c => c.id));
+      setCobros(prev => prev.map(c => fixIds.has(c.id)
+        ? { ...c, pf: { ...allocateCobro({ amount: c.amount, tripIds: c.collectedTripIds || [], trips, trucks, partners, clients, brokers, settings: pfSettings }), at: c.collectedDate || c.pf?.at || today() } }
+        : c));
+    }
+
     // ── Step 3: Backfill invoice amounts for pass-through clients ──────────────
     // Old invoices lack a stored `amount`. For pass-through clients, recompute
     // the net amount (gross − broker deduction) and store it so the CFO pipeline
@@ -339,7 +351,7 @@ export function AppProvider({ children }) {
       }));
     }
 
-    return { added: toAdd.length, removed: staleExpIds.size, invoicesPatched: invoicesToPatch.length };
+    return { added: toAdd.length, removed: staleExpIds.size, invoicesPatched: invoicesToPatch.length, cobrosAllocated: cobrosToFix.length };
   };
 
   const forceSync = async () => {
@@ -347,7 +359,7 @@ export function AppProvider({ children }) {
     const result = await saveData({
       clients, partners, trucks, drivers, trips, expenses,
       brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff,
-      bankAccount, bankReconciliation,
+      bankAccount, bankReconciliation, pfSettings,
     }, versionRef.current);
     if (result.saved === "unauthorized") { setUser(null); return; }
     if (result.saved === "conflict") { setSyncStatus("conflict"); return result; }
@@ -378,6 +390,7 @@ export function AppProvider({ children }) {
     staff, setStaff,
     bankAccount, setBankAccount,
     bankReconciliation, setBankReconciliation,
+    pfSettings, setPfSettings,
     // Computed
     partner, partnerTruckIds, driverObj, alerts,
   };

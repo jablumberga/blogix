@@ -3,11 +3,12 @@ import { Landmark, TrendingUp, TrendingDown, ArrowUp, CheckCircle2, Circle, Sett
 import { colors } from "../constants/theme.js";
 import { fmt } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Th, Td, Badge } from "../components/ui/index.jsx";
+import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
 
 const FILTER_OPTS   = ["todos", "pendientes", "conciliados", "debitos", "creditos"];
 const FILTER_LABELS = { todos: "Todos", pendientes: "Pendientes", conciliados: "Conciliados", debitos: "Solo Débitos", creditos: "Solo Créditos" };
 
-export default function BancoPage({ expenses, cobros, clients, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation }) {
+export default function BancoPage({ expenses, cobros, clients, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, isMobile }) {
   const [filter, setFilter]           = useState("todos");
   const [showSettings, setShowSettings] = useState(false);
   const [draft, setDraft]             = useState(null);
@@ -26,13 +27,13 @@ export default function BancoPage({ expenses, cobros, clients, bankAccount, setB
         amount: e.amount || 0,
       }));
     const credits = (cobros || [])
-      .filter(c => c.status === "collected" && (c.collectedDate || c.date || "") >= openingDate)
+      .filter(c => (c.status === "collected" || c.status === "partial") && (c.collectedDate || c.pf?.at || c.date || "") >= openingDate)
       .map(c => {
         const cl = clientMap.get(c.clientId);
         return {
           key: `cobro-${c.id}`,
           type: "credit",
-          date: c.collectedDate || c.date || "",
+          date: c.collectedDate || c.pf?.at || c.date || "",
           description: c.description || (cl ? `Cobro — ${cl.companyName}` : `Cobro #${c.id}`),
           amount: c.amount || 0,
         };
@@ -86,6 +87,7 @@ export default function BancoPage({ expenses, cobros, clients, bankAccount, setB
   return (
     <div>
       <PageHeader title="Banco" />
+      <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} setPfSettings={setPfSettings} isMobile={isMobile} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 12, marginBottom: 16 }}>
         <StatCard icon={Landmark}     label="Saldo Conciliado"    value={fmt(saldoConciliado)}   color={saldoConciliado >= 0 ? colors.green : colors.red} />

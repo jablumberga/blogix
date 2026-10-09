@@ -3,9 +3,16 @@ import { Truck, Route, TrendingUp, TrendingDown, CircleDollarSign } from "lucide
 import { colors } from "../constants/theme.js";
 import { fmt, pad, MONTHS_ES } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Sel, Badge, Th, Td, StatusBadge } from "../components/ui/index.jsx";
+import { computeSettlement, normalizePartner, PARTNER_MODELS } from "../utils/partnerModels.js";
 
 const MODES = ["quincena", "mes", "dia", "ano", "custom"];
 const MODE_LABELS = { quincena: "Quincena", mes: "Mes", dia: "Día", ano: "Año", custom: "Personalizado" };
+
+function Row({ label, value, color, bold }) {
+  return <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: `1px solid ${colors.border}11`, fontWeight: bold ? 700 : 400 }}>
+    <span style={{ color: colors.textMuted }}>{label}</span><span style={{ color: color || colors.text }}>{value < 0 ? "− " : ""}{fmt(Math.abs(value))}</span>
+  </div>;
+}
 
 export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, partner, partnerTruckIds, clients, brokers, settlementStatus, setSettlementStatus, isMobile }) {
   const now = new Date();
@@ -85,66 +92,16 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
 
   const activeTruckSet = truckFilter === "all" ? pTruckSet : new Set([Number(truckFilter)]);
 
-  const tripIdSet     = new Set(filtered.map(tr => tr.id));
-  const tripDriverMap = new Map(filtered.map(tr => [tr.id, tr.driverId]).filter(([,d]) => d));
-
-  const tripDriverPayExps  = expenses.filter(e => e.category === "driverPay" && tripIdSet.has(e.tripId));
-  const driverIdsFromTrips = new Set(filtered.map(tr => tr.driverId).filter(Boolean));
-  const driverIdsFromPay   = new Set(tripDriverPayExps.map(e => e.driverId).filter(Boolean));
-  const allDriverIds       = new Set([...driverIdsFromTrips, ...driverIdsFromPay]);
-
-  // Include fixed-salary drivers whose nómina arrives only via nominaTotalOverride
-  expenses.forEach(e => {
-    if (e.category !== "nominaTotalOverride") return;
-    if (!e.driverId || allDriverIds.has(e.driverId)) return;
-    if (!(e.date >= dateFrom && e.date <= dateTo)) return;
-    const driverTruckId = (drivers || []).find(d => d.id === e.driverId)?.truckId;
-    if ((e.truckId && pTruckSet.has(e.truckId)) || (driverTruckId && pTruckSet.has(driverTruckId))) {
-      allDriverIds.add(e.driverId);
-    }
-  });
-
-  const overrideExps = expenses.filter(e =>
-    e.category === "nominaTotalOverride" &&
-    allDriverIds.has(e.driverId) &&
-    e.date >= dateFrom && e.date <= dateTo
-  );
-  const overriddenDriverIds = new Set(overrideExps.map(e => e.driverId));
-
-  const allExpenses = [
-    ...expenses.filter(e => {
-      if (!tripIdSet.has(e.tripId)) return false;
-      if (e.category === "driverPay") {
-        const dId = e.driverId || tripDriverMap.get(e.tripId);
-        if (dId && overriddenDriverIds.has(dId)) return false;
-      }
-      return true;
-    }),
-    ...overrideExps,
-    // Non-trip expenses linked to partner's active truck(s) by truckId
-    ...expenses.filter(e =>
-      !e.tripId && e.truckId && activeTruckSet.has(e.truckId) &&
-      e.date >= dateFrom && e.date <= dateTo
-    ),
-  ];
-
-  const retenciones = allExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s+e.amount, 0);
-  const otrosGastos = allExpenses.filter(e => e.category !== "broker_commission").reduce((s,e) => s+e.amount, 0);
-
-  const passThruDeduction = filtered.reduce((s, tr) => {
-    const cl = clientMap.get(tr.clientId);
-    if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return s;
-    const br = brokerMap.get(tr.brokerId);
-    if (!br) return s;
-    return s + Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
-  }, 0);
-
-  const grossRev         = filtered.reduce((s,tr) => s+(tr.revenue||0), 0);
-  const rev              = grossRev - passThruDeduction;
-  const totalDeducciones = passThruDeduction + retenciones + otrosGastos;
-  const net              = rev - retenciones - otrosGastos;
-  const adminComm        = Math.max(0, Math.round(net * ((partner?.commissionPct||0) / 100)));
-  const toReceive        = net - adminComm;
+  // ── Misma función que Liquidaciones (3 modelos, reembolso primero) ─────────
+  const p = normalizePartner(partner || {});
+  const myTruckList = trucks.filter(tk => activeTruckSet.has(tk.id) && pTruckSet.has(tk.id));
+  const period = { dateFrom, dateTo, half: viewMode === "quincena" ? qHalf : null, label: periodLabel, mStr: dateFrom.slice(0, 7) };
+  const settle = computeSettlement({ partner: p, period, trips, expenses, trucks: myTruckList, clients, brokers, drivers });
+  const passThruDeduction = settle.brokerDeduction;
+  const rev = settle.netRevenue;
+  const totalDeducciones = settle.commission + settle.reimbursement + settle.fixedTotal + (settle.model === "profit_share" ? settle.companyShare : 0);
+  const toReceive = settle.toTransfer;
+  const modelLabel = PARTNER_MODELS[settle.model]?.label || settle.model;
 
   const inputStyle = { padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 12 };
 
@@ -204,8 +161,27 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
       <StatCard icon={Route}           label={t.totalTrips}  value={filtered.length}  color={colors.cyan} />
       <StatCard icon={TrendingUp}      label={passThruDeduction > 0 ? "Ingreso Neto" : "Ingreso Bruto"} value={fmt(rev)} color={colors.green} />
       <StatCard icon={TrendingDown}    label="Total Deducciones" value={fmt(totalDeducciones)} color={colors.orange} />
-      <StatCard icon={CircleDollarSign} label="A Recibir"   value={fmt(toReceive)}   color={toReceive >= 0 ? colors.green : colors.red} />
+      <StatCard icon={CircleDollarSign} label="A Recibir"   value={fmt(Math.max(0, toReceive))}   color={toReceive >= 0 ? colors.green : colors.red} sub={toReceive < 0 ? `debes ${fmt(-toReceive)}` : undefined} />
     </div>
+
+    <Card style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
+        <h3 style={{ margin: 0, fontSize: 14 }}>Cómo se calcula</h3><Badge label={modelLabel} color={colors.accent} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "4px 24px", fontSize: 13 }}>
+        <Row label="Ingreso bruto (fletes)" value={settle.grossRevenue} color={colors.green} />
+        {settle.brokerDeduction > 0 && <Row label="Broker (pass-through)" value={-settle.brokerDeduction} color={colors.orange} />}
+        {settle.model !== "profit_share" && <Row label={`Comisión empresa ${settle.commissionPct}% del bruto`} value={-settle.commission} color={colors.purple || "#9b7fe8"} />}
+        {settle.reimbursement > 0 && <Row label={`Gastos pagados por la empresa (${settle.expenseLines.length})`} value={-settle.reimbursement} color={colors.orange} />}
+        {settle.fixedTotal > 0 && <Row label="Cargos fijos" value={-settle.fixedTotal} color={colors.orange} />}
+        {settle.model === "profit_share" && <Row label="Utilidad a repartir" value={settle.net} />}
+        {settle.model === "profit_share" && <Row label={`Tu parte ${settle.partnerSharePct}%`} value={settle.partnerShare} color={colors.green} />}
+        <Row label="A recibir" value={Math.max(0, toReceive)} color={colors.green} bold />
+      </div>
+      {viewMode !== "quincena" && p.fixedCharges?.length > 0 && <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 6 }}>Los cargos fijos se muestran solo en la vista por quincena.</div>}
+      {settle.expenseLines.length > 0 && <details style={{ marginTop: 8, fontSize: 12 }}><summary style={{ cursor: "pointer", color: colors.textMuted }}>Ver gastos descontados</summary>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}><tbody>{settle.expenseLines.map(e => <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11` }}><Td>{e.date}</Td><Td color={colors.textMuted}>{t[e.category] || e.category}</Td><Td>{e.description}</Td><Td align="right" color={colors.orange}>− {fmt(e.amount)}</Td></tr>)}</tbody></table></details>}
+    </Card>
 
     <Card>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>

@@ -38,7 +38,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   };
   // ¿Este gasto se le descuenta al socio en su liquidación (reembolso a la empresa)?
   const isChargedToPartner = (e) => {
-    if (["driverPay", "nominaTotalOverride", "adelanto_conductor", "broker_commission"].includes(e.category)) return false;
+    if (["driverPay", "nominaTotalOverride", "adelanto_conductor", "broker_commission", "partner_settlement"].includes(e.category)) return false;
     const p = partnerOfExpense(e);
     return !!p && expenseChargedToPartner(e, p);
   };

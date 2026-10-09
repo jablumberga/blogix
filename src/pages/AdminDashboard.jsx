@@ -3,6 +3,7 @@ import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote, Fil
 import { colors } from "../constants/theme.js";
 import { fmt, monthStr, getPeriodInfo, expenseTruckId } from "../utils/helpers.js";
 import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
+import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
 
 // ── Mini stat block ─────────────────────────────────────────────────────────
 function Stat({ label, value, color, sub, onClick }) {
@@ -39,7 +40,7 @@ function SectionTitle({ label, color }) {
   );
 }
 
-export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, isMobile }) {
+export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, pfSettings, isMobile }) {
   // brokers is used in the revenue useMemo for pass-through deduction
   const cm = monthStr();
   const today = new Date().toISOString().slice(0, 10);
@@ -409,6 +410,9 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
           </>
         )}
       </Card>
+
+      {/* ── Profit First: las tres cuentas ── */}
+      <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} isMobile={isMobile} />
 
       {/* ── Row 1: KPIs financieros ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 16 }}>

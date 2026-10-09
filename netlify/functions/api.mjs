@@ -243,13 +243,14 @@ async function readAllTables(url, key) {
     readTable(url, key, "bl_staff").catch(() => []), // tabla nueva: puede no existir aún
   ]);
   // Extract bank config stored in the settlement_status blob under __ keys
-  const { __bankAccount, __bankReconciliation, ...cleanSettlementStatus } = settlementStatus;
+  const { __bankAccount, __bankReconciliation, __pfSettings, ...cleanSettlementStatus } = settlementStatus;
   return {
     trips, expenses, trucks, drivers, clients, partners, brokers, suppliers,
     invoices, cobros, fixedTemplates, staff,
     settlementStatus: cleanSettlementStatus,
     bankAccount: __bankAccount || null,
     bankReconciliation: __bankReconciliation || null,
+    pfSettings: __pfSettings || null,
   };
 }
 
@@ -666,6 +667,7 @@ export default async (request) => {
           _version: newVersion,
           ...(body.bankAccount != null           ? { __bankAccount: body.bankAccount }           : {}),
           ...(body.bankReconciliation != null     ? { __bankReconciliation: body.bankReconciliation } : {}),
+          ...(body.pfSettings != null             ? { __pfSettings: body.pfSettings }             : {}),
         });
         return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "relational", _version: newVersion }, { headers: corsHeaders });
       } catch (err) {

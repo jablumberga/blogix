@@ -1,473 +1,189 @@
-import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { useState, useMemo } from "react";
+import { ChevronDown, ChevronRight, CheckCircle2, Printer, PiggyBank } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, genSettlementPeriods as genPeriods } from "../utils/helpers.js";
-import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
+import { fmt, genSettlementPeriods, today, nxId } from "../utils/helpers.js";
+import { computeSettlement, normalizePartner, PARTNER_MODELS } from "../utils/partnerModels.js";
+import { settlementRelease } from "../utils/profitFirst.js";
+import { companyHeaderHTML, openPrintWindow, esc } from "../utils/printReport.js";
+import { Card, PageHeader, Th, Td, StatusBadge, Badge } from "../components/ui/index.jsx";
 
-const NOMINA_CATS = new Set(["driverPay", "salary", "nominaTotalOverride"]);
+const PURPLE = "#9b7fe8";
+export const settlementKeyOf = (partnerId, pd) => `${partnerId}-${pd.mStr}-${pd.half}`;
 
-// ── Sub-component: one financial row ────────────────────────────────────────
-function FRow({ label, value, minus, plus, valueColor, bold, divider, size }) {
-  let wrapperStyle = { display: "flex", justifyContent: "space-between", alignItems: "baseline" };
-  if (divider === "single") {
-    wrapperStyle = { ...wrapperStyle, paddingTop: 10, marginTop: 6, borderTop: "1px solid rgba(255,255,255,0.12)" };
-  } else if (divider === "double") {
-    wrapperStyle = { ...wrapperStyle, paddingTop: 12, marginTop: 8, borderTop: "2px solid rgba(255,255,255,0.22)" };
-  }
+function FRow({ label, value, minus, plus, valueColor, bold, divider, size, hint }) {
+  let st = { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 };
+  if (divider === "single") st = { ...st, paddingTop: 10, marginTop: 6, borderTop: "1px solid rgba(255,255,255,0.12)" };
+  if (divider === "double") st = { ...st, paddingTop: 12, marginTop: 8, borderTop: "2px solid rgba(255,255,255,0.22)" };
   const prefix = minus && value > 0 ? "− " : plus && value > 0 ? "+ " : "";
-
-  return (
-    <div style={wrapperStyle}>
-      <span style={{ color: bold ? colors.text : colors.textMuted, fontWeight: bold ? 700 : 400, fontSize: size || 13 }}>
-        {label}
-      </span>
-      <span style={{ fontWeight: bold ? (size ? 800 : 700) : 500, fontSize: size || 13, color: valueColor || colors.text }}>
-        {prefix}{fmt(value)}
-      </span>
-    </div>
-  );
+  return <div style={st}>
+    <span style={{ color: bold ? colors.text : colors.textMuted, fontWeight: bold ? 700 : 400, fontSize: size || 13 }}>{label}{hint && <span style={{ fontSize: 10, color: colors.textMuted, marginLeft: 6 }}>{hint}</span>}</span>
+    <span style={{ fontWeight: bold ? (size ? 800 : 700) : 500, fontSize: size || 13, color: valueColor || colors.text }}>{prefix}{fmt(value)}</span>
+  </div>;
 }
 
-// ── Sub-component: collapsible trips (ingresos) table ────────────────────────
-function IngresosTable({ pTrips, clients, trucks, t }) {
+function Collapsible({ title, right, children }) {
   const [open, setOpen] = useState(false);
-  const total = pTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
-  return (
-    <div style={{ marginTop: 14 }}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: colors.textMuted, cursor: "pointer", fontSize: 12, padding: "4px 0" }}
-      >
-        {open ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}
-        Ingresos — <span style={{ color: colors.green, fontWeight: 600 }}>+ {fmt(total)}</span>
-      </button>
-      {open && (
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", marginTop: 6 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-                <Th>Fecha</Th><Th>Ruta</Th><Th>Cliente</Th><Th>{t.truck}</Th><Th align="center">Estado</Th><Th align="right">Ingreso</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...pTrips].sort((a, b) => (a.date || "").localeCompare(b.date || "")).map(tr => {
-                const cl = clients.find(c => c.id === tr.clientId);
-                const tk = trucks.find(tk => tk.id === tr.truckId);
-                return (
-                  <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
-                    <Td>{tr.date}</Td>
-                    <Td>{tr.origin ? `${tr.origin} → ` : ""}{tr.municipality}{tr.province ? `, ${tr.province}` : ""}</Td>
-                    <Td>{cl?.companyName || "—"}</Td>
-                    <Td>{tk?.plate || "—"}</Td>
-                    <Td align="center"><StatusBadge status={tr.status} t={t} /></Td>
-                    <Td align="right" bold color={colors.green}>{fmt(tr.revenue || 0)}</Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
+  return <div style={{ marginTop: 12 }}>
+    <button onClick={() => setOpen(v => !v)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: colors.textMuted, cursor: "pointer", fontSize: 12, padding: "4px 0" }}>
+      {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{title} — {right}
+    </button>
+    {open && <div style={{ overflowX: "auto", marginTop: 6 }}>{children}</div>}
+  </div>;
 }
 
-// ── Sub-component: collapsible consolidated gastos table ─────────────────────
-function GastosTable({ allExps, supplierMap, driverMap, brokerMap, t }) {
+/** Liquidación imprimible para entregar al socio. */
+export function settlementHTML({ s, partner, t }) {
+  const model = PARTNER_MODELS[s.model]?.label || s.model;
+  const rows = s.trips.map(tr => `<tr><td>${esc(tr.date)}</td><td>${esc(tr.municipality)}, ${esc(tr.province)}</td><td>${esc(tr.invoiceRef || "")}</td><td class="right">${fmt(tr.revenue || 0)}</td></tr>`).join("");
+  const exp = s.expenseLines.map(e => `<tr><td>${esc(e.date)}</td><td>${esc(t?.[e.category] || e.category)}</td><td>${esc(e.description)}</td><td class="right">−${fmt(e.amount)}</td></tr>`).join("");
+  const fixed = s.fixedLines.map(c => `<tr><td></td><td>Cargo fijo</td><td>${esc(c.name)}</td><td class="right">−${fmt(c.amount)}</td></tr>`).join("");
+  const line = (l, v, b) => `<tr><td colspan="3" class="right"${b ? ' style="font-weight:700"' : ""}>${l}</td><td class="right"${b ? ' style="font-weight:700"' : ""}>${v}</td></tr>`;
+  return `${companyHeaderHTML("LIQUIDACIÓN DE SOCIO")}
+    <table class="fields"><tr><td>Socio:</td><td>${esc(partner.name)}</td></tr><tr><td>Período:</td><td>${esc(s.period.label)}</td></tr><tr><td>Modelo:</td><td>${esc(model)}</td></tr><tr><td>Pago:</td><td>${esc(s.payDate || "")}</td></tr></table>
+    <h2>Viajes (${s.tripCount})</h2>
+    <table><thead><tr><th>Fecha</th><th>Destino</th><th>Referencia</th><th class="right">Flete</th></tr></thead><tbody>${rows}</tbody>
+    <tfoot>${line("Ingreso bruto", fmt(s.grossRevenue))}${s.brokerDeduction ? line("Broker (pass-through)", "−" + fmt(s.brokerDeduction)) : ""}${s.brokerDeduction ? line("Ingreso neto", fmt(s.netRevenue), true) : ""}</tfoot></table>
+    ${(exp || fixed) ? `<h2>Gastos pagados por la empresa (se reembolsan primero)</h2><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th class="right">Monto</th></tr></thead><tbody>${exp}${fixed}</tbody><tfoot>${line("Total descontado", "−" + fmt(s.expensesTotal + s.fixedTotal), true)}</tfoot></table>` : ""}
+    <h2>Resumen</h2>
+    <table><tbody>
+      ${line("Ingreso neto", fmt(s.netRevenue))}
+      ${s.model === "profit_share" ? line("Gastos reembolsados a la empresa", "−" + fmt(s.reimbursement)) + line("Utilidad a repartir", fmt(s.net), true) + line(`Socio ${s.partnerSharePct}%`, fmt(s.partnerShare)) + line(`Empresa ${100 - s.partnerSharePct}%`, fmt(s.companyShare))
+        : line(`Comisión empresa ${s.commissionPct}% del bruto`, "−" + fmt(s.commission)) + (s.reimbursement ? line("Gastos reembolsados a la empresa", "−" + fmt(s.reimbursement)) : "") + (s.fixedTotal ? line("Cargos fijos", "−" + fmt(s.fixedTotal)) : "")}
+      ${line("<b>A TRANSFERIR AL SOCIO</b>", `<b>${fmt(Math.max(0, s.toTransfer))}</b>`, true)}
+      ${s.toTransfer < 0 ? line("Saldo que el socio debe a la empresa", fmt(-s.toTransfer)) : ""}
+    </tbody></table>
+    <div class="sig"><div>Entregado por</div><div>Recibí conforme: ${esc(partner.name)}</div><div>Fecha</div></div>`;
+}
+
+function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, onToggle, onPrint, clients, trucks, t, isMobile }) {
   const [open, setOpen] = useState(false);
-  if (allExps.length === 0) return null;
-  const total = allExps.reduce((s, e) => s + e.amount, 0);
-  return (
-    <div style={{ marginTop: 14 }}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: colors.textMuted, cursor: "pointer", fontSize: 12, padding: "4px 0" }}
-      >
-        {open ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}
-        Gastos — <span style={{ color: colors.orange, fontWeight: 600 }}>− {fmt(total)}</span>
-      </button>
-      {open && (
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", marginTop: 6 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-                <Th>Fecha</Th><Th>Concepto</Th><Th>Categoría</Th><Th align="center">Estado</Th><Th align="right">Monto</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...allExps].sort((a, b) => (a.date || "").localeCompare(b.date || "")).map((e, i) => {
-                const sup = supplierMap.get(e.supplierId);
-                const drv = driverMap.get(e.driverId);
-                const br  = brokerMap?.get(e.brokerId);
-                const name = br?.name || sup?.name || drv?.name || e.description || "—";
-                const catLabel = t[e.category] || e.category || "—";
-                const isPending = !e.status || e.status === "pending";
-                return (
-                  <tr key={e.id ?? i} style={{ borderBottom: `1px solid ${colors.border}11` }}>
-                    <Td>{e.date || "—"}</Td>
-                    <Td>{name}</Td>
-                    <Td style={{ color: colors.textMuted }}>{catLabel}</Td>
-                    <Td align="center">
-                      <span style={{ color: isPending ? colors.orange : colors.green, fontWeight: 600, fontSize: 11 }}>
-                        {isPending ? "CxP" : "Pagado"}
-                      </span>
-                    </Td>
-                    <Td align="right" color={colors.orange}>− {fmt(e.amount)}</Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── SettlementCard ───────────────────────────────────────────────────────────
-function SettlementCard({ card, partner, periodLabel, clients, trucks, supplierMap, driverMap, brokerMap, t, isPartnerView, onToggle, isMobile }) {
-  const {
-    pTrips,
-    comisionExps, paidGastoExps, cxpExps, nominaExps,
-    comisiones, gastos, nomina,
-    grossRev, passThruDeduction, rev, net, adminComm, toTransfer, status,
-  } = card;
   const isPaid = status === "paid";
-  const [showDetail, setShowDetail] = useState(false);
-
-  const allGastoExps = [...comisionExps, ...paidGastoExps, ...cxpExps, ...nominaExps];
-
-  return (
-    <Card style={{ marginBottom: 16 }}>
-      {/* ── Header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, paddingBottom: 14, borderBottom: `1px solid ${colors.border}`, flexWrap: "wrap", gap: 12 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>{isPartnerView ? "Mi Liquidación" : partner.name}</div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
-            {periodLabel} • {pTrips.length} viaje{pTrips.length !== 1 ? "s" : ""}
-          </div>
+  const model = PARTNER_MODELS[s.model] || {};
+  const rel = settlementRelease(s);
+  const transfer = Math.max(0, s.toTransfer);
+  return <Card style={{ marginBottom: 14, borderLeft: `4px solid ${isPaid ? colors.green : colors.orange}` }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 16 }}>{isPartnerView ? "Mi liquidación" : partner.name} <Badge label={model.short || s.model} color={colors.accent} /></div>
+        <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{s.period.label} · {s.tripCount} viaje{s.tripCount !== 1 ? "s" : ""} entregado{s.tripCount !== 1 ? "s" : ""} · pago {s.payDate}{notDelivered > 0 && <span style={{ color: colors.orange }}> · {notDelivered} sin entregar (entran al entregarse)</span>}</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        {!isPartnerView && <div style={{ textAlign: "right", fontSize: 11, color: colors.textMuted }}>
+          <div>Empresa retiene</div><div style={{ fontWeight: 700, color: colors.cyan, fontSize: 14 }}>{fmt(s.companyReceives)}</div>
+        </div>}
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 11, color: colors.textMuted }}>{isPartnerView ? "RECIBES" : "A TRANSFERIR"}</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: isPaid ? colors.green : s.toTransfer < 0 ? colors.red : colors.orange }}>{fmt(transfer)}</div>
+          {s.toTransfer < 0 && <div style={{ fontSize: 10, color: colors.red }}>el socio debe {fmt(-s.toTransfer)}</div>}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, color: colors.textMuted }}>{isPartnerView ? "LO QUE RECIBES" : "A TRANSFERIR"}</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: isPaid ? colors.green : colors.orange }}>{fmt(toTransfer)}</div>
-          </div>
-          {!isPartnerView && (
-            <button
-              onClick={onToggle}
-              style={{ padding: "7px 14px", borderRadius: 8, border: "none", fontWeight: 700, fontSize: 12, cursor: "pointer", background: isPaid ? colors.green : colors.orange, color: "white" }}
-            >
-              {isPaid ? "✓ Transferido" : "Marcar Transferido"}
-            </button>
-          )}
-          {isPartnerView && (
-            <div style={{ padding: "7px 14px", borderRadius: 8, background: isPaid ? colors.green + "18" : colors.orange + "18", color: isPaid ? colors.green : colors.orange, fontWeight: 700, fontSize: 12 }}>
-              {isPaid ? "✓ Recibido" : "Pendiente"}
-            </div>
-          )}
-        </div>
+        {!isPartnerView && <>
+          <button onClick={onPrint} style={{ padding: "7px 10px", borderRadius: 8, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Printer size={13} /> PDF</button>
+          <button onClick={onToggle} style={{ padding: "7px 14px", borderRadius: 8, border: "none", fontWeight: 700, fontSize: 12, cursor: "pointer", background: isPaid ? colors.green : colors.orange, color: "white", display: "flex", alignItems: "center", gap: 4 }}>
+            <CheckCircle2 size={13} /> {isPaid ? "Transferido" : "Marcar transferido"}
+          </button>
+        </>}
+        {isPartnerView && <Badge label={isPaid ? "✓ Recibido" : "Pendiente"} color={isPaid ? colors.green : colors.orange} />}
+      </div>
+    </div>
+
+    <button onClick={() => setOpen(v => !v)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: colors.textMuted, cursor: "pointer", fontSize: 12, padding: "4px 0", marginTop: 8 }}>
+      {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{open ? "Ocultar detalle" : "Ver detalle"}
+    </button>
+
+    {open && <>
+      <div style={{ background: colors.inputBg, borderRadius: 10, padding: "14px 16px", border: `1px solid ${colors.border}`, marginTop: 10, display: "flex", flexDirection: "column", gap: 6, fontSize: isMobile ? 15 : 13 }}>
+        <FRow label="Ingreso bruto (fletes)" value={s.grossRevenue} plus valueColor={colors.green} />
+        {s.brokerDeduction > 0 && <FRow label="Broker (pass-through, ya descontado)" value={s.brokerDeduction} minus valueColor={colors.orange} />}
+        {s.brokerDeduction > 0 && <FRow label="Ingreso neto" value={s.netRevenue} bold />}
+        {s.model !== "profit_share" && <FRow label={`Comisión empresa ${s.commissionPct}% del bruto`} value={s.commission} minus valueColor={PURPLE} />}
+        {s.reimbursement > 0 && <FRow label="Gastos pagados por la empresa (reembolso primero)" value={s.reimbursement} minus valueColor={colors.orange} hint={`${s.expenseLines.length} gasto(s)`} />}
+        {s.fixedTotal > 0 && <FRow label="Cargos fijos (GPS, seguro…)" value={s.fixedTotal} minus valueColor={colors.orange} />}
+        {s.model === "profit_share" && <>
+          <FRow label="Utilidad a repartir" value={s.net} bold divider="single" valueColor={s.net >= 0 ? colors.green : colors.red} />
+          <FRow label={`Socio ${s.partnerSharePct}%`} value={s.partnerShare} />
+          <FRow label={`Empresa ${100 - s.partnerSharePct}%`} value={s.companyShare} valueColor={colors.cyan} />
+        </>}
+        <FRow label={isPartnerView ? "Recibes" : "A transferir al socio"} value={transfer} bold divider="double" valueColor={isPaid ? colors.green : colors.orange} size={18} />
+        {!isPartnerView && <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, background: PURPLE + "14", fontSize: 11, color: colors.textMuted, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <PiggyBank size={12} color={PURPLE} /><b style={{ color: PURPLE }}>Profit First:</b> apartado para el socio al cobrar {fmt(rel.pool)} · se transfiere {fmt(rel.transfer)} · <span style={{ color: colors.cyan }}>vuelve a OpEx {fmt(rel.releasedToOpex)}</span> (gastos reembolsados y cargos, sin 20/80: ya habían salido de OpEx).
+        </div>}
       </div>
 
-      {/* ── Detail toggle ── */}
-      <button
-        onClick={() => setShowDetail(v => !v)}
-        style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: colors.textMuted, cursor: "pointer", fontSize: 12, padding: "4px 0", marginTop: 4 }}
-      >
-        {showDetail ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
-        {showDetail ? "Ocultar detalle" : "Ver detalle y resumen financiero"}
-      </button>
-
-      {showDetail && (
-        <>
-          {/* ── Resumen Financiero — always visible when detail is open ── */}
-          <div style={{ background: colors.inputBg, borderRadius: 10, padding: "14px 16px", border: `1px solid ${colors.border}`, marginTop: 14 }}>
-            <h4 style={{ margin: "0 0 10px", fontSize: isMobile ? 15 : 13 }}>Resumen Financiero</h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: isMobile ? 15 : 13 }}>
-
-              <FRow label="Ingreso Bruto (tarifas)" value={grossRev} plus valueColor={colors.green} />
-
-              {passThruDeduction > 0 && (
-                <FRow
-                  label={isPartnerView ? "Retenciones broker (pass-through)" : "Deducción broker (pass-through)"}
-                  value={passThruDeduction}
-                  minus
-                  valueColor={colors.orange}
-                />
-              )}
-
-              {passThruDeduction > 0 && (
-                <FRow label="Ingreso Neto Recibido" value={rev} bold />
-              )}
-
-              {comisiones > 0 && (
-                <FRow
-                  label={isPartnerView ? "Retenciones" : "Comisiones broker"}
-                  value={comisiones}
-                  minus
-                  valueColor={colors.orange}
-                />
-              )}
-
-              {gastos > 0 && (
-                <FRow label="Gastos" value={gastos} minus valueColor={colors.orange} />
-              )}
-
-              {nomina > 0 && (
-                <FRow label="Nómina" value={nomina} minus valueColor={colors.orange} />
-              )}
-
-              <FRow
-                label="Neto"
-                value={net}
-                bold
-                divider="single"
-                valueColor={net >= 0 ? colors.green : colors.red}
-                size={15}
-              />
-
-              {adminComm > 0 && (
-                <FRow
-                  label={isPartnerView
-                    ? `Comisión empresa (${partner.commissionPct || 0}%)`
-                    : `Comisión admin (${partner.commissionPct || 0}%)`}
-                  value={adminComm}
-                  minus
-                  valueColor={colors.purple}
-                />
-              )}
-
-              <FRow
-                label="A Transferir"
-                value={toTransfer}
-                bold
-                divider="double"
-                valueColor={isPaid ? colors.green : colors.orange}
-                size={18}
-              />
-            </div>
-          </div>
-
-          {/* ── [Ingresos ▶] — collapsible trips table ── */}
-          <IngresosTable pTrips={pTrips} clients={clients} trucks={trucks} t={t} />
-
-          {/* ── [Gastos ▶] — consolidated all-costs table ── */}
-          <GastosTable
-            allExps={allGastoExps}
-            supplierMap={supplierMap}
-            driverMap={driverMap}
-            brokerMap={brokerMap}
-            t={t}
-          />
-        </>
-      )}
-    </Card>
-  );
+      <Collapsible title="Viajes" right={<span style={{ color: colors.green, fontWeight: 600 }}>+ {fmt(s.grossRevenue)}</span>}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>Fecha</Th><Th>Ruta</Th><Th>Cliente</Th><Th>{t.truck}</Th><Th align="center">Estado</Th><Th align="right">Flete</Th></tr></thead>
+          <tbody>{[...s.trips].sort((a, b) => (a.date || "").localeCompare(b.date || "")).map(tr => {
+            const cl = clients.find(c => c.id === tr.clientId); const tk = trucks.find(x => x.id === tr.truckId);
+            return <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}><Td>{tr.date}</Td><Td>{tr.municipality}{tr.province ? `, ${tr.province}` : ""}</Td><Td>{cl?.companyName || "—"}</Td><Td>{tk?.plate || "—"}</Td><Td align="center"><StatusBadge status={tr.status} t={t} /></Td><Td align="right" bold color={colors.green}>{fmt(tr.revenue || 0)}</Td></tr>;
+          })}</tbody>
+        </table>
+      </Collapsible>
+      {(s.expenseLines.length > 0 || s.fixedLines.length > 0) && <Collapsible title="Gastos descontados" right={<span style={{ color: colors.orange, fontWeight: 600 }}>− {fmt(s.expensesTotal + s.fixedTotal)}</span>}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>Fecha</Th><Th>Categoría</Th><Th>Concepto</Th><Th align="right">Monto</Th></tr></thead>
+          <tbody>
+            {s.expenseLines.map(e => <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11` }}><Td>{e.date}</Td><Td color={colors.textMuted}>{t[e.category] || e.category}</Td><Td>{e.description}</Td><Td align="right" color={colors.orange}>− {fmt(e.amount)}</Td></tr>)}
+            {s.fixedLines.map(c => <tr key={`f${c.id}`} style={{ borderBottom: `1px solid ${colors.border}11` }}><Td></Td><Td color={colors.textMuted}>Cargo fijo</Td><Td>{c.name}</Td><Td align="right" color={colors.orange}>− {fmt(c.amount)}</Td></tr>)}
+          </tbody>
+        </table>
+      </Collapsible>}
+    </>}
+  </Card>;
 }
 
-// ── Main page ────────────────────────────────────────────────────────────────
-export default function SettlementsPage({ t, trips, trucks, expenses, clients, partners, brokers, suppliers, drivers, settlementStatus, setSettlementStatus, user, partner, partnerTruckIds, isMobile }) {
+/**
+ * Liquidaciones de socios por quincena (1–15 / 16–30), con los 3 modelos.
+ * Profit First: lo transferido es pass-through (gasto `partner_settlement`);
+ * lo que la empresa retiene por gastos reembolsados vuelve a OpEx (releasedToOpex).
+ */
+export default function SettlementsPage({ t, trips = [], trucks = [], expenses = [], setExpenses, clients = [], partners = [], brokers = [], drivers = [], settlementStatus = {}, setSettlementStatus, user, partner, isMobile }) {
   const isPartnerView = user?.role === "partner";
+  const periods = useMemo(() => genSettlementPeriods(trips.map(tr => tr.date)), [trips]);
+  const list = isPartnerView ? [partner].filter(Boolean) : partners;
 
-  const clientMap   = new Map((clients   || []).map(c => [c.id, c]));
-  const brokerMap   = new Map((brokers   || []).map(b => [b.id, b]));
-  const supplierMap = new Map((suppliers || []).map(s => [s.id, s]));
-  const driverMap   = new Map((drivers   || []).map(d => [d.id, d]));
+  const groups = useMemo(() => periods.map(pd => {
+    const cards = list.map(raw => {
+      const p = normalizePartner(raw);
+      const s = computeSettlement({ partner: p, period: pd, trips, expenses, trucks, clients, brokers, drivers });
+      const truckIds = new Set(trucks.filter(tk => tk.partnerId === p.id).map(tk => tk.id));
+      const notDelivered = trips.filter(tr => truckIds.has(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo && tr.status !== "delivered" && tr.status !== "cancelled").length;
+      if (s.tripCount === 0 && s.fixedTotal === 0 && notDelivered === 0) return null;
+      return { p, s, notDelivered, key: settlementKeyOf(p.id, pd), status: settlementStatus[settlementKeyOf(p.id, pd)] || "unpaid" };
+    }).filter(Boolean);
+    if (cards.length === 0) return null;
+    return { pd, cards, total: cards.reduce((a, c) => a + Math.max(0, c.s.toTransfer), 0), pending: cards.filter(c => c.status !== "paid").reduce((a, c) => a + Math.max(0, c.s.toTransfer), 0) };
+  }).filter(Boolean), [periods, list, trips, expenses, trucks, clients, brokers, drivers, settlementStatus]);
 
-  const toggleStatus = (key) =>
-    setSettlementStatus(prev => ({ ...prev, [key]: prev[key] === "paid" ? "unpaid" : "paid" }));
-
-  const buildCard = (p, pTrips, pd, key) => {
-    const tripIdSet = new Set(pTrips.map(tr => tr.id));
-
-    // All driverPay expenses for these trips
-    const tripDriverPayExps = expenses.filter(e => e.category === "driverPay" && tripIdSet.has(e.tripId));
-
-    // Collect all driver IDs referenced by driverPay or trip assignment
-    const tripDriverMap    = new Map(pTrips.map(tr => [tr.id, tr.driverId]).filter(([, d]) => d));
-    const driverIdsFromPay = new Set(tripDriverPayExps.map(e => e.driverId).filter(Boolean));
-    const allDriverIds     = new Set([...pTrips.map(tr => tr.driverId).filter(Boolean), ...driverIdsFromPay]);
-
-    // Trucks belonging to this partner (for non-trip expenses like fuel)
-    const pTruckSet = new Set(trucks.filter(tk => tk.partnerId === p.id).map(tk => tk.id));
-
-    // Include fixed-salary drivers whose nómina arrives only via nominaTotalOverride
-    expenses.forEach(e => {
-      if (e.category !== "nominaTotalOverride") return;
-      if (!e.driverId) return;
-      if (!(e.date >= pd.dateFrom && e.date <= pd.dateTo)) return;
-      if (allDriverIds.has(e.driverId)) return;
-      const belongsByExpenseTruck = e.truckId && pTruckSet.has(e.truckId);
-      const driverTruckId = drivers.find(d => d.id === e.driverId)?.truckId;
-      const belongsByDriverTruck = driverTruckId && pTruckSet.has(driverTruckId);
-      if (belongsByExpenseTruck || belongsByDriverTruck) {
-        allDriverIds.add(e.driverId);
-      }
-    });
-
-    // nominaTotalOverride replaces individual driverPay for that driver in this period
-    const overrideExpenses = expenses.filter(e =>
-      e.category === "nominaTotalOverride" &&
-      allDriverIds.has(e.driverId) &&
-      e.date >= pd.dateFrom && e.date <= pd.dateTo
-    );
-    const overriddenDriverIds = new Set(overrideExpenses.map(e => e.driverId));
-
-    // Exclude driverPay for overridden drivers; nominaTotalOverride collected separately above
-    const tripExpenses = expenses.filter(e => {
-      if (tripIdSet.has(e.tripId)) {
-        if (e.category === "nominaTotalOverride") return false; // collected separately
-        if (e.category === "driverPay") {
-          const dId = e.driverId || tripDriverMap.get(e.tripId);
-          if (dId && overriddenDriverIds.has(dId)) return false;
-        }
-        return true;
-      }
-      // Non-trip expense linked to a partner's truck within the period (e.g. fuel, repairs)
-      if (!e.tripId && e.truckId && pTruckSet.has(e.truckId) &&
-          e.date >= pd.dateFrom && e.date <= pd.dateTo) {
-        return true;
-      }
-      return false;
-    });
-    const pExpenses = [...tripExpenses, ...overrideExpenses];
-
-    // ── Split into buckets ───────────────────────────────────────────────────
-    // 1. Comisiones / Retenciones
-    const comisionExps = pExpenses.filter(e => e.category === "broker_commission");
-    const comisiones   = comisionExps.reduce((s, e) => s + e.amount, 0);
-
-    // 2. Nómina (driver pay — committed regardless of payment status)
-    const nominaExps = pExpenses.filter(e => NOMINA_CATS.has(e.category));
-    const nomina     = nominaExps.reduce((s, e) => s + e.amount, 0);
-
-    // 3. Gastos — ALL operational expenses (paid or pending)
-    const gastoExps     = pExpenses.filter(e => !NOMINA_CATS.has(e.category) && e.category !== "broker_commission");
-    const gastos        = gastoExps.reduce((s, e) => s + e.amount, 0);
-    const paidGastoExps = gastoExps.filter(e => e.status !== "pending");
-    const cxpExps       = gastoExps.filter(e => e.status === "pending");
-
-    // ── Revenue ─────────────────────────────────────────────────────────────
-    const passThruDeduction = pTrips.reduce((s, tr) => {
-      const cl = clientMap.get(tr.clientId);
-      if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return s;
-      const br = brokerMap.get(tr.brokerId);
-      if (!br) return s;
-      return s + Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
-    }, 0);
-
-    const grossRev   = pTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
-    const rev        = grossRev - passThruDeduction;
-
-    // ── Final figures ────────────────────────────────────────────────────────
-    const net        = rev - comisiones - gastos - nomina;
-    const adminComm  = Math.max(0, Math.round(net * ((p.commissionPct || 0) / 100)));
-    const toTransfer = net - adminComm;
-    const status     = settlementStatus[key] || "unpaid";
-
-    return {
-      pTrips, pExpenses,
-      comisionExps, comisiones, gastos, paidGastoExps, cxpExps, nomina, nominaExps,
-      grossRev, passThruDeduction, rev, net, adminComm, toTransfer, status, key,
-    };
+  const toggle = ({ p, s, key, status }) => {
+    const paid = status === "paid";
+    setSettlementStatus(prev => ({ ...prev, [key]: paid ? "unpaid" : "paid" }));
+    if (!setExpenses) return;
+    if (paid) { setExpenses(prev => prev.filter(e => !(e.category === "partner_settlement" && e.settlementKey === key))); return; }
+    const rel = settlementRelease(s);
+    setExpenses(prev => [...prev.filter(e => !(e.category === "partner_settlement" && e.settlementKey === key)), {
+      id: nxId(prev), category: "partner_settlement", partnerId: p.id, settlementKey: key, tripId: null, supplierId: null,
+      date: today(), paidDate: today(), status: "paid", paymentMethod: "transfer",
+      amount: rel.transfer, description: `Liquidación ${p.name} · ${s.period.label}`,
+      passThroughPool: rel.pool, releasedToOpex: rel.releasedToOpex, reimbursement: s.reimbursement, companyShare: s.companyShare,
+    }]);
   };
 
-  const periods = genPeriods((trips || []).map(tr => tr.date));
+  const print = ({ p, s }) => openPrintWindow(`Liquidación ${p.name} ${s.period.label}`, settlementHTML({ s, partner: p, t }));
 
-  // ── Partner view ─────────────────────────────────────────────────────────
-  if (isPartnerView) {
-    const periodCards = periods.map(pd => {
-      const myTrips = (trips || []).filter(tr => (partnerTruckIds || []).includes(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo && tr.status !== "cancelled");
-      if (myTrips.length === 0) return null;
-      const key = `${partner?.id}-${pd.mStr}-${pd.half}`;
-      return { pd, card: buildCard(partner || {}, myTrips, pd, key) };
-    }).filter(Boolean);
-
-    return (
-      <div>
-        <PageHeader title={t.settlements} />
-        {periodCards.length === 0 && (
-          <Card>
-            <div style={{ textAlign: "center", padding: 40, color: colors.textMuted }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: colors.text, marginBottom: 6 }}>No hay liquidaciones disponibles</div>
-              <div style={{ fontSize: 13 }}>Tus liquidaciones aparecen aquí al cerrar cada quincena. Si tienes viajes recientes, el administrador los procesará al cierre del período.</div>
-            </div>
-          </Card>
-        )}
-        {periodCards.map(({ pd, card }) => (
-          <SettlementCard
-            key={card.key}
-            card={card}
-            partner={partner || {}}
-            periodLabel={pd.label}
-            clients={clients}
-            trucks={trucks}
-            supplierMap={supplierMap}
-            driverMap={driverMap}
-            brokerMap={brokerMap}
-            t={t}
-            isPartnerView={true}
-            onToggle={() => toggleStatus(card.key)}
-            isMobile={isMobile}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  // ── Admin view ───────────────────────────────────────────────────────────
-  const periodGroups = periods.map(pd => {
-    const partnerCards = (partners || []).map(p => {
-      const pTruckSet = new Set((trucks || []).filter(tk => tk.partnerId === p.id).map(tk => tk.id));
-      const pTrips    = (trips || []).filter(tr => pTruckSet.has(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo && tr.status !== "cancelled");
-      if (pTrips.length === 0) return null;
-      const key = `${p.id}-${pd.mStr}-${pd.half}`;
-      return { p, card: buildCard(p, pTrips, pd, key) };
-    }).filter(Boolean);
-    if (partnerCards.length === 0) return null;
-    const periodTotal = partnerCards.reduce((s, x) => s + x.card.toTransfer, 0);
-    return { pd, partnerCards, periodTotal };
-  }).filter(Boolean);
-
-  return (
-    <div>
-      <PageHeader title={t.settlements} />
-      {periodGroups.length === 0 && (
-        <Card><div style={{ textAlign: "center", padding: 40, color: colors.textMuted }}>{t.noSettlements}</div></Card>
-      )}
-      {periodGroups.map(({ pd, partnerCards, periodTotal }) => (
-        <div key={`${pd.mStr}-${pd.half}`} style={{ marginBottom: 28 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, padding: "10px 4px", marginBottom: 10, borderBottom: `2px solid ${colors.border}` }}>
-            <div>
-              <span style={{ fontWeight: 700, fontSize: 15 }}>{pd.label}</span>
-              <span style={{ marginLeft: 12, fontSize: 12, color: colors.textMuted }}>
-                {partnerCards.length} socio{partnerCards.length !== 1 ? "s" : ""} • {partnerCards.reduce((s, x) => s + x.card.pTrips.length, 0)} viajes
-              </span>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 10, color: colors.textMuted }}>TOTAL A TRANSFERIR</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: colors.green }}>{fmt(periodTotal)}</div>
-            </div>
-          </div>
-          {partnerCards.map(({ p, card }) => (
-            <SettlementCard
-              key={card.key}
-              card={card}
-              partner={p}
-              periodLabel={pd.label}
-              clients={clients}
-              trucks={trucks}
-              supplierMap={supplierMap}
-              driverMap={driverMap}
-              brokerMap={brokerMap}
-              t={t}
-              isPartnerView={false}
-              onToggle={() => toggleStatus(card.key)}
-              isMobile={isMobile}
-            />
-          ))}
+  return <div>
+    <PageHeader title={t.settlements} />
+    {!isPartnerView && <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 12 }}>Los gastos que la empresa pagó por el camión del socio se reembolsan primero; después se aplica la comisión o el reparto. La primera quincena se paga a los {normalizePartner(partners[0] || {}).fondoDays || 30} días y luego cada 15.</div>}
+    {groups.length === 0 && <Card><div style={{ textAlign: "center", padding: 40, color: colors.textMuted }}>{isPartnerView ? "Tus liquidaciones aparecen aquí al cerrar cada quincena." : t.noSettlements}</div></Card>}
+    {groups.map(({ pd, cards, total, pending }) => <div key={`${pd.mStr}-${pd.half}`} style={{ marginBottom: 26 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, padding: "10px 4px", marginBottom: 10, borderBottom: `2px solid ${colors.border}` }}>
+        <div><span style={{ fontWeight: 700, fontSize: 15 }}>{pd.label}</span><span style={{ marginLeft: 12, fontSize: 12, color: colors.textMuted }}>{cards.length} socio{cards.length !== 1 ? "s" : ""} · {cards.reduce((a, c) => a + c.s.tripCount, 0)} viajes</span></div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 10, color: colors.textMuted }}>{isPartnerView ? "RECIBES" : "A TRANSFERIR"}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: pending > 0 ? colors.orange : colors.green }}>{fmt(total)}</div>
+          {!isPartnerView && pending > 0 && pending !== total && <div style={{ fontSize: 10, color: colors.orange }}>pendiente {fmt(pending)}</div>}
         </div>
-      ))}
-    </div>
-  );
+      </div>
+      {cards.map(c => <SettlementCard key={c.key} s={c.s} partner={c.p} status={c.status} notDelivered={c.notDelivered} isPartnerView={isPartnerView} onToggle={() => toggle(c)} onPrint={() => print(c)} clients={clients} trucks={trucks} t={t} isMobile={isMobile} />)}
+    </div>)}
+  </div>;
 }

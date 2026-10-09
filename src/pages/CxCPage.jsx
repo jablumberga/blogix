@@ -3,9 +3,15 @@ import { ChevronDown, ChevronRight, FileText } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, getPeriodInfo } from "../utils/helpers.js";
 import { Card, PageHeader } from "../components/ui/index.jsx";
+import { allocateCobro, accountBalances, DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
+import { today as todayFn } from "../utils/helpers.js";
 
-export default function CxCPage({ clients, trips, cobros, setCobros, trucks, invoices, setInvoices, setPage, isMobile, brokers }) {
-  const today = new Date().toISOString().slice(0, 10);
+export default function CxCPage({ clients, trips, cobros, setCobros, trucks, invoices, setInvoices, setPage, isMobile, brokers, partners = [], expenses = [], pfSettings = DEFAULT_PF_SETTINGS }) {
+  const today = todayFn();
+
+  // ── Profit First: cada cobro se reparte al registrarlo ───────────────────
+  const pfFor = (amount, tripIds) => allocateCobro({ amount, tripIds, trips, trucks, partners, clients, brokers, settings: pfSettings });
+  const pfTotals = useMemo(() => accountBalances({ cobros, expenses, settings: pfSettings }), [cobros, expenses, pfSettings]);
 
   const [expandedInv,     setExpandedInv]     = useState({});
   const [expandedSinFact, setExpandedSinFact] = useState({});
@@ -141,7 +147,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
         const t = trips.find(tr => tr.id === tid);
         return s + (t ? tripNetAmt(t) : 0);
       }, 0);
-      const patch = { collectedTripIds: merged, status: allDone ? "collected" : "partial", collectedDate: allDone ? today : null, amount: amt };
+      const patch = { collectedTripIds: merged, status: allDone ? "collected" : "partial", collectedDate: allDone ? today : null, amount: amt, pf: pfFor(amt, merged) };
       if (idx >= 0) newCobros[idx] = { ...newCobros[idx], ...patch };
       else newCobros.push({ id: newCobros.length > 0 ? Math.max(...newCobros.map(c => c.id)) + 1 : 1, clientId: inv.clientId, periodKey, ...patch });
     });
@@ -183,6 +189,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
       status: allDone ? "collected" : collected.length > 0 ? "partial" : "pending",
       collectedDate: allDone ? today : null,
       amount: amt,
+      pf: collected.length > 0 ? pfFor(amt, collected) : null,
     });
   };
 
@@ -209,6 +216,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
       inv.status === "draft"  ? colors.border  : colors.accent;
 
     const brokerDed = inv.brokerDeduction || (inv.isPassThrough ? inv.grossAmt - inv.amount : 0);
+    const pf = pfFor(inv.amount, inv.tripIds || []);
 
     return (
       <Card key={inv.id} style={{ marginBottom: 8, borderLeft: `4px solid ${borderColor}`, opacity: inv.status === "paid" ? 0.8 : 1 }}>
@@ -238,6 +246,13 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
                 </span>
               )}
               <span style={{ marginLeft: 8 }}>· {(inv.tripIds || []).length} viaje{(inv.tripIds || []).length !== 1 ? "s" : ""}</span>
+            </div>
+            <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ color: "#9b7fe8" }}>Profit First{inv.status === "paid" ? "" : " (al cobrar)"}:</span>
+              {pf.passThrough > 0 && <span>socios/broker {fmt(pf.passThrough)} ·</span>}
+              <span>real {fmt(pf.real)} →</span>
+              <span style={{ color: "#9b7fe8" }}>Reserva {fmt(pf.reserve)}</span>
+              <span style={{ color: colors.cyan }}>OpEx {fmt(pf.opex)}</span>
             </div>
           </div>
 
@@ -385,6 +400,13 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
             <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>{sinFacturarTrips.length} viaje{sinFacturarTrips.length !== 1 ? "s" : ""} con docs OK</div>
           </div>
         )}
+
+        <div style={{ background: colors.card, borderRadius: 10, padding: "14px 16px", border: `1px solid #9b7fe844` }}>
+          <div style={{ fontSize: 10, color: "#9b7fe8", fontWeight: 700, marginBottom: 4 }}>PROFIT FIRST · COBRADO</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}><span style={{ color: "#9b7fe8" }}>Reserva {fmt(pfTotals.reserve)}</span></div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: colors.cyan }}>OpEx {fmt(pfTotals.opexIn)}</div>
+          <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>{pfTotals.passThrough > 0 ? `${fmt(pfTotals.passThrough)} apartado para socios/broker` : "sin pass-through"}</div>
+        </div>
 
         <div style={{ background: colors.card, borderRadius: 10, padding: "14px 16px", border: `1px solid ${colors.green}33` }}>
           <div style={{ fontSize: 10, color: colors.green, fontWeight: 700, marginBottom: 4 }}>COBRADO</div>

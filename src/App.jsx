@@ -94,6 +94,7 @@ export default function App() {
     fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus,
     cobros, setCobros, invoices, setInvoices,
     bankAccount, setBankAccount, bankReconciliation, setBankReconciliation,
+    pfSettings, setPfSettings,
     syncStatus, partner, partnerTruckIds, driverObj, alerts,
   } = useApp();
 
@@ -200,7 +201,7 @@ export default function App() {
   ];
   const navItems = isAdmin ? adminNav : isPartner ? partnerNav : isAssistant ? assistantNav : driverNav;
 
-  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, partner, partnerTruckIds, driverObj, alerts };
+  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, partner, partnerTruckIds, driverObj, alerts };
 
   const pageTitles = {
     dashboard:   t.dashboard,
