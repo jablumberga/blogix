@@ -6,6 +6,7 @@ import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js"
 import { calcDriverPay, describeDriverPay, normalizeDriver, tripSize, DEFAULT_HELPERS } from "../utils/driverPay.js";
 import { TRIP_DOCS, docsComplete } from "../utils/payroll.js";
 import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
+import { buildCompanionTrip, applyReceived } from "../utils/jointTrip.js";
 import { generateConduce } from "../utils/generateConduce.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td, StatusBadge, DestinationSelect } from "../components/ui/index.jsx";
 
@@ -32,7 +33,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     return m;
   }, [invoices]);
 
-  const emptyForm = { date: today(), province: "", municipality: "", truckId: "", driverId: "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: null, helperPayEach: "", helperNames: [], discounts: [], tarifaOverride: null, joint: false, jointWith: null };
+  const emptyForm = { date: today(), province: "", municipality: "", truckId: "", driverId: "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: null, helperPayEach: "", helperNames: [], discounts: [], tarifaOverride: null, joint: false, jointWith: null, jointDriverId: "", jointTruckId: "" };
 
   // Viajes ya cobrados (en algún cobro registrado): no se pueden borrar ni cambiar de monto
   const collectedTripIds = useMemo(() => new Set((cobros || []).flatMap(c => (c.collectedTripIds || []).map(Number))), [cobros]);
@@ -158,6 +159,12 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     if (cl?.rules?.requiresInvoiceRef && !form.invoiceRef && !cancelled) { setFormError(t.invoiceRefRequired || "Referencia de factura requerida"); return; }
     const refCheck = checkTripRef({ ...form, id: editId, clientId: Number(form.clientId), truckId: Number(form.truckId), status: form.status }, trips, { drivers, trucks });
     if (!refCheck.ok) { setFormError(refCheck.error); return; }
+    const wantsCompanion = form.joint && !refCheck.linkWith && !form.jointWith && !cancelled;
+    if (wantsCompanion) {
+      if (!form.jointDriverId || !form.jointTruckId) { setFormError("Viaje conjunto: elige el chofer y el camión que van con él."); return; }
+      if (Number(form.jointDriverId) === Number(form.driverId)) { setFormError("El compañero no puede ser el mismo chofer."); return; }
+      if (Number(form.jointTruckId) === Number(form.truckId)) { setFormError("El camión del compañero debe ser distinto."); return; }
+    }
     if (payPreview && payPreview.payType === "perTrip" && !payPreview.rateFound && !cancelled) {
       if (!window.confirm("El chofer no tiene tarifa para este destino: el viaje se guardará SIN pago de chofer. ¿Continuar?")) return;
     }
@@ -167,7 +174,17 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     const helpersArr = Array.from({ length: numHelpers }, (_, i) => ({ name: helperNames[i] || `Ayudante ${i + 1}`, pay: helperPayEach }));
     const data = { ...form, truckId: Number(form.truckId), driverId: Number(form.driverId), clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null,
       weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, numHelpers, helperPayEach, helperNames, helpers: helpersArr,
-      discounts: (form.discounts || []).filter(d => Number(d.amount) > 0) };
+      discounts: (form.discounts || []).filter(d => Number(d.amount) > 0),
+      jointDriverId: form.joint && form.jointDriverId ? Number(form.jointDriverId) : null, jointTruckId: form.joint && form.jointTruckId ? Number(form.jointTruckId) : null };
+    // Viaje conjunto registrado aquí: se crea el viaje del compañero y sus gastos
+    const makeCompanion = (saved, list) => {
+      if (!wantsCompanion) return { saved, list };
+      const built = buildCompanionTrip({ trip: saved, companionDriverId: saved.jointDriverId, companionTruckId: saved.jointTruckId, drivers, trucks, clients, nextTripId: nxId(list), nextExpenseId: nxId(expenses), createdBy: user?.name });
+      if (!built) return { saved, list };
+      if (built.revenueEstimated) window.alert(`El cliente no tiene tarifa para ese destino con el camión del compañero: se usó la misma tarifa (${fmt(saved.revenue)}). Ajústala en el viaje #${built.trip.id} si hace falta.`);
+      if (built.expenses.length) setExpenses(prev => [...prev, ...built.expenses.map((e, i) => ({ ...e, id: nxId(prev) + i }))]);
+      return { saved: { ...saved, jointWith: built.trip.id }, list: [...list, built.trip] };
+    };
     if (editId) {
       const prevTrip = trips.find(tr => tr.id === editId);
       if (isLocked(editId) && prevTrip && (prevTrip.revenue !== data.revenue || prevTrip.clientId !== data.clientId || prevTrip.province !== data.province || prevTrip.municipality !== data.municipality)) {
@@ -175,13 +192,15 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       }
       let saved = { ...data, id: editId }, linked = null;
       if (refCheck.linkWith) { const l = linkJoint(saved, refCheck.linkWith); saved = l.trip; linked = l.other; }
-      setTrips(trips.map(tr => tr.id === editId ? saved : (linked && tr.id === linked.id ? linked : tr)));
+      const c = makeCompanion(saved, trips.map(tr => tr.id === editId ? saved : (linked && tr.id === linked.id ? linked : tr)));
+      setTrips(c.list.map(tr => tr.id === editId ? c.saved : tr));
       syncTripExpenses(editId, data, prevTrip);
     } else {
       const newId = nxId(trips);
       let saved = { ...data, id: newId }, linked = null;
       if (refCheck.linkWith) { const l = linkJoint(saved, refCheck.linkWith); saved = l.trip; linked = l.other; }
-      setTrips([...trips.map(tr => linked && tr.id === linked.id ? linked : tr), saved]);
+      const c = makeCompanion(saved, [...trips.map(tr => linked && tr.id === linked.id ? linked : tr), saved]);
+      setTrips(c.list.map(tr => tr.id === newId ? c.saved : tr));
       syncTripExpenses(newId, data, null);
     }
     setShowForm(false);
@@ -197,9 +216,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   };
 
   // Documentos recibidos (misma lógica que el panel de Oficina)
-  const setReceived = (tripId, value) => setTrips(prev => prev.map(tr => tr.id !== tripId ? tr : {
-    ...tr, docs: Object.fromEntries(TRIP_DOCS.map(d => [d.key, value])), docStatus: value ? "delivered" : "pending", podDelivered: value,
-    docsReceivedAt: value ? (tr.docsReceivedAt || today()) : null, docsReceivedBy: value ? (tr.docsReceivedBy || user?.name || "") : "" }));
+  const setReceived = (tripId, value) => setTrips(prev => applyReceived(prev, tripId, value, { docKeys: TRIP_DOCS.map(d => d.key), today: today(), by: user?.name }));
 
   const addExpense = () => {
     if (!expForm.amount || !expModal) return;
@@ -332,6 +349,18 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           const others = sameRefTrips(probe, trips);
           return <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, border: `1px solid ${others.length ? colors.orange + "80" : colors.border}`, background: others.length ? colors.orange + "0d" : "transparent", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: 12 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}><input type="checkbox" checked={!!form.joint} onChange={e => setForm({ ...form, joint: e.target.checked })} /> Viaje conjunto (2 camiones para la misma factura)</label>
+            {form.joint && others.length === 0 && !form.jointWith && <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", width: "100%" }}>
+              <Sel label="Chofer que va con él" value={form.jointDriverId} onChange={e => { const d = drivers.find(x => x.id === Number(e.target.value)); setForm({ ...form, jointDriverId: e.target.value, jointTruckId: d?.truckId || form.jointTruckId || "" }); }}>
+                <option value="">— elegir —</option>
+                {drivers.filter(d => d.id !== Number(form.driverId) && d.status !== "inactive").map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </Sel>
+              <Sel label="Su camión" value={form.jointTruckId} onChange={e => setForm({ ...form, jointTruckId: e.target.value })}>
+                <option value="">— elegir —</option>
+                {trucks.filter(tk => tk.id !== Number(form.truckId)).map(tk => <option key={tk.id} value={tk.id}>{tk.plate} ({tk.size})</option>)}
+              </Sel>
+              <span style={{ fontSize: 11, color: colors.textMuted, maxWidth: 340 }}>Se crea el viaje del compañero con la misma referencia, la tarifa del cliente para su camión y su pago según su tarifario.</span>
+            </div>}
+            {form.jointWith && <span style={{ color: colors.purple }}>Enlazado con el viaje #{form.jointWith}.</span>}
             {others.length > 0 && <span style={{ color: colors.orange }}>Esta referencia ya está en el viaje #{others[0].id} ({others[0].date}, {trucks.find(x => x.id === others[0].truckId)?.plate || "—"}, {drivers.find(x => x.id === others[0].driverId)?.name || "—"}). {form.joint || others[0].joint ? "Se enlazará como viaje conjunto: la factura paga los dos camiones." : "Marca «Viaje conjunto» si fueron dos camiones; si no, no se puede guardar."}</span>}
           </div>; })()}
         {selectedClient && selectedClient.rules && <div style={{ margin: "10px 0", padding: 10, background: colors.purple + "08", borderRadius: 8, border: `1px solid ${colors.purple}30`, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: 11 }}>

@@ -1,9 +1,10 @@
-import { useState, Fragment } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
 import { calcDriverPay } from "../utils/driverPay.js";
 import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
+import { checkRef } from "../api.js";
 import { Card, StatCard, PageHeader, Inp, Sel, Btn, Th, Td, DestinationSelect } from "../components/ui/index.jsx";
 
 export default function DriverDashboard({ t, user, trips = [], trucks = [], expenses = [], clients = [], drivers = [], driverObj, setTrips, setExpenses, brokers = [], isMobile }) {
@@ -11,8 +12,22 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
   const [form, setForm] = useState({});
   const [rateMsg, setRateMsg] = useState("");
   const [formError, setFormError] = useState("");
+  // Referencia de factura: el chofer no ve los viajes de otros, así que se consulta al servidor mientras escribe
+  const [refInfo, setRefInfo] = useState(null);   // { found, canJoin, alreadyOk, error, hint, checking }
+  useEffect(() => {
+    const ref = String(form.invoiceRef || "").trim(), clientId = Number(form.clientId), truckId = Number(form.truckId);
+    if (!showForm || !ref || !clientId) { setRefInfo(null); return; }
+    let alive = true;
+    setRefInfo(r => ({ ...(r || {}), checking: true }));
+    const h = setTimeout(async () => {
+      const info = await checkRef({ clientId, ref, truckId });
+      if (alive) setRefInfo({ ...info, checking: false });
+    }, 450);
+    return () => { alive = false; clearTimeout(h); };
+  }, [form.invoiceRef, form.clientId, form.truckId, showForm]);
+  const refBlocked = !!refInfo?.found && (!refInfo.canJoin || (!form.joint && !refInfo.found.joint));
 
-  const emptyForm = { date: today(), province: "", municipality: "", truckId: driverObj?.truckId || trucks[0]?.id || "", driverId: driverObj?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [], joint: false, jointWith: null };
+  const emptyForm = { date: today(), province: "", municipality: "", truckId: driverObj?.truckId || trucks.find(tk => tk.mine)?.id || trucks[0]?.id || "", driverId: driverObj?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [], joint: false, jointWith: null, jointDriverId: "", jointTruckId: "" };
 
   const openNew = () => { setForm({ ...emptyForm, createdBy: user?.name || driverObj?.name || "" }); setShowForm(true); setRateMsg(""); setFormError(""); };
 
@@ -54,10 +69,19 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
     if (cl?.rules?.requiresInvoiceRef && !form.invoiceRef) { setFormError(t.invoiceRefRequired); return; }
     const refCheck = checkTripRef({ ...form, id: null, clientId: Number(form.clientId), truckId: Number(form.truckId) }, trips, { drivers, trucks });
     if (!refCheck.ok) { setFormError(refCheck.error); return; }
+    if (refInfo?.checking) { setFormError("Verificando la referencia de factura, espera un segundo…"); return; }
+    if (refBlocked) { setFormError(refInfo.error || refInfo.hint || "Esa referencia de factura ya está registrada en otro viaje."); return; }
+    const foundOther = !!(refInfo?.found) || sameRefTrips({ ...form, id: null, clientId: Number(form.clientId) }, trips).length > 0;
+    if (form.joint && !foundOther) {
+      if (!form.jointDriverId || !form.jointTruckId) { setFormError("Viaje conjunto: elige el chofer y el camión que van contigo."); return; }
+      if (Number(form.jointDriverId) === driverObj?.id) { setFormError("El compañero no puedes ser tú mismo."); return; }
+      if (Number(form.jointTruckId) === Number(form.truckId)) { setFormError("El camión del compañero debe ser distinto al tuyo."); return; }
+    }
     setFormError("");
     const helpersPay = Number(form.helperPayEach) || 0;
     const helpersArr = Array.from({ length: Number(form.numHelpers) || 0 }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
-    const data = { ...form, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr };
+    const data = { ...form, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr,
+      jointDriverId: form.joint && form.jointDriverId ? Number(form.jointDriverId) : null, jointTruckId: form.joint && form.jointTruckId ? Number(form.jointTruckId) : null };
     const newId = nxId(trips);
     let saved = { ...data, id: newId }, linked = null;
     if (refCheck.linkWith) { const l = linkJoint(saved, refCheck.linkWith); saved = l.trip; linked = l.other; }
@@ -170,14 +194,8 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
         <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} />
         <div style={{ marginTop: 10 }}>
           <Sel label={t.truck} value={form.truckId} onChange={e => setForm({ ...form, truckId: e.target.value })}>
-            {trucks.length === 0
-              ? <option value="">— Sin camión asignado (contacta al admin) —</option>
-              : (() => {
-                  const assigned = trucks.filter(tk => tk.id === driverObj?.truckId || tk.driverId === driverObj?.id);
-                  const opts = assigned.length > 0 ? assigned : trucks;
-                  return opts.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>);
-                })()
-            }
+            {trucks.length === 0 && <option value="">— Sin camión asignado (contacta al admin) —</option>}
+            {[...trucks].sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0)).map(tk => <option key={tk.id} value={tk.id}>{tk.plate} ({tk.size}){tk.mine === false ? " · otro camión" : ""}</option>)}
           </Sel>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginTop: 10 }}>
@@ -189,10 +207,31 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
           <Inp label={t.invoiceRef + (selectedClient?.rules?.requiresInvoiceRef ? " *" : "")} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: selectedClient?.rules?.requiresInvoiceRef && !form.invoiceRef ? colors.red : colors.border }} />
         </div>
         {form.invoiceRef && (() => {
-          const others = sameRefTrips({ ...form, id: null, clientId: Number(form.clientId) }, trips);
-          return <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, border: `1px solid ${others.length ? colors.orange + "80" : colors.border}`, background: others.length ? colors.orange + "0d" : "transparent", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: 12 }}>
+          const local = sameRefTrips({ ...form, id: null, clientId: Number(form.clientId) }, trips)[0] || null;
+          const f = refInfo?.found || (local ? { id: local.id, date: local.date, joint: !!local.joint } : null);
+          const blocked = refBlocked || (local && !form.joint && !local.joint);
+          const color = f ? (blocked ? colors.red : colors.green) : colors.border;
+          return <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, border: `1px solid ${color}80`, background: f ? color + "0d" : "transparent", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: 12 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}><input type="checkbox" checked={!!form.joint} onChange={e => setForm({ ...form, joint: e.target.checked })} /> Viaje conjunto (2 camiones para la misma factura)</label>
-            {others.length > 0 && <span style={{ color: colors.orange }}>Esa referencia ya fue registrada en el viaje #{others[0].id} ({others[0].date}). {form.joint || others[0].joint ? "Se enlazará como viaje conjunto." : "Si fueron dos camiones para la misma factura, marca «Viaje conjunto»; si no, revisa la referencia."}</span>}
+            {form.joint && !f && <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", width: "100%" }}>
+              <Sel label="Chofer que va contigo" value={form.jointDriverId} onChange={e => { const d = drivers.find(x => x.id === Number(e.target.value)); setForm({ ...form, jointDriverId: e.target.value, jointTruckId: d?.truckId || form.jointTruckId || "" }); }}>
+                <option value="">— elegir —</option>
+                {drivers.filter(d => d.id !== driverObj?.id).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </Sel>
+              <Sel label="Su camión" value={form.jointTruckId} onChange={e => setForm({ ...form, jointTruckId: e.target.value })}>
+                <option value="">— elegir —</option>
+                {trucks.filter(tk => tk.id !== Number(form.truckId)).map(tk => <option key={tk.id} value={tk.id}>{tk.plate} ({tk.size})</option>)}
+              </Sel>
+              <span style={{ fontSize: 11, color: colors.textMuted, maxWidth: 320 }}>El viaje del compañero se crea solo, con la misma referencia y la tarifa de su camión; él no tiene que registrarlo.</span>
+            </div>}
+            {refInfo?.checking && <span style={{ color: colors.textMuted }}>Verificando referencia…</span>}
+            {!refInfo?.checking && f && <span style={{ color: blocked ? colors.red : colors.green, fontWeight: 600 }}>
+              {blocked
+                ? (refInfo?.error || `Esa referencia ya fue registrada en el viaje #${f.id} (${f.date}${f.plate ? `, ${f.plate}` : ""}${f.driverName ? `, ${f.driverName}` : ""}). Si fueron dos camiones para la misma factura, marca «Viaje conjunto»; si no, revisa la referencia.`)
+                : `Se enlazará como viaje conjunto con el viaje #${f.id}${f.plate ? ` (${f.plate}${f.driverName ? `, ${f.driverName}` : ""})` : ""}: la factura paga los dos camiones.`}
+            </span>}
+            {!refInfo?.checking && !f && refInfo && !refInfo.offline && <span style={{ color: colors.green }}>Referencia disponible ✓</span>}
+            {refInfo?.offline && <span style={{ color: colors.orange }}>Sin conexión: se verificará al guardar.</span>}
           </div>; })()}
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22`, display: "grid", gridTemplateColumns: Number(form.numHelpers) > 0 ? "1fr 1fr" : "1fr", gap: 10 }}>
           <Sel label={t.numHelpers} value={form.numHelpers ?? 0} onChange={e => setForm({ ...form, numHelpers: Number(e.target.value) })}>
@@ -211,13 +250,13 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
     {activePeriods.length === 0
       ? <Card><div style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", padding: 32 }}>{t.noTrips}</div></Card>
       : activePeriods.map((pd, idx) => (
-        <DriverCorteCard key={`${pd.mStr}-${pd.half}`} pd={pd} driverObj={driverObj} myTrips={allMyTrips} expenses={expenses} trucks={trucks} clients={clients} t={t} defaultOpen={idx === 0} setTrips={setTrips} allTrips={trips} />
+        <DriverCorteCard key={`${pd.mStr}-${pd.half}`} pd={pd} driverObj={driverObj} myTrips={allMyTrips} expenses={expenses} trucks={trucks} clients={clients} t={t} defaultOpen={idx === 0} setTrips={setTrips} allTrips={trips} driversAll={drivers} />
       ))
     }
   </div>;
 }
 
-function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t, defaultOpen, setTrips, allTrips }) {
+function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t, defaultOpen, setTrips, allTrips, driversAll = [] }) {
   const [open, setOpen] = useState(defaultOpen);
   const periodTrips = myTrips.filter(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo);
 
@@ -309,7 +348,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                     <tr style={{ borderBottom: `1px solid ${colors.border}11` }}>
                       <Td>{tr.date}</Td>
                       <Td>{tr.municipality}, {tr.province}</Td>
-                      <Td>{cl?.companyName || "—"}</Td>
+                      <Td>{cl?.companyName || "—"}{tr.joint && <div style={{ fontSize: 10, color: colors.purple || "#9b7fe8", fontWeight: 700 }}>⛓ conjunto{tr.jointAuto ? " (lo registró tu compañero)" : tr.jointDriverId ? ` con ${driversAll.find(d => d.id === tr.jointDriverId)?.name || "compañero"}` : ""}</div>}</Td>
                       <Td align="right" bold color={colors.green}>
                         {driverObj?.salaryType === "fixed" ? <span style={{ fontSize: 10, color: colors.textMuted }}>Fijo</span> : basePay > 0 ? fmt(basePay) : <span style={{ fontSize: 10, color: colors.orange }}>—</span>}
                       </Td>

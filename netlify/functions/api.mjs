@@ -16,7 +16,8 @@
  * Optional env var (set AFTER running migration SQL):
  *   BLOGIX_RELATIONAL=true  → use relational bl_* tables instead of JSON blob
  */
-import { validateTripWrites, linkJoint } from "../../src/utils/tripRef.js";
+import { validateTripWrites, linkJoint, checkTripRef, sameRefTrips } from "../../src/utils/tripRef.js";
+import { buildCompanionTrip } from "../../src/utils/jointTrip.js";
 
 const ALLOWED_ORIGINS = new Set([
   "https://blogix.do",
@@ -165,11 +166,16 @@ function applyRLS(data, user) {
     );
     // Drivers need active clients to fill out the new-trip form
     const activeClients = (data.clients || []).filter(c => !c.status || c.status === "active");
+    // Para viajes conjuntos el chofer elige al compañero: lista mínima de los demás choferes
+    // (id, nombre, camión) y todos los camiones activos (los suyos marcados `mine`).
+    const colleagues = (data.drivers || []).filter(d => d.id !== driver.id && d.status !== "inactive").map(d => ({ id: d.id, name: d.name, truckId: d.truckId || null, slim: true }));
+    const myTruckIds = new Set(myTrucks.map(tk => tk.id));
+    const allTrucks = (data.trucks || []).filter(tk => tk.status !== "inactive" || myTruckIds.has(tk.id)).map(tk => ({ id: tk.id, plate: tk.plate, size: tk.size, driverId: tk.driverId || null, partnerId: tk.partnerId || null, mine: myTruckIds.has(tk.id) }));
     return {
-      drivers:          [driver],
+      drivers:          [driver, ...colleagues],
       trips:            myTrips,
       expenses:         myExp,
-      trucks:           myTrucks,
+      trucks:           allTrucks.length ? allTrucks : myTrucks,
       clients:          activeClients,
       partners:         [], brokers: [], suppliers: [],
       settlementStatus: {}, fixedTemplates: [], cobros: [], invoices: [],
@@ -437,6 +443,27 @@ export default async (request) => {
   const isExport = url.pathname.endsWith("/export");
   const useRelational = BLOGIX_RELATIONAL === "true";
 
+  // ── GET /api/data/check-ref: ¿esta referencia ya existe para el cliente? ─────
+  // Cualquier usuario autenticado (el chofer no ve los viajes de otros, pero sí
+  // necesita saber si la referencia está tomada antes de guardar). Devuelve solo
+  // lo mínimo del otro viaje: id, fecha, placa, chofer y si está marcado conjunto.
+  if (request.method === "GET" && url.pathname.endsWith("/check-ref")) {
+    const q = url.searchParams;
+    const probe = { id: Number(q.get("tripId")) || null, clientId: Number(q.get("clientId")) || null, truckId: Number(q.get("truckId")) || null,
+      invoiceRef: q.get("ref") || "", status: "pending" };
+    if (!probe.clientId || !String(probe.invoiceRef).trim()) return Response.json({ found: null, canJoin: false, error: null }, { headers: corsHeaders });
+    let trips = [], drivers = [], trucks = [];
+    try { [trips, drivers, trucks] = await Promise.all([readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trips"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_drivers").catch(() => []), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trucks").catch(() => [])]); }
+    catch (e) { return Response.json({ error: `DB read failed: ${e.message}` }, { status: 500, headers: corsHeaders }); }
+    const others = sameRefTrips(probe, trips);
+    if (others.length === 0) return Response.json({ found: null, canJoin: false, error: null }, { headers: corsHeaders });
+    const o = others[0];
+    const found = { id: o.id, date: o.date, plate: trucks.find(t => t.id === o.truckId)?.plate || null, driverName: drivers.find(d => d.id === o.driverId)?.name || null, joint: !!o.joint, count: others.length };
+    const asJoint = checkTripRef({ ...probe, joint: true }, trips, { drivers, trucks });
+    const plain = checkTripRef(probe, trips, { drivers, trucks });
+    return Response.json({ found, canJoin: asJoint.ok, alreadyOk: plain.ok, error: asJoint.ok ? null : asJoint.error, hint: plain.ok ? null : plain.error }, { headers: corsHeaders });
+  }
+
   // ── GET ───────────────────────────────────────────────────────────────────
   if (request.method === "GET") {
     let data = defaultData;
@@ -531,6 +558,28 @@ export default async (request) => {
         const refs = await enforceTripRefs(SUPABASE_URL, SUPABASE_SERVICE_KEY, driverTrips);
         if (refs.error) return Response.json({ error: refs.error, code: "duplicate_ref", tripId: refs.tripId }, { status: 422, headers: corsHeaders });
         driverTrips.length = 0; driverTrips.push(...refs.trips);
+        // Viaje conjunto registrado por este chofer: el servidor crea el viaje del compañero
+        const needCompanion = driverTrips.filter(tr => tr.joint && tr.jointDriverId && tr.jointTruckId && !tr.jointWith && tr.status !== "cancelled");
+        if (needCompanion.length > 0) {
+          const [allTrips, allDrivers, allTrucks, allClients, allExps] = await Promise.all([
+            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trips"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_drivers"),
+            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trucks"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_clients"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_expenses")]);
+          let nextTripId = Math.max(0, ...allTrips.map(t => Number(t.id) || 0), ...driverTrips.map(t => Number(t.id) || 0)) + 1;
+          let nextExpId = Math.max(0, ...allExps.map(e => Number(e.id) || 0), ...driverExps.map(e => Number(e.id) || 0)) + 1;
+          const newTrips = [], newExps = [];
+          for (const tr of needCompanion) {
+            if (Number(tr.jointDriverId) === driverId) continue; // no puede enlazarse consigo mismo
+            const already = allTrips.find(t => t.jointWith === tr.id && t.status !== "cancelled");
+            if (already) { tr.jointWith = already.id; continue; }   // ya se creó en un guardado anterior
+            const built = buildCompanionTrip({ trip: tr, companionDriverId: tr.jointDriverId, companionTruckId: tr.jointTruckId, drivers: allDrivers, trucks: allTrucks, clients: allClients, nextTripId, nextExpenseId: nextExpId, createdBy: tr.createdBy });
+            if (!built) continue;
+            nextTripId += 1; nextExpId += built.expenses.length;
+            newTrips.push(built.trip); newExps.push(...built.expenses);
+            tr.jointWith = built.trip.id;
+          }
+          if (newTrips.length) await fetch(`${SUPABASE_URL}/rest/v1/bl_trips`, { method: "POST", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify(newTrips.map(tr => ({ id: tr.id, rec: tr }))) });
+          if (newExps.length) await fetch(`${SUPABASE_URL}/rest/v1/bl_expenses`, { method: "POST", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify(newExps.map(e => ({ id: e.id, rec: e }))) });
+        }
         if (refs.extraUpserts.length > 0) {
           await fetch(`${SUPABASE_URL}/rest/v1/bl_trips`, { method: "POST", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify(refs.extraUpserts.map(tr => ({ id: tr.id, rec: tr }))) });
         }
@@ -590,7 +639,17 @@ export default async (request) => {
           });
         }
       }
-      return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "driver-write" }, { headers: corsHeaders });
+      // Sube la versión: un admin con el app abierto recibe conflicto y recarga (no borra lo que el chofer creó)
+      let newVersion = 0;
+      if (useRelational) {
+        try {
+          const sRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_settlement_status?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+          const cur = sRes.ok ? ((await sRes.json())[0]?.data || {}) : {};
+          newVersion = Date.now();
+          await syncSettlementStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY, { ...cur, _version: newVersion });
+        } catch { newVersion = 0; }
+      }
+      return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "driver-write", ...(newVersion ? { _version: newVersion } : {}) }, { headers: corsHeaders });
     }
 
     // ── Asistente de oficina: solo documentos de viajes existentes ───────
@@ -758,5 +817,5 @@ export default async (request) => {
 };
 
 export const config = {
-  path: ["/api/data", "/api/data/export"],
+  path: ["/api/data", "/api/data/export", "/api/data/check-ref"],
 };

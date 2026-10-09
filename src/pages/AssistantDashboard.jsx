@@ -4,6 +4,7 @@ import { colors } from "../constants/theme.js";
 import { genPeriods, today } from "../utils/helpers.js";
 import { buildPayroll, partnerTripsInPeriod, TRIP_DOCS } from "../utils/payroll.js";
 import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow } from "../utils/printReport.js";
+import { applyReceived } from "../utils/jointTrip.js";
 import { Card, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
 /**
@@ -31,12 +32,8 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
   const detailItems = selectedDriver ? selectedDriver.allTrips : selectedPartner ? selectedPartner.items : [];
 
   // ── Documentos físicos recibidos (una sola marca por viaje) ────────────
-  const setReceived = (tripId, value) => setTrips(prev => prev.map(tr => {
-    if (tr.id !== tripId) return tr;
-    const docs = Object.fromEntries(TRIP_DOCS.map(d => [d.key, value]));
-    return { ...tr, docs, docStatus: value ? "delivered" : "pending", podDelivered: value,
-      docsReceivedAt: value ? (tr.docsReceivedAt || today()) : null, docsReceivedBy: value ? (tr.docsReceivedBy || user?.name || "") : "" };
-  }));
+  // Viaje conjunto: una sola entrega de la factura marca los dos viajes
+  const setReceived = (tripId, value) => setTrips(prev => applyReceived(prev, tripId, value, { docKeys: TRIP_DOCS.map(d => d.key), today: today(), by: user?.name }));
   const setAllReceived = (items, value) => items.forEach(({ trip }) => setReceived(trip.id, value));
 
   // ── Reportes ────────────────────────────────────────────────────────────
@@ -122,7 +119,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
             </tr></thead>
             <tbody>{detailItems.map(({ trip, client, truck, driver: drv, docsOk }) =>
               <tr key={trip.id} style={{ borderBottom: `1px solid ${colors.border}11`, background: docsOk ? colors.green + "0a" : colors.orange + "0a" }}>
-                <Td>{trip.date}</Td><Td>{client?.companyName || "—"}</Td><Td>{trip.invoiceRef || <span style={{ color: colors.textMuted }}>—</span>}</Td>
+                <Td>{trip.date}</Td><Td>{client?.companyName || "—"}</Td><Td>{trip.invoiceRef || <span style={{ color: colors.textMuted }}>—</span>}{trip.joint && <div style={{ fontSize: 10, color: "#9b7fe8", fontWeight: 700 }}>⛓ conjunto{trip.jointWith ? ` con #${trip.jointWith}` : ""} · una sola entrega marca los dos</div>}</Td>
                 <Td>{trip.municipality}<span style={{ color: colors.textMuted }}>, {trip.province}</span></Td>
                 {selectedPartner && <Td>{drv?.name || "—"}</Td>}
                 <Td>{truck?.plate || "—"}</Td>

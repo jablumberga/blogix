@@ -170,3 +170,16 @@ export async function saveData(data, version = 0) {
 
   return { saved: "localStorage" };
 }
+
+
+/** Consulta al servidor si una referencia de factura ya existe para el cliente (viaje conjunto). */
+export async function checkRef({ clientId, ref, truckId, tripId }) {
+  const token = getToken();
+  if (!token || !clientId || !String(ref || "").trim()) return { found: null, canJoin: false, error: null };
+  try {
+    const qs = new URLSearchParams({ clientId: String(clientId), ref: String(ref), truckId: String(truckId || ""), tripId: String(tripId || "") });
+    const res = await fetch(`${API_URL}/check-ref?${qs}`, { headers: authHeaders(), cache: "no-store" });
+    if (!res.ok) return { found: null, canJoin: false, error: null, offline: true };
+    return await res.json();
+  } catch { return { found: null, canJoin: false, error: null, offline: true }; }
+}

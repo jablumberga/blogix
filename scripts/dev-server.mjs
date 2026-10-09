@@ -155,7 +155,7 @@ async function restHandler(req, url) {
 
 // ── Netlify Functions ───────────────────────────────────────────────────────
 const FUNCTIONS = [
-  ["api.mjs",        ["/api/data", "/api/data/export"]],
+  ["api.mjs",        ["/api/data", "/api/data/export", "/api/data/check-ref"]],
   ["auth.mjs",       ["/api/auth/login", "/api/auth/logout"]],
   ["chat.mjs",       ["/api/chat"]],
   ["push-token.mjs", ["/api/push/token"]],
