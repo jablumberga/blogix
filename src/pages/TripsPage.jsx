@@ -12,7 +12,7 @@ import { checkRef } from "../api.js";
 import { generateConduce } from "../utils/generateConduce.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td, StatusBadge, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, invoices, cobros = [], partners = [], isMobile }) {
+export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, invoices, cobros = [], partners = [], pfSettings, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({});
@@ -276,7 +276,9 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const tripExpMap = expenses.reduce((m, e) => { if (e.tripId && !["adelanto_conductor", "nominaTotalOverride", "partner_settlement"].includes(e.category)) m.set(e.tripId, (m.get(e.tripId) || 0) + e.amount); return m; }, new Map());
   if (filterExtra === "nodocs") filtered = filtered.filter(tr => tr.status !== "cancelled" && !docsComplete(tr, clientMap.get(tr.clientId)));
   if (filterExtra === "uninvoiced") filtered = filtered.filter(tr => tr.status !== "cancelled" && (tr.revenue || 0) > 0 && !invoicedTripMap.has(tr.id));
-  // Margen por viaje: tarifa − chofer − ayudantes − gastos del viaje; en camión de socio, lo que le toca al socio
+  // Profit First por viaje: ingreso real = tarifa − socio/broker; Reserva = 20 % del real (no se toca);
+  // la operación del viaje (chofer, ayudantes, gastos) tiene que caber en el 80 % de OpEx.
+  const reservePct = Number(pfSettings?.reservePct ?? 20);
   const partnerMap = new Map(partners.map(p => [p.id, p]));
   const brokerMap = new Map((brokers || []).map(b => [b.id, b]));
   const marginOf = (tr) => {
@@ -285,9 +287,11 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     const costs = tripExpMap.get(tr.id) || 0;
     const partner = tk?.partnerId ? partnerMap.get(tk.partnerId) : null;
     const pt = tripPassThrough({ trip: tr, truck: tk, partner, broker: tr.brokerId ? brokerMap.get(tr.brokerId) : null, brokerPassThrough: clientMap.get(tr.clientId)?.rules?.brokerPassThrough === true });
-    const mine = revenue - pt.total;                     // ingreso real de la empresa
-    const net = mine - costs;                             // lo que queda después de la operación pagada por la empresa
-    return { revenue, costs, partnerPart: pt.partner, brokerPart: pt.broker, mine, net, pct: revenue > 0 ? net / revenue * 100 : 0, partner };
+    const real = revenue - pt.total;
+    const reserve = Math.round(real * reservePct / 100);
+    const opex = real - reserve;
+    const left = opex - costs;                                // lo que queda en OpEx después de la operación del viaje
+    return { revenue, costs, partnerPart: pt.partner, brokerPart: pt.broker, real, reserve, opex, left, pct: opex > 0 ? costs / opex * 100 : (costs > 0 ? 999 : 0), partner };
   };
   const summary = filtered.reduce((a, tr) => {
     const m = marginOf(tr); const cl = clientMap.get(tr.clientId);
@@ -296,10 +300,10 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       if (invoicedTripMap.has(tr.id)) { a.invoiced += 1; a.invoicedAmt += Number(tr.revenue) || 0; } else if ((tr.revenue || 0) > 0) { a.uninvoiced += 1; a.uninvoicedAmt += Number(tr.revenue) || 0; }
       if (collectedTripIds.has(tr.id)) { a.collected += 1; a.collectedAmt += Number(tr.revenue) || 0; }
       if (!docsComplete(tr, cl)) a.nodocs += 1;
-      if (m) { a.net += m.net; a.partner += m.partnerPart; }
+      if (m) { a.net += m.left; a.partner += m.partnerPart; a.reserve += m.reserve; a.opex += m.opex; a.costs += m.costs; }
     }
     return a;
-  }, { trips: 0, revenue: 0, invoiced: 0, invoicedAmt: 0, uninvoiced: 0, uninvoicedAmt: 0, collected: 0, collectedAmt: 0, nodocs: 0, net: 0, partner: 0 });
+  }, { trips: 0, revenue: 0, invoiced: 0, invoicedAmt: 0, uninvoiced: 0, uninvoicedAmt: 0, collected: 0, collectedAmt: 0, nodocs: 0, net: 0, partner: 0, reserve: 0, opex: 0, costs: 0 });
 
   if (search) {
     const s = search.toLowerCase();
@@ -352,7 +356,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         ["Cobrados", summary.collected, fmt(summary.collectedAmt), colors.cyan],
         ["Sin facturar", summary.uninvoiced, fmt(summary.uninvoicedAmt), colors.orange],
         ["Sin documentos", summary.nodocs, "no entran en nómina ni factura", colors.red],
-        ["Margen", fmt(summary.net), summary.partner > 0 ? `socios ${fmt(summary.partner)}` : "tarifa − operación", summary.net >= 0 ? colors.green : colors.red],
+        [`Queda en OpEx`, fmt(summary.net), `Reserva ${fmt(summary.reserve)} · OpEx ${fmt(summary.opex)} − operación ${fmt(summary.costs)}${summary.partner > 0 ? ` · socios ${fmt(summary.partner)}` : ""}`, summary.net >= 0 ? colors.green : colors.red],
       ].map(([k, v, sub, c]) => <div key={k} style={{ background: colors.card, border: `1px solid ${colors.border}`, borderRadius: 10, padding: "8px 12px" }}>
         <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>{k.toUpperCase()}</div>
         <div style={{ fontSize: 18, fontWeight: 800, color: c }}>{v}</div>
@@ -592,7 +596,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                 <Th>{t.driver}</Th><Th>{t.truck}</Th>
                 <Th align="center">{t.conduce}</Th>
                 <Th align="center">{t.document}</Th>
-                <Th align="center">{t.expenses}</Th><Th align="right">{t.rate}</Th><Th align="right">Margen</Th><Th align="right">{t.actions}</Th>
+                <Th align="center">{t.expenses}</Th><Th align="right">{t.rate}</Th><Th align="right">Profit First</Th><Th align="right">{t.actions}</Th>
               </tr></thead>
               <tbody>
                 {filtered.map(tr => {
@@ -639,10 +643,11 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                     </Td>
                     <Td align="right">
                       {(() => { const m = marginOf(tr); if (!m) return <span style={{ color: colors.textMuted }}>—</span>;
-                        const c = m.net < 0 ? colors.red : m.pct < 15 ? colors.orange : colors.green;
-                        return <div title={`Tarifa ${fmt(m.revenue)} − operación ${fmt(m.costs)}${m.partnerPart ? ` − socio ${fmt(m.partnerPart)}` : ""}${m.brokerPart ? ` − broker ${fmt(m.brokerPart)}` : ""}`} style={{ cursor: "help" }}>
-                          <div style={{ fontWeight: 700, color: c }}>{fmt(m.net)}</div>
-                          <div style={{ fontSize: 9, color: colors.textMuted }}>{m.pct.toFixed(0)} %{m.partner ? ` · socio ${fmt(m.partnerPart)}` : ""}</div>
+                        const c = m.left < 0 ? colors.red : m.pct > 85 ? colors.orange : colors.green;
+                        return <div title={`Tarifa ${fmt(m.revenue)}${m.partnerPart ? ` − socio ${fmt(m.partnerPart)}` : ""}${m.brokerPart ? ` − broker ${fmt(m.brokerPart)}` : ""} = ingreso real ${fmt(m.real)}\nReserva ${reservePct} %: ${fmt(m.reserve)} (no se toca)\nOpEx ${100 - reservePct} %: ${fmt(m.opex)} − operación ${fmt(m.costs)} = queda ${fmt(m.left)}`} style={{ cursor: "help" }}>
+                          <div style={{ fontSize: 9, color: "#9b7fe8" }}>Reserva {fmt(m.reserve)}</div>
+                          <div style={{ fontWeight: 700, color: c }}>{fmt(m.left)}</div>
+                          <div style={{ fontSize: 9, color: colors.textMuted }}>operación {m.pct > 900 ? "∞" : m.pct.toFixed(0) + " %"} del OpEx{m.partner ? ` · socio ${fmt(m.partnerPart)}` : ""}</div>
                         </div>; })()}
                     </Td>
                     <Td align="right">
