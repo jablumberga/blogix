@@ -44,7 +44,7 @@ test("documentos requeridos según reglas del cliente", () => {
 });
 
 test("el PDF del chofer no contiene montos y escapa HTML; el de nómina sí tiene totales", () => {
-  const p = buildPayroll({ period, drivers, trips: trips.map(t => t.id === 10 ? { ...t, cargo: "<img src=x onerror=alert(1)>" } : t), trucks, clients, expenses });
+  const p = buildPayroll({ period, drivers, trips: trips.map(t => t.id === 10 ? { ...t, invoiceRef: "<img src=x onerror=alert(1)>" } : t), trucks, clients, expenses });
   const html = driverPeriodReportHTML({ row: p.drivers[0], period, generatedBy: "Ana" });
   assert.ok(!html.includes("RD$"), "sin montos");
   assert.ok(!html.includes("onerror=alert"), "escapado");
