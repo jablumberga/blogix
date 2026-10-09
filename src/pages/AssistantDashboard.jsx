@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Printer, FileSpreadsheet, ClipboardCheck, Users, UserCog, Check, X, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Printer, FileSpreadsheet, ClipboardCheck, Users, UserCog, AlertTriangle } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { genPeriods, today } from "../utils/helpers.js";
-import { buildPayroll, partnerTripsInPeriod, TRIP_DOCS, docsRequired, docsComplete } from "../utils/payroll.js";
+import { buildPayroll, partnerTripsInPeriod, TRIP_DOCS } from "../utils/payroll.js";
 import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow } from "../utils/printReport.js";
 import { Card, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
@@ -18,7 +18,6 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
   const [pIdx, setPIdx] = useState(0);            // 0 = período en curso
   const period = periods[pIdx] || periods[0];
   const [sel, setSel] = useState(null);            // { kind: "driver"|"partner", id }
-  const [checklist, setChecklist] = useState(null); // viaje abierto en el checklist
 
   const payroll = useMemo(() => buildPayroll({ period, drivers, trips, trucks, clients, expenses, partners }), [period, drivers, trips, trucks, clients, expenses, partners]);
   const clientMap = useMemo(() => new Map(clients.map(c => [c.id, c])), [clients]);
@@ -30,16 +29,14 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
   const selectedPartner = sel?.kind === "partner" ? partnerRows.find(r => r.partner.id === sel.id) : null;
   const detailItems = selectedDriver ? selectedDriver.trips : selectedPartner ? selectedPartner.items : [];
 
-  // ── Checklist de documentos ──────────────────────────────────────────────
-  const setDoc = (tripId, key, value) => setTrips(prev => prev.map(tr => {
+  // ── Documentos físicos recibidos (una sola marca por viaje) ────────────
+  const setReceived = (tripId, value) => setTrips(prev => prev.map(tr => {
     if (tr.id !== tripId) return tr;
-    const docs = { ...(tr.docs || {}), [key]: value };
-    const client = clientMap.get(tr.clientId);
-    const complete = docsRequired(client).every(d => !!docs[d.key]);
-    return { ...tr, docs, docStatus: complete ? "delivered" : "pending", podDelivered: !!docs.pod,
-      docsReceivedAt: complete ? (tr.docsReceivedAt || today()) : null, docsReceivedBy: complete ? (tr.docsReceivedBy || user?.name || "") : tr.docsReceivedBy || "" };
+    const docs = Object.fromEntries(TRIP_DOCS.map(d => [d.key, value]));
+    return { ...tr, docs, docStatus: value ? "delivered" : "pending", podDelivered: value,
+      docsReceivedAt: value ? (tr.docsReceivedAt || today()) : null, docsReceivedBy: value ? (tr.docsReceivedBy || user?.name || "") : "" };
   }));
-  const markAll = (tripId, value) => TRIP_DOCS.forEach(d => setDoc(tripId, d.key, value));
+  const setAllReceived = (items, value) => items.forEach(({ trip }) => setReceived(trip.id, value));
 
   // ── Reportes ────────────────────────────────────────────────────────────
   const printDriver = (row) => openPrintWindow(`Viajes ${row.driver.name} ${period.label}`, driverPeriodReportHTML({ row, period, generatedBy: user?.name }));
@@ -56,7 +53,6 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
   const totalTrips = payroll.totals.trips;
   const totalDocsPending = payroll.drivers.reduce((s, r) => s + r.docsPending, 0);
 
-  const pill = (on, label, onClick, color = colors.accent) => <button type="button" onClick={onClick} style={{ padding: "4px 10px", borderRadius: 12, cursor: "pointer", fontSize: 11, border: `1px solid ${on ? color : colors.border}`, background: on ? color + "18" : "transparent", color: on ? color : colors.textMuted }}>{label}</button>;
 
   return <div>
     {/* ── Período ── */}
@@ -83,7 +79,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
           {payroll.drivers.length === 0 && <div style={{ fontSize: 12, color: colors.textMuted }}>Sin viajes en este período.</div>}
           {payroll.drivers.map(r => {
             const on = sel?.kind === "driver" && sel.id === r.driver.id;
-            return <button key={r.driver.id} type="button" onClick={() => { setSel({ kind: "driver", id: r.driver.id }); setChecklist(null); }}
+            return <button key={r.driver.id} type="button" onClick={() => setSel({ kind: "driver", id: r.driver.id })}
               style={{ display: "flex", width: "100%", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 4, borderRadius: 8, cursor: "pointer", textAlign: "left", border: `1px solid ${on ? colors.accent : colors.border}`, background: on ? colors.accent + "18" : "transparent", color: colors.text }}>
               <span style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>{r.driver.name}</span>
               <span style={{ fontSize: 11, color: colors.textMuted }}>{r.tripCount} viajes</span>
@@ -97,7 +93,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
           {partnerRows.map(r => {
             const on = sel?.kind === "partner" && sel.id === r.partner.id;
             const pend = r.items.filter(x => !x.docsOk).length;
-            return <button key={r.partner.id} type="button" onClick={() => { setSel({ kind: "partner", id: r.partner.id }); setChecklist(null); }}
+            return <button key={r.partner.id} type="button" onClick={() => setSel({ kind: "partner", id: r.partner.id })}
               style={{ display: "flex", width: "100%", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 4, borderRadius: 8, cursor: "pointer", textAlign: "left", border: `1px solid ${on ? colors.orange : colors.border}`, background: on ? colors.orange + "18" : "transparent", color: colors.text }}>
               <span style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>{r.partner.name}</span>
               <span style={{ fontSize: 11, color: colors.textMuted }}>{r.items.length} viajes</span>
@@ -115,43 +111,28 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
             <h3 style={{ margin: 0, fontSize: 15 }}>{selectedDriver ? selectedDriver.driver.name : selectedPartner?.partner.name}</h3>
             <span style={{ fontSize: 11, color: colors.textMuted }}>{detailItems.length} viajes · {period.label}</span>
             <span style={{ flex: 1 }} />
+            {detailItems.length > 0 && <Btn variant="ghost" onClick={() => setAllReceived(detailItems, !detailItems.every(x => x.docsOk))} style={{ fontSize: 11 }}><ClipboardCheck size={12} /> {detailItems.every(x => x.docsOk) ? "Desmarcar todos" : "Marcar todos como recibidos"}</Btn>}
             {selectedDriver && <Btn variant="ghost" onClick={() => printDriver(selectedDriver)} style={{ fontSize: 11 }}><Printer size={12} /> Relación de viajes (PDF)</Btn>}
           </div>
           <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-              <Th>Fecha</Th><Th>Viaje</Th><Th>Cliente</Th><Th>Referencia</Th><Th>Ciudad</Th>{selectedPartner && <Th>Chofer</Th>}<Th>Camión</Th><Th>Documentos</Th><Th align="right"></Th>
+              <Th>Fecha</Th><Th>Cliente</Th><Th>Referencia</Th><Th>Ciudad</Th>{selectedPartner && <Th>Chofer</Th>}<Th>Camión</Th><Th align="center">Recibido</Th>
             </tr></thead>
-            <tbody>{detailItems.map(({ trip, client, truck, driver: drv, docsOk }) => {
-              const req = docsRequired(client);
-              const open = checklist === trip.id;
-              return [
-                <tr key={trip.id} style={{ borderBottom: `1px solid ${colors.border}11`, background: open ? colors.accent + "0c" : "transparent" }}>
-                  <Td>{trip.date}</Td><Td>#{trip.id}</Td><Td>{client?.companyName || "—"}</Td><Td>{trip.invoiceRef || <span style={{ color: colors.textMuted }}>—</span>}</Td>
-                  <Td>{trip.municipality}<span style={{ color: colors.textMuted }}>, {trip.province}</span></Td>
-                  {selectedPartner && <Td>{drv?.name || "—"}</Td>}
-                  <Td>{truck?.plate || "—"}</Td>
-                  <Td>{req.map(d => <span key={d.key} title={d.label} style={{ marginRight: 6, fontSize: 11, color: trip.docs?.[d.key] ? colors.green : colors.red }}>{trip.docs?.[d.key] ? "✓" : "✗"} {d.label.split(" ")[0]}</span>)}{docsOk && <Badge label="Completo" color={colors.green} />}</Td>
-                  <Td align="right"><Btn variant={open ? "primary" : "ghost"} onClick={() => setChecklist(open ? null : trip.id)} style={{ fontSize: 11, padding: "5px 9px" }}><ClipboardCheck size={12} /> {open ? "Cerrar" : "Recibir docs"}</Btn></Td>
-                </tr>,
-                open && <tr key={`${trip.id}-chk`}><td colSpan={selectedPartner ? 9 : 8} style={{ padding: "6px 10px 12px", background: colors.accent + "0c" }}>
-                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12 }}>
-                    <span style={{ color: colors.textMuted }}>Documentos físicos recibidos:</span>
-                    {TRIP_DOCS.map(d => {
-                      const required = req.some(r => r.key === d.key);
-                      const on = !!trip.docs?.[d.key];
-                      return <label key={d.key} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", opacity: required ? 1 : 0.6 }}>
-                        <input type="checkbox" checked={on} onChange={e => setDoc(trip.id, d.key, e.target.checked)} /> {d.label}{!required && <span style={{ fontSize: 10, color: colors.textMuted }}>(no requerido)</span>}
-                      </label>;
-                    })}
-                    <span style={{ flex: 1 }} />
-                    {pill(false, "Marcar todos", () => markAll(trip.id, true), colors.green)}
-                    {pill(false, "Quitar todos", () => markAll(trip.id, false), colors.red)}
-                    {trip.docsReceivedAt && <span style={{ fontSize: 10, color: colors.textMuted }}>Completo el {trip.docsReceivedAt}{trip.docsReceivedBy ? ` por ${trip.docsReceivedBy}` : ""}</span>}
-                  </div>
-                </td></tr>,
-              ];
-            })}</tbody>
+            <tbody>{detailItems.map(({ trip, client, truck, driver: drv, docsOk }) =>
+              <tr key={trip.id} style={{ borderBottom: `1px solid ${colors.border}11`, background: docsOk ? colors.green + "0a" : "transparent" }}>
+                <Td>{trip.date}</Td><Td>{client?.companyName || "—"}</Td><Td>{trip.invoiceRef || <span style={{ color: colors.textMuted }}>—</span>}</Td>
+                <Td>{trip.municipality}<span style={{ color: colors.textMuted }}>, {trip.province}</span></Td>
+                {selectedPartner && <Td>{drv?.name || "—"}</Td>}
+                <Td>{truck?.plate || "—"}</Td>
+                <Td align="center">
+                  <label title={trip.docsReceivedAt ? `Recibido el ${trip.docsReceivedAt}${trip.docsReceivedBy ? ` por ${trip.docsReceivedBy}` : ""}` : "Marcar cuando llegue la factura física"} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11, color: docsOk ? colors.green : colors.textMuted }}>
+                    <input type="checkbox" checked={docsOk} onChange={e => setReceived(trip.id, e.target.checked)} style={{ width: 16, height: 16, cursor: "pointer" }} />
+                    {docsOk ? "Sí" : "No"}
+                  </label>
+                </Td>
+              </tr>
+            )}</tbody>
           </table>
           </div>
           {detailItems.length === 0 && <div style={{ textAlign: "center", padding: 24, color: colors.textMuted, fontSize: 12 }}>Sin viajes en este período.</div>}

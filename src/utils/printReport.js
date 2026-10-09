@@ -43,7 +43,7 @@ const docsCell = (trip, client) => TRIP_DOCS.map(d => `<span class="${trip.docs?
 export function driverPeriodReportHTML({ row, period, generatedBy, minRows = 14 }) {
   const d = row.driver;
   const plates = [...new Set(row.trips.map(x => x.truck?.plate).filter(Boolean))].join(", ");
-  const lines = row.trips.map(({ trip, client, truck, calc }) => `
+  const lines = row.trips.map((x) => { const { trip, client, truck, calc } = x; return `
     <tr>
       <td>${esc(trip.date)}</td>
       <td>${esc(client?.companyName || "—")}</td>
@@ -51,8 +51,8 @@ export function driverPeriodReportHTML({ row, period, generatedBy, minRows = 14 
       <td>${esc(trip.municipality)}, ${esc(trip.province)}</td>
       <td style="text-align:center">${esc(calc?.size || (truck?.size || ""))}</td>
       <td style="text-align:center">1</td>
-      <td class="small">${docsCell(trip, client)}</td>
-    </tr>`);
+      <td style="text-align:center" class="${x.docsOk ? "ok" : "no"}">${x.docsOk ? "✓" : "—"}</td>
+    </tr>`; });
   while (lines.length < minRows) lines.push(`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`);
   const docsOk = row.trips.filter(x => x.docsOk).length;
   return `
@@ -65,9 +65,9 @@ export function driverPeriodReportHTML({ row, period, generatedBy, minRows = 14 
       <tr><td>Contacto:</td><td>${esc(d.phone || "")}</td></tr>
     </table>
     <table class="grid">
-      <thead><tr><th>Fecha</th><th>Cliente</th><th>Referencia</th><th>Destino</th><th>Tarifa (T1/T2)</th><th>Cantidad</th><th>Docs</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Cliente</th><th>Referencia</th><th>Destino</th><th>Tarifa (T1/T2)</th><th>Cantidad</th><th>Recibido</th></tr></thead>
       <tbody>${lines.join("")}</tbody>
-      <tfoot><tr><td colspan="5" class="right"><b>Total :</b></td><td style="text-align:center"><b>${row.tripCount}</b></td><td class="small">${docsOk}/${row.tripCount} completos</td></tr></tfoot>
+      <tfoot><tr><td colspan="5" class="right"><b>Total :</b></td><td style="text-align:center"><b>${row.tripCount}</b></td><td class="small" style="text-align:center">${docsOk}/${row.tripCount}</td></tr></tfoot>
     </table>
     <div class="sig"><div>Entregado por: ${esc(generatedBy || "")}</div><div>Recibí conforme: ${esc(d.name)}</div><div>Fecha</div></div>`;
 }
