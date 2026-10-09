@@ -7327,5 +7327,19 @@
   }
  ],
  "push_tokens": [],
- "bl_rate_limits": []
+ "bl_rate_limits": [],
+ "bl_staff": [
+  {
+   "id": 1,
+   "rec": {
+    "id": 1,
+    "name": "Ana Oficina",
+    "username": "ana",
+    "password": "$2b$10$deaJPUj33leyNNUYRswtD.CJ1mKoLPzP0Eb1e4l1VTnjduU.sEGP.",
+    "role": "assistant",
+    "status": "active",
+    "phone": ""
+   }
+  }
+ ]
 }
