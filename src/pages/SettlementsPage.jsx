@@ -5,6 +5,8 @@ import { fmt, genSettlementPeriods, today, nxId } from "../utils/helpers.js";
 import { computeSettlement, normalizePartner, PARTNER_MODELS } from "../utils/partnerModels.js";
 import { settlementRelease } from "../utils/profitFirst.js";
 import { companyHeaderHTML, openPrintWindow, esc } from "../utils/printReport.js";
+import { COMPANY } from "../constants/company.js";
+const COMPANY_LEGAL = COMPANY.legalName, COMPANY_RNC = COMPANY.rnc;
 import { Card, PageHeader, Th, Td, StatusBadge, Badge } from "../components/ui/index.jsx";
 
 const PURPLE = "#9b7fe8";
@@ -35,25 +37,51 @@ function Collapsible({ title, right, children }) {
 export function settlementHTML({ s, partner, t, clients = [], trucks = [], status }) {
   const model = PARTNER_MODELS[s.model]?.label || s.model;
   const cm = new Map(clients.map(c => [c.id, c])), tm = new Map(trucks.map(x => [x.id, x]));
-  const rows = [...s.trips].sort((a, b) => (a.date || "").localeCompare(b.date || "")).map(tr => `<tr><td>${esc(tr.date)}</td><td>${esc(cm.get(tr.clientId)?.companyName || "—")}</td><td>${esc(tr.municipality)}, ${esc(tr.province)}</td><td>${esc(tr.invoiceRef || "")}</td><td>${esc(tm.get(tr.truckId)?.plate || "")}</td><td class="right">${fmt(tr.revenue || 0)}</td></tr>`).join("");
-  const exp = s.expenseLines.map(e => `<tr><td>${esc(e.date)}</td><td>${esc(t?.[e.category] || e.category)}</td><td>${esc(e.description)}</td><td class="right">−${fmt(e.amount)}</td></tr>`).join("");
-  const fixed = s.fixedLines.map(c => `<tr><td></td><td>Cargo fijo</td><td>${esc(c.name)}</td><td class="right">−${fmt(c.amount)}</td></tr>`).join("");
-  const line = (l, v, b, span = 3) => `<tr><td colspan="${span}" class="right"${b ? ' style="font-weight:700"' : ""}>${l}</td><td class="right"${b ? ' style="font-weight:700"' : ""}>${v}</td></tr>`;
+  const transfer = Math.max(0, s.toTransfer);
+  const charges = s.expensesTotal + s.fixedTotal;
+  const rows = [...s.trips].sort((a, b) => (a.date || "").localeCompare(b.date || "")).map((tr, i) =>
+    `<tr><td class="small">${i + 1}</td><td>${esc(tr.date)}</td><td>${esc(cm.get(tr.clientId)?.companyName || "—")}</td><td>${esc(tr.municipality)}, ${esc(tr.province)}</td><td>${esc(tr.invoiceRef || "")}</td><td>${esc(tm.get(tr.truckId)?.plate || "")}</td><td class="right">${fmt(tr.revenue || 0)}</td></tr>`).join("");
+  const exp = [...s.expenseLines].sort((a, b) => (a.date || "").localeCompare(b.date || "")).map(e =>
+    `<tr><td>${esc(e.date)}</td><td>${esc(t?.[e.category] || e.category)}</td><td>${esc(e.description)}</td><td>${esc(tm.get(e.truckId)?.plate || "")}</td><td class="right">${fmt(e.amount)}</td></tr>`).join("");
+  const fixed = s.fixedLines.map(c => `<tr><td>—</td><td>Cargo fijo</td><td>${esc(c.name)} (${esc({ biweekly: "quincenal", monthly: "mensual", yearly: "anual" }[c.frequency] || c.frequency)})</td><td></td><td class="right">${fmt(c.amount)}</td></tr>`).join("");
+  const r = (l, v, cls = "") => `<tr class="${cls}"><td class="lbl">${l}</td><td class="right">${v}</td></tr>`;
+  const summary = s.model === "profit_share"
+    ? r("Ingreso neto", fmt(s.netRevenue)) + (s.reimbursement ? r("Gastos reembolsados a la empresa", "− " + fmt(s.reimbursement)) : "") +
+      r("Utilidad a repartir", fmt(s.net), "sep") + r(`Parte del socio (${s.partnerSharePct} %)`, fmt(s.partnerShare)) + r(`Parte de la empresa (${100 - s.partnerSharePct} %)`, fmt(s.companyShare))
+    : r("Ingreso neto", fmt(s.netRevenue)) + r(`Comisión empresa (${s.commissionPct} % del bruto)`, "− " + fmt(s.commission)) +
+      (s.reimbursement ? r("Gastos reembolsados a la empresa", "− " + fmt(s.reimbursement)) : "") + (s.fixedTotal ? r("Cargos fijos", "− " + fmt(s.fixedTotal)) : "");
   return `${companyHeaderHTML("LIQUIDACIÓN DE SOCIO")}
-    <table class="fields"><tr><td>Socio:</td><td>${esc(partner.name)}</td></tr><tr><td>Período:</td><td>${esc(s.period.label)} (${esc(s.period.dateFrom)} a ${esc(s.period.dateTo)})</td></tr><tr><td>Modelo:</td><td>${esc(model)}</td></tr><tr><td>Fecha de pago:</td><td>${esc(s.payDate || "")}${status ? ` · ${status === "paid" ? "TRANSFERIDO" : "PENDIENTE"}` : ""}</td></tr><tr><td>Emitido:</td><td>${new Date().toLocaleDateString("es-DO")}</td></tr></table>
-    <h2>Ingresos — viajes entregados (${s.tripCount})</h2>
-    <table><thead><tr><th>Fecha</th><th>Cliente</th><th>Destino</th><th>Referencia</th><th>Camión</th><th class="right">Flete</th></tr></thead><tbody>${rows}</tbody>
-    <tfoot>${line("Ingreso bruto", fmt(s.grossRevenue), false, 5)}${s.brokerDeduction ? line("Broker (pass-through)", "−" + fmt(s.brokerDeduction), false, 5) : ""}${s.brokerDeduction ? line("Ingreso neto", fmt(s.netRevenue), true, 5) : ""}</tfoot></table>
-    ${(exp || fixed) ? `<h2>Cargos — gastos pagados por la empresa (se reembolsan primero) y cargos fijos</h2><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th class="right">Monto</th></tr></thead><tbody>${exp}${fixed}</tbody><tfoot>${line("Total descontado", "−" + fmt(s.expensesTotal + s.fixedTotal), true)}</tfoot></table>` : ""}
-    <h2>Resumen</h2>
-    <table><tbody>
-      ${line("Ingreso neto", fmt(s.netRevenue))}
-      ${s.model === "profit_share" ? line("Gastos reembolsados a la empresa", "−" + fmt(s.reimbursement)) + line("Utilidad a repartir", fmt(s.net), true) + line(`Socio ${s.partnerSharePct}%`, fmt(s.partnerShare)) + line(`Empresa ${100 - s.partnerSharePct}%`, fmt(s.companyShare))
-        : line(`Comisión empresa ${s.commissionPct}% del bruto`, "−" + fmt(s.commission)) + (s.reimbursement ? line("Gastos reembolsados a la empresa", "−" + fmt(s.reimbursement)) : "") + (s.fixedTotal ? line("Cargos fijos", "−" + fmt(s.fixedTotal)) : "")}
-      ${line("<b>A TRANSFERIR AL SOCIO</b>", `<b>${fmt(Math.max(0, s.toTransfer))}</b>`, true)}
-      ${s.toTransfer < 0 ? line("Saldo que el socio debe a la empresa", fmt(-s.toTransfer)) : ""}
+    <div class="info">
+      <div class="col"><div class="k">Socio</div><div class="v">${esc(partner.name)}</div><div class="k">Modelo</div><div class="v">${esc(model)}</div></div>
+      <div class="col"><div class="k">Período</div><div class="v">${esc(s.period.label)}</div><div class="k">Del / al</div><div class="v">${esc(s.period.dateFrom)} — ${esc(s.period.dateTo)}</div></div>
+      <div class="col" style="text-align:right"><div class="k">Fecha de pago</div><div class="v">${esc(s.payDate || "—")} ${status ? `<span class="pill ${status === "paid" ? "ok" : "no"}">${status === "paid" ? "TRANSFERIDO" : "PENDIENTE"}</span>` : ""}</div><div class="k">Emitido</div><div class="v">${new Date().toLocaleDateString("es-DO")}</div></div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="k">Viajes entregados</div><div class="v">${s.tripCount}</div></div>
+      <div class="kpi"><div class="k">Ingreso bruto</div><div class="v">${fmt(s.grossRevenue)}</div></div>
+      <div class="kpi"><div class="k">Cargos descontados</div><div class="v">${charges ? "− " + fmt(charges) : "—"}</div></div>
+      <div class="kpi hi"><div class="k">A transferir al socio</div><div class="v">${fmt(transfer)}</div></div>
+    </div>
+
+    <div class="section">1 · Ingresos — viajes entregados en el período</div>
+    <table><thead><tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Destino</th><th>Referencia</th><th>Camión</th><th class="right">Flete</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="7" class="muted">Sin viajes entregados en el período</td></tr>`}</tbody>
+      <tfoot><tr class="tot"><td colspan="6" class="right">Ingreso bruto</td><td class="right">${fmt(s.grossRevenue)}</td></tr>
+      ${s.brokerDeduction ? `<tr><td colspan="6" class="right">Broker (pass-through, descontado por el cliente)</td><td class="right">− ${fmt(s.brokerDeduction)}</td></tr><tr class="tot"><td colspan="6" class="right">Ingreso neto</td><td class="right">${fmt(s.netRevenue)}</td></tr>` : ""}</tfoot></table>
+
+    <div class="section">2 · Cargos — gastos pagados por la empresa y cargos fijos</div>
+    ${(exp || fixed) ? `<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Camión</th><th class="right">Monto</th></tr></thead><tbody>${exp}${fixed}</tbody>
+      <tfoot><tr class="tot"><td colspan="4" class="right">Total descontado (se reembolsa primero a la empresa)</td><td class="right">− ${fmt(charges)}</td></tr></tfoot></table>`
+      : `<div class="muted small" style="padding:6px 0 2px">Sin cargos en este período.</div>`}
+
+    <div class="section">3 · Resumen de la liquidación</div>
+    <table class="sum"><tbody>${summary}
+      <tr class="total"><td class="lbl">A TRANSFERIR AL SOCIO</td><td class="right">${fmt(transfer)}</td></tr>
+      ${s.toTransfer < 0 ? r("Saldo que el socio debe a la empresa", fmt(-s.toTransfer)) : ""}
     </tbody></table>
-    <div class="sig"><div>Entregado por</div><div>Recibí conforme: ${esc(partner.name)}</div><div>Fecha</div></div>`;
+
+    <div class="sig"><div>Entregado por</div><div>Recibí conforme: ${esc(partner.name)}</div><div>Fecha</div></div>
+    <div class="foot">${esc(COMPANY_LEGAL)} · RNC ${esc(COMPANY_RNC)} · Liquidación ${esc(s.period.label)} · ${esc(partner.name)}</div>`;
 }
 
 function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, onToggle, onPrint, clients, trucks, t, isMobile }) {

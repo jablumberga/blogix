@@ -20,7 +20,14 @@ const CSS = `
   .title { text-align: center; font-size: 16px; font-weight: 700; letter-spacing: .04em; margin: 8px 0 4px; } .rule { border: 0; border-top: 2px solid #f26522; margin: 4px 0 14px; }
   .fields { width: 60%; margin: 0 auto 12px; } .fields td { border: 0; padding: 3px 6px; } .fields td:first-child { text-align: right; font-weight: 700; width: 90px; } .fields td:last-child { border-bottom: 1px solid #333; }
   table.grid th, table.grid td { border: 1px solid #333; } table.grid th { background: #fff; text-align: center; } table.grid td { height: 22px; }
-  @media print { body { margin: 12mm; } .noprint { display: none; } }
+  .info { display: flex; justify-content: space-between; gap: 16px; margin: 6px 0 14px; } .info .col { flex: 1; } .info .k { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: .04em; } .info .v { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+  .kpis { display: flex; gap: 10px; margin: 10px 0 16px; } .kpi { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 8px 10px; } .kpi .k { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: .04em; } .kpi .v { font-size: 15px; font-weight: 800; margin-top: 2px; } .kpi.hi { border-color: #f26522; background: #fff7f2; } .kpi.hi .v { color: #f26522; }
+  .section { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #f26522; border-bottom: 1px solid #f26522; padding-bottom: 3px; margin: 18px 0 6px; }
+  table.sum { width: 60%; margin-left: auto; } table.sum td { border: 0; padding: 4px 6px; } table.sum tr.sep td { border-top: 1px solid #ccc; padding-top: 6px; } table.sum tr.total td { border-top: 2px solid #111; font-size: 14px; font-weight: 800; padding-top: 8px; } table.sum td.lbl { color: #444; } table.sum tr.total td.lbl { color: #111; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; } .pill.ok { background: #e7f7ec; color: #16a34a; } .pill.no { background: #fff1e6; color: #f26522; }
+  .foot { margin-top: 24px; font-size: 9px; color: #888; text-align: center; border-top: 1px solid #eee; padding-top: 6px; }
+  tr.tot td { font-weight: 700; background: #fafafa; }
+  @media print { body { margin: 12mm; } .noprint { display: none; } .kpi, .section, table { page-break-inside: avoid; } }
 `;
 
 export function companyHeaderHTML(title) {
