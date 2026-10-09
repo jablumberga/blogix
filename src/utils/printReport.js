@@ -118,3 +118,37 @@ export function payrollSheets(payroll) {
     ...drivers.flatMap(r => r.trips.map(({ trip, calc, client, truck }) => [trip.date, trip.id, r.driver.name, client?.companyName || "", `${trip.municipality}, ${trip.province}`, truck?.plate || "", calc.size, calc.base, calc.dieta, calc.numHelpers, calc.helperEach, calc.helpersTotal, calc.discounts, calc.driverNet, trip.docs?.factura ? "Sí" : "No", trip.docs?.conduce ? "Sí" : "No", trip.docs?.pod ? "Sí" : "No"]))];
   return { resumen, detalle };
 }
+
+/** Factura al cliente (formato FACTURA de la empresa: logo, razón social, RNC, datos y cuadro de viajes). */
+export function invoiceHTML({ inv, client, trips = [], trucks = [], brokers = [], minRows = 10 }) {
+  const items = (inv.tripIds || []).map(id => trips.find(t => t.id === id)).filter(Boolean).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const truckOf = (tr) => trucks.find(t => t.id === tr.truckId);
+  const plates = [...new Set(items.map(tr => truckOf(tr)?.plate).filter(Boolean))].join(", ");
+  const gross = items.reduce((s, tr) => s + (Number(tr.revenue) || 0), 0);
+  const passThrough = client?.rules?.brokerPassThrough === true;
+  const brokerDed = Number(inv.brokerDeduction) || (passThrough ? items.reduce((s, tr) => { const b = brokers.find(x => x.id === tr.brokerId); return s + (b ? Math.round((Number(tr.revenue) || 0) * (Number(b.commissionPct) || 0) / 100) : 0); }, 0) : 0);
+  const total = inv.amount != null ? Number(inv.amount) : gross - brokerDed;
+  const status = inv.status === "paid" ? "COBRADA" : inv.status === "cancelled" ? "ANULADA" : inv.status === "sent" ? "ENVIADA" : "BORRADOR";
+  const lines = items.map((tr, i) => { const tk = truckOf(tr); return `
+    <tr><td style="text-align:center">${i + 1}</td><td>${esc(tr.date)}</td><td>${esc(tr.invoiceRef || "")}</td><td>${esc(tr.municipality)}, ${esc(tr.province)}</td><td>${esc(tk?.plate || "")}${tr.joint ? " ⛓" : ""}</td><td style="text-align:center">${esc(tr.tarifaOverride && tr.tarifaOverride !== "custom" ? tr.tarifaOverride : (tk?.size || ""))}</td><td style="text-align:center">1</td><td class="right">${fmt(tr.revenue || 0)}</td></tr>`; });
+  while (lines.length < minRows) lines.push(`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`);
+  return `
+    ${companyHeaderHTML("FACTURA")}
+    <div class="info">
+      <div class="col"><div class="k">Cliente</div><div class="v">${esc(client?.companyName || "—")}</div><div class="k">Contacto</div><div class="v">${esc([client?.contactPerson, client?.phone].filter(Boolean).join(" · ") || "—")}</div></div>
+      <div class="col"><div class="k">Factura No.</div><div class="v">${esc(inv.invoiceNumber || inv.id)}</div><div class="k">Camión(es)</div><div class="v">${esc(plates || "—")}</div></div>
+      <div class="col" style="text-align:right"><div class="k">Fecha</div><div class="v">${esc(inv.date || "")}</div><div class="k">Vence</div><div class="v">${esc(inv.dueDate || "—")} <span class="pill ${inv.status === "paid" ? "ok" : "no"}">${status}</span></div></div>
+    </div>
+    <table class="grid">
+      <thead><tr><th>#</th><th>Fecha</th><th>Referencia</th><th>Destino</th><th>Camión</th><th>Tarifa (T1/T2)</th><th>Cantidad</th><th class="right">Total</th></tr></thead>
+      <tbody>${lines.join("")}</tbody>
+      <tfoot>
+        ${brokerDed > 0 ? `<tr><td colspan="7" class="right">Subtotal</td><td class="right">${fmt(gross)}</td></tr><tr><td colspan="7" class="right">Comisión broker (deducida)</td><td class="right">− ${fmt(brokerDed)}</td></tr>` : ""}
+        <tr class="tot"><td colspan="7" class="right"><b>TOTAL</b></td><td class="right"><b>${fmt(total)}</b></td></tr>
+      </tfoot>
+    </table>
+    ${items.some(tr => tr.joint) ? `<div class="small muted" style="margin-top:6px">⛓ Viaje conjunto: dos camiones bajo la misma referencia.</div>` : ""}
+    ${inv.notes ? `<div class="small" style="margin-top:8px">${esc(inv.notes)}</div>` : ""}
+    <div class="sig"><div>Entregado por</div><div>Recibido por: ${esc(client?.companyName || "")}</div><div>Fecha</div></div>
+    <div class="foot">${esc(COMPANY.legalName)} · RNC ${esc(COMPANY.rnc)} · ${esc(COMPANY.city)}</div>`;
+}

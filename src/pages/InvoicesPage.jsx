@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
-import { Plus, X, Pencil, Trash2, FileText, CheckCircle2, Clock, Send, Ban, AlertCircle, Lock } from "lucide-react";
+import { Plus, X, Pencil, Trash2, FileText, CheckCircle2, Clock, Send, Ban, AlertCircle, Lock, Eye } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, getPeriodInfo } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../components/ui/index.jsx";
+import { invoiceHTML, openPrintWindow } from "../utils/printReport.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function nextInvoiceNumber(invoices) {
@@ -415,6 +416,9 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                           ✓ Cobrar
                         </button>
                       )}
+                      <button onClick={() => openPrintWindow(`Factura ${inv.invoiceNumber || inv.id}`, invoiceHTML({ inv, client: cl, trips, trucks, brokers }))} title="Ver factura (PDF)" style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: "transparent", color: colors.text, cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                        <Eye size={11}/> Ver factura
+                      </button>
                       <button onClick={() => openEdit(inv)} title="Editar" style={{ background: "none", border: "none", color: colors.accent, cursor: "pointer", padding: 4 }}><Pencil size={13}/></button>
                       <button onClick={() => deleteInvoice(inv.id)} title="Eliminar" style={{ background: "none", border: "none", color: colors.red, cursor: "pointer", padding: 4 }}><Trash2 size={13}/></button>
                     </div>
