@@ -27,7 +27,8 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
 
   const selectedDriver = sel?.kind === "driver" ? payroll.drivers.find(r => r.driver.id === sel.id) : null;
   const selectedPartner = sel?.kind === "partner" ? partnerRows.find(r => r.partner.id === sel.id) : null;
-  const detailItems = selectedDriver ? selectedDriver.trips : selectedPartner ? selectedPartner.items : [];
+  // En el panel se ven TODOS los viajes del período (recibidos y pendientes); en nómina y PDF solo los recibidos
+  const detailItems = selectedDriver ? selectedDriver.allTrips : selectedPartner ? selectedPartner.items : [];
 
   // ── Documentos físicos recibidos (una sola marca por viaje) ────────────
   const setReceived = (tripId, value) => setTrips(prev => prev.map(tr => {
@@ -50,8 +51,8 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
     XLSX.writeFile(wb, `nomina-${period.dateFrom}-a-${period.dateTo}.xlsx`);
   };
 
-  const totalTrips = payroll.totals.trips;
-  const totalDocsPending = payroll.drivers.reduce((s, r) => s + r.docsPending, 0);
+  const totalTrips = payroll.drivers.reduce((s, r) => s + r.allTrips.length, 0);
+  const totalDocsPending = payroll.drivers.reduce((s, r) => s + r.pendingCount, 0);
 
 
   return <div>
@@ -65,7 +66,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
         </div>
         <button onClick={() => setPIdx(i => Math.max(0, i - 1))} disabled={pIdx === 0} style={{ background: "none", border: `1px solid ${colors.border}`, borderRadius: 8, color: pIdx === 0 ? colors.textMuted : colors.text, cursor: pIdx === 0 ? "default" : "pointer", padding: 6 }}><ChevronRight size={14} /></button>
         <span style={{ flex: 1 }} />
-        {totalDocsPending > 0 && <span style={{ fontSize: 11, color: colors.orange }}><AlertTriangle size={12} style={{ verticalAlign: "middle" }} /> {totalDocsPending} viaje(s) con documentos pendientes</span>}
+        {totalDocsPending > 0 && <span style={{ fontSize: 11, color: colors.orange }}><AlertTriangle size={12} style={{ verticalAlign: "middle" }} /> {totalDocsPending} viaje(s) pendiente(s) de documentos: no entran en nómina hasta recibirlos</span>}
         <Btn variant="ghost" onClick={printPayroll} style={{ fontSize: 11 }}><Printer size={12} /> Nómina del período (PDF)</Btn>
         <Btn onClick={exportPayrollXlsx} style={{ fontSize: 11 }}><FileSpreadsheet size={12} /> Nómina para contabilidad (Excel)</Btn>
       </div>
@@ -82,8 +83,8 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
             return <button key={r.driver.id} type="button" onClick={() => setSel({ kind: "driver", id: r.driver.id })}
               style={{ display: "flex", width: "100%", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 4, borderRadius: 8, cursor: "pointer", textAlign: "left", border: `1px solid ${on ? colors.accent : colors.border}`, background: on ? colors.accent + "18" : "transparent", color: colors.text }}>
               <span style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>{r.driver.name}</span>
-              <span style={{ fontSize: 11, color: colors.textMuted }}>{r.tripCount} viajes</span>
-              {r.docsPending > 0 ? <Badge label={`${r.docsPending} sin docs`} color={colors.orange} /> : <Badge label="docs ✓" color={colors.green} />}
+              <span style={{ fontSize: 11, color: colors.textMuted }}>{r.allTrips.length} viajes</span>
+              {r.pendingCount > 0 ? <Badge label={`${r.pendingCount} pendiente${r.pendingCount > 1 ? "s" : ""}`} color={colors.orange} /> : <Badge label="recibidos ✓" color={colors.green} />}
             </button>;
           })}
         </Card>
@@ -97,7 +98,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
               style={{ display: "flex", width: "100%", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 4, borderRadius: 8, cursor: "pointer", textAlign: "left", border: `1px solid ${on ? colors.orange : colors.border}`, background: on ? colors.orange + "18" : "transparent", color: colors.text }}>
               <span style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>{r.partner.name}</span>
               <span style={{ fontSize: 11, color: colors.textMuted }}>{r.items.length} viajes</span>
-              {pend > 0 ? <Badge label={`${pend} sin docs`} color={colors.orange} /> : <Badge label="docs ✓" color={colors.green} />}
+              {pend > 0 ? <Badge label={`${pend} pendiente${pend > 1 ? "s" : ""}`} color={colors.orange} /> : <Badge label="recibidos ✓" color={colors.green} />}
             </button>;
           })}
         </Card>
@@ -109,7 +110,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
         {sel && <>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
             <h3 style={{ margin: 0, fontSize: 15 }}>{selectedDriver ? selectedDriver.driver.name : selectedPartner?.partner.name}</h3>
-            <span style={{ fontSize: 11, color: colors.textMuted }}>{detailItems.length} viajes · {period.label}</span>
+            <span style={{ fontSize: 11, color: colors.textMuted }}>{detailItems.length} viajes · {detailItems.filter(x => x.docsOk).length} recibidos · {detailItems.filter(x => !x.docsOk).length} pendientes · {period.label}</span>
             <span style={{ flex: 1 }} />
             {detailItems.length > 0 && <Btn variant="ghost" onClick={() => setAllReceived(detailItems, !detailItems.every(x => x.docsOk))} style={{ fontSize: 11 }}><ClipboardCheck size={12} /> {detailItems.every(x => x.docsOk) ? "Desmarcar todos" : "Marcar todos como recibidos"}</Btn>}
             {selectedDriver && <Btn variant="ghost" onClick={() => printDriver(selectedDriver)} style={{ fontSize: 11 }}><Printer size={12} /> Relación de viajes (PDF)</Btn>}
@@ -120,7 +121,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
               <Th>Fecha</Th><Th>Cliente</Th><Th>Referencia</Th><Th>Ciudad</Th>{selectedPartner && <Th>Chofer</Th>}<Th>Camión</Th><Th align="center">Recibido</Th>
             </tr></thead>
             <tbody>{detailItems.map(({ trip, client, truck, driver: drv, docsOk }) =>
-              <tr key={trip.id} style={{ borderBottom: `1px solid ${colors.border}11`, background: docsOk ? colors.green + "0a" : "transparent" }}>
+              <tr key={trip.id} style={{ borderBottom: `1px solid ${colors.border}11`, background: docsOk ? colors.green + "0a" : colors.orange + "0a" }}>
                 <Td>{trip.date}</Td><Td>{client?.companyName || "—"}</Td><Td>{trip.invoiceRef || <span style={{ color: colors.textMuted }}>—</span>}</Td>
                 <Td>{trip.municipality}<span style={{ color: colors.textMuted }}>, {trip.province}</span></Td>
                 {selectedPartner && <Td>{drv?.name || "—"}</Td>}
@@ -128,7 +129,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
                 <Td align="center">
                   <label title={trip.docsReceivedAt ? `Recibido el ${trip.docsReceivedAt}${trip.docsReceivedBy ? ` por ${trip.docsReceivedBy}` : ""}` : "Marcar cuando llegue la factura física"} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11, color: docsOk ? colors.green : colors.textMuted }}>
                     <input type="checkbox" checked={docsOk} onChange={e => setReceived(trip.id, e.target.checked)} style={{ width: 16, height: 16, cursor: "pointer" }} />
-                    {docsOk ? "Sí" : "No"}
+                    {docsOk ? "Sí" : "Pendiente"}
                   </label>
                 </Td>
               </tr>

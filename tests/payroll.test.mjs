@@ -20,16 +20,18 @@ const trips = [
 ];
 const expenses = [{ id: 1, category: "adelanto_conductor", driverId: 1, date: "2026-10-05", amount: 700 }];
 
-test("buildPayroll: período 30→14, dieta incluida, ayudantes variables, adelantos y fijo", () => {
+test("buildPayroll: solo viajes recibidos entran; los pendientes se listan aparte", () => {
   const p = buildPayroll({ period, drivers, trips, trucks, clients, expenses });
   const r = p.drivers.find(x => x.driver.id === 1);
-  assert.equal(r.tripCount, 2);
-  assert.equal(r.base, 2000 + 2500); assert.equal(r.dieta, 500 + 600);
-  assert.equal(r.helpers, 1 * 1000 + 1 * 1200);
-  assert.equal(r.discounts, 300); assert.equal(r.advances, 700);
-  assert.equal(r.net, 5600 - 300 - 700);
+  assert.equal(r.allTrips.length, 2);
+  assert.equal(r.tripCount, 1, "solo el viaje 10 tiene documentos recibidos");
+  assert.equal(r.pendingCount, 1);
+  assert.equal(r.pendingTrips[0].trip.id, 11);
+  assert.equal(r.base, 2000); assert.equal(r.dieta, 500);
+  assert.equal(r.helpers, 1 * 1000);
+  assert.equal(r.discounts, 0); assert.equal(r.advances, 700);
+  assert.equal(r.net, 2500 - 700);
   assert.deepEqual(r.helperNames, ["Miguel"]);
-  assert.equal(r.docsPending, 1);
   const f = p.drivers.find(x => x.driver.id === 2);
   assert.equal(f.gross, 20000); assert.equal(f.net, 20000);
   assert.ok(!p.drivers.find(x => x.driver.id === 3), "sin viajes y no fijo → no aparece");
@@ -47,6 +49,8 @@ test("el PDF del chofer no contiene montos y escapa HTML; el de nómina sí tien
   const p = buildPayroll({ period, drivers, trips: trips.map(t => t.id === 10 ? { ...t, invoiceRef: "<img src=x onerror=alert(1)>" } : t), trucks, clients, expenses });
   const html = driverPeriodReportHTML({ row: p.drivers[0], period, generatedBy: "Ana" });
   assert.ok(!html.includes("RD$"), "sin montos");
+  assert.ok(html.includes("pendiente(s) de entrega"), "avisa de los pendientes");
+  assert.ok(!html.includes("2026-10-14"), "el viaje pendiente no sale en la relación");
   assert.ok(!html.includes("<img src=x"), "escapado");
   assert.ok(html.includes("&lt;img"));
   const pay = payrollReportHTML({ payroll: p, generatedBy: "Ana" });

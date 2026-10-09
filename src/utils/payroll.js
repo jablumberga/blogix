@@ -32,6 +32,9 @@ const inPeriod = (date, pd) => !!date && date >= pd.dateFrom && date <= pd.dateT
 
 /**
  * Construye la nómina de un período.
+ * Solo entran los viajes con documentos RECIBIDOS (docsOk). Los demás quedan en
+ * `pendingTrips` (no se pagan ni salen en la relación) hasta que la oficina los
+ * marque recibidos o el admin los cancele.
  * Devuelve { period, drivers: [{ driver, trips:[{trip, calc, client, truck}], base, dieta, helpers,
  *   discounts, advances, gross, net, helperNames, payType, fixedAmount }], totals }
  */
@@ -43,7 +46,7 @@ export function buildPayroll({ period, drivers = [], trips = [], trucks = [], cl
   for (const raw of drivers) {
     const driver = normalizeDriver(raw);
     if (driver.status === "inactive" && !trips.some(tr => tr.driverId === driver.id && inPeriod(tr.date, period))) continue;
-    const dTrips = trips
+    const allTrips = trips
       .filter(tr => tr.driverId === driver.id && tr.status !== "cancelled" && inPeriod(tr.date, period))
       .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
       .map(trip => {
@@ -52,6 +55,8 @@ export function buildPayroll({ period, drivers = [], trips = [], trucks = [], cl
         const calc = calcDriverPay({ driver, trip, truck, clientId: trip.clientId });
         return { trip, calc, client, truck, docsOk: docsComplete(trip, client) };
       });
+    const dTrips = allTrips.filter(x => x.docsOk);          // entran en nómina
+    const pendingTrips = allTrips.filter(x => !x.docsOk);   // esperan documentos
     const advances = expenses.filter(e => e.category === "adelanto_conductor" && e.driverId === driver.id && inPeriod(e.date, period)).reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const base      = dTrips.reduce((s, x) => s + x.calc.base, 0);
     const dieta     = dTrips.reduce((s, x) => s + x.calc.dieta, 0);
@@ -63,10 +68,11 @@ export function buildPayroll({ period, drivers = [], trips = [], trucks = [], cl
     const net = Math.max(0, gross - discounts - advances);
     const helperNames = [...new Set(dTrips.flatMap(x => (x.trip.helpers || []).map(h => h.name).filter(Boolean)))];
     const missingRates = dTrips.filter(x => driver.payType === "perTrip" && !x.calc.rateFound).length;
-    if (dTrips.length === 0 && driver.payType !== "fixed") continue;
+    if (allTrips.length === 0 && driver.payType !== "fixed") continue;
     rows.push({ driver, payType: driver.payType, fixedAmount: fixed, trips: dTrips, tripCount: dTrips.length,
+      pendingTrips, pendingCount: pendingTrips.length, allTrips,
       base, dieta, discounts, advances, helpers, helperCount, helperNames, gross, net, missingRates,
-      docsPending: dTrips.filter(x => !x.docsOk).length });
+      docsPending: pendingTrips.length });
   }
 
   const totals = rows.reduce((acc, r) => ({

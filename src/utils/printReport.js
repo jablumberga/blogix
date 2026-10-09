@@ -54,7 +54,6 @@ export function driverPeriodReportHTML({ row, period, generatedBy, minRows = 14 
       <td style="text-align:center" class="${x.docsOk ? "ok" : "no"}">${x.docsOk ? "✓" : "—"}</td>
     </tr>`; });
   while (lines.length < minRows) lines.push(`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`);
-  const docsOk = row.trips.filter(x => x.docsOk).length;
   return `
     ${companyHeaderHTML("FACTURA — RELACIÓN DE VIAJES")}
     <table class="fields">
@@ -67,8 +66,9 @@ export function driverPeriodReportHTML({ row, period, generatedBy, minRows = 14 
     <table class="grid">
       <thead><tr><th>Fecha</th><th>Cliente</th><th>Referencia</th><th>Destino</th><th>Tarifa (T1/T2)</th><th>Cantidad</th><th>Recibido</th></tr></thead>
       <tbody>${lines.join("")}</tbody>
-      <tfoot><tr><td colspan="5" class="right"><b>Total :</b></td><td style="text-align:center"><b>${row.tripCount}</b></td><td class="small" style="text-align:center">${docsOk}/${row.tripCount}</td></tr></tfoot>
+      <tfoot><tr><td colspan="5" class="right"><b>Total :</b></td><td style="text-align:center"><b>${row.tripCount}</b></td><td style="text-align:center">✓</td></tr></tfoot>
     </table>
+    ${row.pendingCount ? `<div class="small muted" style="margin-top:6px">${row.pendingCount} viaje(s) del período pendiente(s) de entrega de documentos: no incluidos en esta relación.</div>` : ""}
     <div class="sig"><div>Entregado por: ${esc(generatedBy || "")}</div><div>Recibí conforme: ${esc(d.name)}</div><div>Fecha</div></div>`;
 }
 
@@ -82,7 +82,7 @@ export function payrollReportHTML({ payroll, company = "B-Logix", generatedBy })
       <td class="right">${fmt(r.gross)}</td><td class="right">${r.discounts ? "−" + fmt(r.discounts) : "—"}</td><td class="right">${r.advances ? "−" + fmt(r.advances) : "—"}</td>
       <td class="right"><b>${fmt(r.net)}</b></td>
       <td class="right">${r.helperCount}</td><td class="right">${fmt(r.helpers)}</td>
-      <td class="small">${r.docsPending ? `<span class="no">${r.docsPending} sin docs</span>` : `<span class="ok">docs ✓</span>`}${r.missingRates ? ` <span class="no">${r.missingRates} sin tarifa</span>` : ""}</td>
+      <td class="small">${r.pendingCount ? `<span class="no">${r.pendingCount} pendiente(s), no pagados</span>` : `<span class="ok">todo recibido</span>`}${r.missingRates ? ` <span class="no">${r.missingRates} sin tarifa</span>` : ""}</td>
     </tr>`).join("");
   const helperDetail = drivers.flatMap(r => r.trips.filter(x => x.calc.numHelpers > 0).map(({ trip, calc }) =>
     `<tr><td>${esc(trip.date)}</td><td>#${esc(trip.id)} ${esc(trip.municipality)}</td><td>${esc(r.driver.name)}</td><td>${esc((trip.helpers || []).map(h => h.name).filter(Boolean).join(", ") || "—")}</td><td class="right">${calc.numHelpers}</td><td class="right">${fmt(calc.helperEach)}</td><td class="right">${fmt(calc.helpersTotal)}</td></tr>`)).join("");
@@ -95,6 +95,7 @@ export function payrollReportHTML({ payroll, company = "B-Logix", generatedBy })
       <tbody>${rows}</tbody>
       <tfoot><tr><td colspan="2">Totales</td><td class="right">${totals.trips}</td><td class="right">${fmt(totals.gross)}</td><td class="right">−${fmt(totals.discounts)}</td><td class="right">−${fmt(totals.advances)}</td><td class="right">${fmt(totals.net)}</td><td></td><td class="right">${fmt(totals.helpers)}</td><td></td></tr></tfoot>
     </table>
+    <div class="small muted" style="margin-top:6px">Solo se pagan viajes con documentos recibidos en oficina. Los pendientes se liquidan cuando se entreguen.</div>
     <div class="box"><div>Total choferes: <b>${fmt(totals.net)}</b></div><div>Total ayudantes: <b>${fmt(totals.helpers)}</b></div><div style="font-size:15px;margin-top:6px">Total nómina del período: <b>${fmt(totals.total)}</b></div></div>
     <h2>Detalle de ayudantes por viaje</h2>
     <table><thead><tr><th>Fecha</th><th>Viaje</th><th>Chofer</th><th>Ayudantes</th><th class="right">Cant.</th><th class="right">Pago c/u</th><th class="right">Total</th></tr></thead>
@@ -104,8 +105,8 @@ export function payrollReportHTML({ payroll, company = "B-Logix", generatedBy })
 /** Filas para el Excel de contabilidad. */
 export function payrollSheets(payroll) {
   const { drivers } = payroll;
-  const resumen = [["Chofer", "Tipo de pago", "Viajes", "Bruto (chofer+dieta)", "Descuentos", "Adelantos", "Neto a pagar", "Ayudantes (cant.)", "Pago ayudantes", "Docs pendientes"],
-    ...drivers.map(r => [r.driver.name, r.payType, r.tripCount, r.gross, r.discounts, r.advances, r.net, r.helperCount, r.helpers, r.docsPending])];
+  const resumen = [["Chofer", "Tipo de pago", "Viajes pagados", "Bruto (chofer+dieta)", "Descuentos", "Adelantos", "Neto a pagar", "Ayudantes (cant.)", "Pago ayudantes", "Viajes pendientes (no pagados)"],
+    ...drivers.map(r => [r.driver.name, r.payType, r.tripCount, r.gross, r.discounts, r.advances, r.net, r.helperCount, r.helpers, r.pendingCount])];
   const detalle = [["Fecha", "Viaje", "Chofer", "Cliente", "Destino", "Camión", "Tamaño", "Pago chofer", "Dieta", "Ayudantes", "Pago c/u", "Total ayudantes", "Descuentos", "Neto chofer", "Factura", "Conduce", "POD"],
     ...drivers.flatMap(r => r.trips.map(({ trip, calc, client, truck }) => [trip.date, trip.id, r.driver.name, client?.companyName || "", `${trip.municipality}, ${trip.province}`, truck?.plate || "", calc.size, calc.base, calc.dieta, calc.numHelpers, calc.helperEach, calc.helpersTotal, calc.discounts, calc.driverNet, trip.docs?.factura ? "Sí" : "No", trip.docs?.conduce ? "Sí" : "No", trip.docs?.pod ? "Sí" : "No"]))];
   return { resumen, detalle };
