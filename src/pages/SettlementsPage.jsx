@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { ChevronDown, ChevronRight, CheckCircle2, Printer, PiggyBank } from "lucide-react";
+import { ChevronDown, ChevronRight, CheckCircle2, Printer, PiggyBank, FileText } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, genSettlementPeriods, today, nxId } from "../utils/helpers.js";
 import { computeSettlement, normalizePartner, PARTNER_MODELS } from "../utils/partnerModels.js";
@@ -32,18 +32,19 @@ function Collapsible({ title, right, children }) {
 }
 
 /** Liquidación imprimible para entregar al socio. */
-export function settlementHTML({ s, partner, t }) {
+export function settlementHTML({ s, partner, t, clients = [], trucks = [], status }) {
   const model = PARTNER_MODELS[s.model]?.label || s.model;
-  const rows = s.trips.map(tr => `<tr><td>${esc(tr.date)}</td><td>${esc(tr.municipality)}, ${esc(tr.province)}</td><td>${esc(tr.invoiceRef || "")}</td><td class="right">${fmt(tr.revenue || 0)}</td></tr>`).join("");
+  const cm = new Map(clients.map(c => [c.id, c])), tm = new Map(trucks.map(x => [x.id, x]));
+  const rows = [...s.trips].sort((a, b) => (a.date || "").localeCompare(b.date || "")).map(tr => `<tr><td>${esc(tr.date)}</td><td>${esc(cm.get(tr.clientId)?.companyName || "—")}</td><td>${esc(tr.municipality)}, ${esc(tr.province)}</td><td>${esc(tr.invoiceRef || "")}</td><td>${esc(tm.get(tr.truckId)?.plate || "")}</td><td class="right">${fmt(tr.revenue || 0)}</td></tr>`).join("");
   const exp = s.expenseLines.map(e => `<tr><td>${esc(e.date)}</td><td>${esc(t?.[e.category] || e.category)}</td><td>${esc(e.description)}</td><td class="right">−${fmt(e.amount)}</td></tr>`).join("");
   const fixed = s.fixedLines.map(c => `<tr><td></td><td>Cargo fijo</td><td>${esc(c.name)}</td><td class="right">−${fmt(c.amount)}</td></tr>`).join("");
-  const line = (l, v, b) => `<tr><td colspan="3" class="right"${b ? ' style="font-weight:700"' : ""}>${l}</td><td class="right"${b ? ' style="font-weight:700"' : ""}>${v}</td></tr>`;
+  const line = (l, v, b, span = 3) => `<tr><td colspan="${span}" class="right"${b ? ' style="font-weight:700"' : ""}>${l}</td><td class="right"${b ? ' style="font-weight:700"' : ""}>${v}</td></tr>`;
   return `${companyHeaderHTML("LIQUIDACIÓN DE SOCIO")}
-    <table class="fields"><tr><td>Socio:</td><td>${esc(partner.name)}</td></tr><tr><td>Período:</td><td>${esc(s.period.label)}</td></tr><tr><td>Modelo:</td><td>${esc(model)}</td></tr><tr><td>Pago:</td><td>${esc(s.payDate || "")}</td></tr></table>
-    <h2>Viajes (${s.tripCount})</h2>
-    <table><thead><tr><th>Fecha</th><th>Destino</th><th>Referencia</th><th class="right">Flete</th></tr></thead><tbody>${rows}</tbody>
-    <tfoot>${line("Ingreso bruto", fmt(s.grossRevenue))}${s.brokerDeduction ? line("Broker (pass-through)", "−" + fmt(s.brokerDeduction)) : ""}${s.brokerDeduction ? line("Ingreso neto", fmt(s.netRevenue), true) : ""}</tfoot></table>
-    ${(exp || fixed) ? `<h2>Gastos pagados por la empresa (se reembolsan primero)</h2><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th class="right">Monto</th></tr></thead><tbody>${exp}${fixed}</tbody><tfoot>${line("Total descontado", "−" + fmt(s.expensesTotal + s.fixedTotal), true)}</tfoot></table>` : ""}
+    <table class="fields"><tr><td>Socio:</td><td>${esc(partner.name)}</td></tr><tr><td>Período:</td><td>${esc(s.period.label)} (${esc(s.period.dateFrom)} a ${esc(s.period.dateTo)})</td></tr><tr><td>Modelo:</td><td>${esc(model)}</td></tr><tr><td>Fecha de pago:</td><td>${esc(s.payDate || "")}${status ? ` · ${status === "paid" ? "TRANSFERIDO" : "PENDIENTE"}` : ""}</td></tr><tr><td>Emitido:</td><td>${new Date().toLocaleDateString("es-DO")}</td></tr></table>
+    <h2>Ingresos — viajes entregados (${s.tripCount})</h2>
+    <table><thead><tr><th>Fecha</th><th>Cliente</th><th>Destino</th><th>Referencia</th><th>Camión</th><th class="right">Flete</th></tr></thead><tbody>${rows}</tbody>
+    <tfoot>${line("Ingreso bruto", fmt(s.grossRevenue), false, 5)}${s.brokerDeduction ? line("Broker (pass-through)", "−" + fmt(s.brokerDeduction), false, 5) : ""}${s.brokerDeduction ? line("Ingreso neto", fmt(s.netRevenue), true, 5) : ""}</tfoot></table>
+    ${(exp || fixed) ? `<h2>Cargos — gastos pagados por la empresa (se reembolsan primero) y cargos fijos</h2><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th class="right">Monto</th></tr></thead><tbody>${exp}${fixed}</tbody><tfoot>${line("Total descontado", "−" + fmt(s.expensesTotal + s.fixedTotal), true)}</tfoot></table>` : ""}
     <h2>Resumen</h2>
     <table><tbody>
       ${line("Ingreso neto", fmt(s.netRevenue))}
@@ -82,15 +83,18 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
             <CheckCircle2 size={13} /> {isPaid ? "Transferido" : "Marcar transferido"}
           </button>
         </>}
-        {isPartnerView && <Badge label={isPaid ? "✓ Recibido" : "Pendiente"} color={isPaid ? colors.green : colors.orange} />}
+        {isPartnerView && <>
+          <Badge label={isPaid ? "✓ Recibido" : "Pendiente"} color={isPaid ? colors.green : colors.orange} />
+          <button onClick={onPrint} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: colors.accent, color: "white", cursor: "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}><FileText size={13} /> Ver detalle</button>
+        </>}
       </div>
     </div>
 
-    <button onClick={() => setOpen(v => !v)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: colors.textMuted, cursor: "pointer", fontSize: 12, padding: "4px 0", marginTop: 8 }}>
+    {!isPartnerView && <button onClick={() => setOpen(v => !v)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: colors.textMuted, cursor: "pointer", fontSize: 12, padding: "4px 0", marginTop: 8 }}>
       {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{open ? "Ocultar detalle" : "Ver detalle"}
-    </button>
+    </button>}
 
-    {open && <>
+    {open && !isPartnerView && <>
       <div style={{ background: colors.inputBg, borderRadius: 10, padding: "14px 16px", border: `1px solid ${colors.border}`, marginTop: 10, display: "flex", flexDirection: "column", gap: 6, fontSize: isMobile ? 15 : 13 }}>
         <FRow label="Ingreso bruto (fletes)" value={s.grossRevenue} plus valueColor={colors.green} />
         {s.brokerDeduction > 0 && <FRow label="Broker (pass-through, ya descontado)" value={s.brokerDeduction} minus valueColor={colors.orange} />}
@@ -168,7 +172,7 @@ export default function SettlementsPage({ t, trips = [], trucks = [], expenses =
     }]);
   };
 
-  const print = ({ p, s }) => openPrintWindow(`Liquidación ${p.name} ${s.period.label}`, settlementHTML({ s, partner: p, t }));
+  const print = ({ p, s, status }) => openPrintWindow(`Liquidación ${p.name} ${s.period.label}`, settlementHTML({ s, partner: p, t, clients, trucks, status }));
 
   return <div>
     <PageHeader title={t.settlements} />
