@@ -158,7 +158,7 @@ export function invoiceHTML({ inv, client, trips = [], trucks = [], brokers = []
     <div class="small muted" style="margin-top:6px">Tarifa: 16 pies = camión T1 · 26 pies = camión T2${lines.some(l => l.joint) ? " · ⛓ viaje conjunto: dos camiones bajo la misma referencia" : ""}.</div>
     ${inv.notes ? `<div class="small" style="margin-top:8px">${esc(inv.notes)}</div>` : ""}
     <div class="sig"><div>Entregado por</div><div>Recibido por: ${esc(client?.companyName || "")}</div><div>Fecha</div></div>
-    <div class="foot">${esc(COMPANY.legalName)} · RNC ${esc(COMPANY.rnc)} · ${esc(COMPANY.city)}</div>`;
+    <div class="foot">${esc(COMPANY.legalName)} · RNC ${esc(COMPANY.rnc)}</div>`;
 }
 
 /** La misma factura como filas para Excel. */
