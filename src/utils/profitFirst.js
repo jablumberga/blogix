@@ -9,8 +9,8 @@
  * Pass-through (no es ingreso real, solo pasa por la cuenta):
  *   - lo que toca al socio en los viajes de sus camiones (liquidaciones),
  *   - comisión de broker (histórico),
- *   - reembolsos de gastos que la empresa adelantó por el socio: vuelven a OpEx
- *     tal cual, sin pasar por el 20/80 (ya salieron de OpEx).
+ *   - lo que la empresa retiene en la liquidación (gastos reembolsados, cargos fijos)
+ *     es ingreso real y se reparte 20/80 al transferir (Profit First siempre).
  */
 export const DEFAULT_PF_SETTINGS = { reservePct: 20, startDate: null };
 
@@ -85,18 +85,20 @@ export function allocateCobro({ amount, tripIds, trips, trucks, partners, client
 
 /**
  * Liquidación de socio: lo apartado como pass-through para esa quincena (pool) vs lo que
- * realmente se transfiere. La diferencia (gastos reembolsados, cargos fijos) vuelve a OpEx
- * íntegra, sin 20/80, porque ya había salido de OpEx.
+ * realmente se transfiere. La diferencia (gastos reembolsados, cargos fijos) es ingreso real
+ * de la empresa y se reparte igual que cualquier ingreso: % a Reserva, el resto a OpEx.
  */
 export function settlementPool(s) {
   if (!s) return 0;
   if (s.model === "profit_share") return Math.round((s.netRevenue || 0) * (Number(s.partnerSharePct) || 0) / 100);
   return Math.max(0, (s.netRevenue || 0) - (s.commission || 0));
 }
-export function settlementRelease(s) {
+export function settlementRelease(s, settings = DEFAULT_PF_SETTINGS) {
   const pool = settlementPool(s);
   const transfer = Math.max(0, Number(s?.toTransfer) || 0);
-  return { pool, transfer, releasedToOpex: round2(Math.max(0, pool - transfer)) };
+  const released = round2(Math.max(0, pool - transfer));
+  const releasedToReserve = round2(released * (Number(settings?.reservePct) || 0) / 100);
+  return { pool, transfer, released, releasedToReserve, releasedToOpex: round2(released - releasedToReserve) };
 }
 
 /** Asignación de un cobro ya registrado (usa la guardada; si no existe, estima sin pass-through). */
@@ -129,7 +131,8 @@ export function accountBalances({ cobros = [], expenses = [], settings = DEFAULT
   for (const e of expenses) {
     const amt = Number(e.amount) || 0;
     if (e.category === "partner_settlement" && e.status === "paid" && afterStart(e.paidDate || e.date, settings)) {
-      passThroughOut += amt; passThroughReleased += Number(e.releasedToOpex) || 0; opexIn += Number(e.releasedToOpex) || 0;
+      const rOp = Number(e.releasedToOpex) || 0, rRes = Number(e.releasedToReserve) || 0;
+      passThroughOut += amt; passThroughReleased += rOp + rRes; opexIn += rOp; reserve += rRes; real += rOp + rRes;
     }
     if (e.category === "broker_commission" && e.status === "paid" && afterStart(e.paidDate || e.date, settings)) passThroughOut += amt;
     if (!isOpexExpense(e)) continue;

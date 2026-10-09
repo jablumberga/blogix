@@ -43,7 +43,7 @@ export default function ProfitFirstPanel({ cobros = [], expenses = [], pfSetting
       <Account icon={PiggyBank} label={`RESERVA · ${pct} %`} value={b.reserve} color={PF_PURPLE}
         lines={[["Owner's comp + profit + tax", "no se toca"], ...(thisMonth ? [[`Este mes (${thisMonth.month})`, thisMonth.reserve]] : [])]} />
       <Account icon={Wallet} label="OPEX · DISPONIBLE" value={b.opexAvailable} color={b.opexAvailable >= 0 ? colors.cyan : colors.red}
-        lines={[["Entró (80 % + reembolsos)", b.opexIn], ["Pagado", b.opexOut, colors.orange], ["Compromisos pendientes", b.opexCommitted, b.opexCommitted > b.opexAvailable ? colors.red : colors.textMuted], ["Después de compromisos", b.opexAfterCommitments, b.opexAfterCommitments >= 0 ? colors.green : colors.red]]} />
+        lines={[["Entró (80 % de lo real)", b.opexIn], ["Pagado", b.opexOut, colors.orange], ["Compromisos pendientes", b.opexCommitted, b.opexCommitted > b.opexAvailable ? colors.red : colors.textMuted], ["Después de compromisos", b.opexAfterCommitments, b.opexAfterCommitments >= 0 ? colors.green : colors.red]]} />
     </div>
     {b.opexAfterCommitments < 0 && <div style={{ marginTop: 10, background: colors.red + "15", border: `1px solid ${colors.red}40`, borderRadius: 10, padding: "8px 12px", fontSize: 12, display: "flex", gap: 8, alignItems: "center" }}>
       <AlertTriangle size={14} color={colors.red} /><span><b style={{ color: colors.red }}>OpEx no cubre los compromisos</b> (faltan {fmt(-b.opexAfterCommitments)}). Profit First: la Reserva no se toca; cobra CxC, renegocia plazos o recorta operación.</span>

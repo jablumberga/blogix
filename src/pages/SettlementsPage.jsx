@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, CheckCircle2, Printer, PiggyBank, FileText }
 import { colors } from "../constants/theme.js";
 import { fmt, genSettlementPeriods, today, nxId } from "../utils/helpers.js";
 import { computeSettlement, normalizePartner, PARTNER_MODELS } from "../utils/partnerModels.js";
-import { settlementRelease } from "../utils/profitFirst.js";
+import { settlementRelease, DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 import { companyHeaderHTML, openPrintWindow, esc } from "../utils/printReport.js";
 import { COMPANY } from "../constants/company.js";
 const COMPANY_LEGAL = COMPANY.legalName, COMPANY_RNC = COMPANY.rnc;
@@ -84,11 +84,11 @@ export function settlementHTML({ s, partner, t, clients = [], trucks = [], statu
     <div class="foot">${esc(COMPANY_LEGAL)} · RNC ${esc(COMPANY_RNC)} · Liquidación ${esc(s.period.label)} · ${esc(partner.name)}</div>`;
 }
 
-function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, onToggle, onPrint, clients, trucks, t, isMobile }) {
+function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, onToggle, onPrint, clients, trucks, t, pfSettings = DEFAULT_PF_SETTINGS, isMobile }) {
   const [open, setOpen] = useState(false);
   const isPaid = status === "paid";
   const model = PARTNER_MODELS[s.model] || {};
-  const rel = settlementRelease(s);
+  const rel = settlementRelease(s, pfSettings);
   const transfer = Math.max(0, s.toTransfer);
   return <Card style={{ marginBottom: 14, borderLeft: `4px solid ${isPaid ? colors.green : colors.orange}` }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
@@ -137,7 +137,7 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
         </>}
         <FRow label={isPartnerView ? "Recibes" : "A transferir al socio"} value={transfer} bold divider="double" valueColor={isPaid ? colors.green : colors.orange} size={18} />
         {!isPartnerView && <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, background: PURPLE + "14", fontSize: 11, color: colors.textMuted, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <PiggyBank size={12} color={PURPLE} /><b style={{ color: PURPLE }}>Profit First:</b> apartado para el socio al cobrar {fmt(rel.pool)} · se transfiere {fmt(rel.transfer)} · <span style={{ color: colors.cyan }}>vuelve a OpEx {fmt(rel.releasedToOpex)}</span> (gastos reembolsados y cargos, sin 20/80: ya habían salido de OpEx).
+          <PiggyBank size={12} color={PURPLE} /><b style={{ color: PURPLE }}>Profit First:</b> apartado para el socio al cobrar {fmt(rel.pool)} · se transfiere {fmt(rel.transfer)} · la empresa retiene {fmt(rel.released)} → <span style={{ color: PURPLE }}>Reserva {fmt(rel.releasedToReserve)}</span> · <span style={{ color: colors.cyan }}>OpEx {fmt(rel.releasedToOpex)}</span>.
         </div>}
       </div>
 
@@ -166,9 +166,9 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
 /**
  * Liquidaciones de socios por quincena (1–15 / 16–30), con los 3 modelos.
  * Profit First: lo transferido es pass-through (gasto `partner_settlement`);
- * lo que la empresa retiene por gastos reembolsados vuelve a OpEx (releasedToOpex).
+ * lo que la empresa retiene (reembolsos, cargos) es ingreso real y se reparte 20/80.
  */
-export default function SettlementsPage({ t, trips = [], trucks = [], expenses = [], setExpenses, clients = [], partners = [], brokers = [], drivers = [], settlementStatus = {}, setSettlementStatus, user, partner, isMobile }) {
+export default function SettlementsPage({ t, trips = [], trucks = [], expenses = [], setExpenses, clients = [], partners = [], brokers = [], drivers = [], settlementStatus = {}, setSettlementStatus, user, partner, pfSettings = DEFAULT_PF_SETTINGS, isMobile }) {
   const isPartnerView = user?.role === "partner";
   const periods = useMemo(() => genSettlementPeriods(trips.map(tr => tr.date)), [trips]);
   const list = isPartnerView ? [partner].filter(Boolean) : partners;
@@ -191,12 +191,12 @@ export default function SettlementsPage({ t, trips = [], trucks = [], expenses =
     setSettlementStatus(prev => ({ ...prev, [key]: paid ? "unpaid" : "paid" }));
     if (!setExpenses) return;
     if (paid) { setExpenses(prev => prev.filter(e => !(e.category === "partner_settlement" && e.settlementKey === key))); return; }
-    const rel = settlementRelease(s);
+    const rel = settlementRelease(s, pfSettings);
     setExpenses(prev => [...prev.filter(e => !(e.category === "partner_settlement" && e.settlementKey === key)), {
       id: nxId(prev), category: "partner_settlement", partnerId: p.id, settlementKey: key, tripId: null, supplierId: null,
       date: today(), paidDate: today(), status: "paid", paymentMethod: "transfer",
       amount: rel.transfer, description: `Liquidación ${p.name} · ${s.period.label}`,
-      passThroughPool: rel.pool, releasedToOpex: rel.releasedToOpex, reimbursement: s.reimbursement, companyShare: s.companyShare,
+      passThroughPool: rel.pool, released: rel.released, releasedToOpex: rel.releasedToOpex, releasedToReserve: rel.releasedToReserve, reimbursement: s.reimbursement, companyShare: s.companyShare,
     }]);
   };
 
@@ -215,7 +215,7 @@ export default function SettlementsPage({ t, trips = [], trucks = [], expenses =
           {!isPartnerView && pending > 0 && pending !== total && <div style={{ fontSize: 10, color: colors.orange }}>pendiente {fmt(pending)}</div>}
         </div>
       </div>
-      {cards.map(c => <SettlementCard key={c.key} s={c.s} partner={c.p} status={c.status} notDelivered={c.notDelivered} isPartnerView={isPartnerView} onToggle={() => toggle(c)} onPrint={() => print(c)} clients={clients} trucks={trucks} t={t} isMobile={isMobile} />)}
+      {cards.map(c => <SettlementCard key={c.key} s={c.s} partner={c.p} status={c.status} notDelivered={c.notDelivered} isPartnerView={isPartnerView} onToggle={() => toggle(c)} onPrint={() => print(c)} clients={clients} trucks={trucks} t={t} pfSettings={pfSettings} isMobile={isMobile} />)}
     </div>)}
   </div>;
 }
