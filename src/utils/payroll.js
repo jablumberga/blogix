@@ -1,5 +1,5 @@
 /**
- * Nómina por período (30/31→14 y 15→29): una sola fuente para la asistente,
+ * Nómina por quincena (1–15 y 16–último día): una sola fuente para la asistente,
  * los PDF, el Excel para contabilidad y (más adelante) la pantalla de Nómina.
  */
 import { calcDriverPay, normalizeDriver } from "./driverPay.js";

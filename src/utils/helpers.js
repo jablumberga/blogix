@@ -166,9 +166,8 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
 // Day 31 of any month is treated as belonging to the NEXT month's half-1
 // (dateFrom is set to the 31st of the previous month when applicable).
 /**
- * Quincenas de FACTURACIÓN / liquidación: 1–15 y 16–último día del mes (31 incluido).
- * Las usan Oficina (referencias recibidas), Facturas y Liquidaciones de socios.
- * La nómina de choferes usa otras (genPeriods: 30/31→14 y 15→29).
+ * Quincenas de toda la app: 1–15 y 16–último día del mes (31 incluido).
+ * Las usan Oficina, Nómina, Facturas y Liquidaciones de socios.
  */
 export function genBillingPeriods(dates = []) {
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
@@ -201,44 +200,8 @@ export const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Juli
 // Corte 1: day 30 of prev month → day 14 of current month (day 31 of prev included via >= filter)
 // Corte 2: day 15 → day 29 of current month
 // Days 30+ belong to the NEXT month's corte 1.
-export function genPeriods(dates = []) {
-  const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
-  const now = new Date(); const day = now.getDate();
-  let y = now.getFullYear(), m = now.getMonth() + 1, h;
-  if (day <= 14) { h = 1; }
-  else if (day <= 29) { h = 2; }
-  else { h = 1; if (m === 12) { m = 1; y++; } else { m++; } }
-  const earliest = [...dates].sort()[0] || `${y}-${pad(m)}-01`;
-  const buildPd = (py, pm, ph) => {
-    const mStr = `${py}-${pad(pm)}`;
-    if (ph === 2) {
-      return { year: py, month: pm, half: ph, mStr,
-        dateFrom: `${mStr}-15`, dateTo: `${mStr}-29`,
-        label: `${MONTHS_ES[pm-1]} 15–29, ${py}` };
-    }
-    // Corte 1: from day 30 (or last day if < 30) of prev month to day 14 of current month
-    const prevM = pm === 1 ? 12 : pm - 1;
-    const prevY = pm === 1 ? py - 1 : py;
-    const prevMStr = `${prevY}-${pad(prevM)}`;
-    const fromDay = Math.min(30, lastDayOf(prevY, prevM));
-    return { year: py, month: pm, half: ph, mStr,
-      dateFrom: `${prevMStr}-${pad(fromDay)}`, dateTo: `${mStr}-14`,
-      label: `${fromDay} ${MONTHS_ES[prevM-1]}–14 ${MONTHS_ES[pm-1]}, ${py}` };
-  };
-  const periods = [];
-  for (let i = 0; i < 60; i++) {
-    const pd = buildPd(y, m, h); periods.push(pd);
-    if (pd.dateTo < earliest) break;
-    if (h === 2) { h = 1; } else { h = 2; if (m === 1) { m = 12; y--; } else { m--; } }
-  }
-  return periods;
-}
-
-// Computes due date for a supplier expense.
-// "invoice_date" cycle: dueDate = expenseDate + creditDays
-// "cutoff_period" cycle: dueDate = end_of_cut_period + creditDays
-//   period 1: days 1–period1CutDay → cutoff at period1CutDay
-//   period 2: days (period1CutDay+1)–end_of_month → cutoff at end_of_month
+/** Nómina de choferes: mismas quincenas que facturación (1–15 y 16–último día). */
+export const genPeriods = genBillingPeriods;
 export function getSupplierDueDate(expenseDate, supplier) {
   if (!expenseDate) return expenseDate;
   if (!supplier || supplier.paymentCondition !== "credit" || !supplier.creditDays) return expenseDate;
