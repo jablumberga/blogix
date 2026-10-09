@@ -50,7 +50,7 @@ test("el PDF del chofer no contiene montos y escapa HTML; el de nómina sí tien
   const html = driverPeriodReportHTML({ row: p.drivers[0], period, generatedBy: "Ana" });
   assert.ok(!html.includes("RD$"), "sin montos");
   assert.ok(html.includes("pendiente(s) de entrega"), "avisa de los pendientes");
-  assert.ok(!html.includes("2026-10-14"), "el viaje pendiente no sale en la relación");
+  assert.ok(!html.includes(">B2<"), "el viaje pendiente (camión B2) no sale en la relación");
   assert.ok(!html.includes("<img src=x"), "escapado");
   assert.ok(html.includes("&lt;img"));
   const pay = payrollReportHTML({ payroll: p, generatedBy: "Ana" });
