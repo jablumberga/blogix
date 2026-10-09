@@ -66,7 +66,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
         </div>
         <button onClick={() => setPIdx(i => Math.max(0, i - 1))} disabled={pIdx === 0} style={{ background: "none", border: `1px solid ${colors.border}`, borderRadius: 8, color: pIdx === 0 ? colors.textMuted : colors.text, cursor: pIdx === 0 ? "default" : "pointer", padding: 6 }}><ChevronRight size={14} /></button>
         <span style={{ flex: 1 }} />
-        {totalDocsPending > 0 && <span style={{ fontSize: 11, color: colors.orange }}><AlertTriangle size={12} style={{ verticalAlign: "middle" }} /> {totalDocsPending} viaje(s) pendiente(s) de documentos: no entran en nómina hasta recibirlos</span>}
+        {totalDocsPending > 0 && <span style={{ fontSize: 11, color: colors.orange }}><AlertTriangle size={12} style={{ verticalAlign: "middle" }} /> {totalDocsPending} viaje(s) pendiente(s) de documentos: se pagan en la quincena en que se reciban</span>}
         <Btn variant="ghost" onClick={printPayroll} style={{ fontSize: 11 }}><Printer size={12} /> Nómina del período (PDF)</Btn>
         <Btn onClick={exportPayrollXlsx} style={{ fontSize: 11 }}><FileSpreadsheet size={12} /> Nómina para contabilidad (Excel)</Btn>
       </div>
@@ -127,9 +127,9 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
                 {selectedPartner && <Td>{drv?.name || "—"}</Td>}
                 <Td>{truck?.plate || "—"}</Td>
                 <Td align="center">
-                  <label title={trip.docsReceivedAt ? `Recibido el ${trip.docsReceivedAt}${trip.docsReceivedBy ? ` por ${trip.docsReceivedBy}` : ""}` : "Marcar cuando llegue la factura física"} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11, color: docsOk ? colors.green : colors.textMuted }}>
+                  <label title={trip.docsReceivedAt ? `Recibido el ${trip.docsReceivedAt}${trip.docsReceivedBy ? ` por ${trip.docsReceivedBy}` : ""} · se paga en la quincena de esa fecha` : "Marcar cuando llegue la factura física: se pagará en la quincena en que se marque"} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11, color: docsOk ? colors.green : colors.textMuted }}>
                     <input type="checkbox" checked={docsOk} onChange={e => setReceived(trip.id, e.target.checked)} style={{ width: 16, height: 16, cursor: "pointer" }} />
-                    {docsOk ? "Sí" : "Pendiente"}
+                    {docsOk ? (trip.docsReceivedAt && trip.docsReceivedAt > period.dateTo ? `Sí (${trip.docsReceivedAt})` : "Sí") : "Pendiente"}
                   </label>
                 </Td>
               </tr>
