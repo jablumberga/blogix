@@ -4,6 +4,7 @@ import { colors } from "../constants/theme.js";
 import { fmt, nxId, getPeriodInfo } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../components/ui/index.jsx";
 import { invoiceHTML, invoiceSheet, openPrintWindow } from "../utils/printReport.js";
+import { allocateCobro, DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function nextInvoiceNumber(invoices) {
@@ -106,7 +107,7 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, isMobile }) {
+export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, partners = [], pfSettings = DEFAULT_PF_SETTINGS, isMobile }) {
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -126,6 +127,11 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   };
   const [form, setForm] = useState(emptyForm);
 
+  // Cliente que exige referencia: solo se factura lo que la oficina marcó como RECIBIDO (con eso te pagan).
+  // Cliente sin esa regla: se factura normal.
+  const needsRef = (cl) => cl?.rules?.requiresInvoiceRef === true;
+  const isReceived = (tr) => { const cl = clients.find(c => c.id === tr?.clientId); return !needsRef(cl) || tr?.docStatus === "delivered" || !!tr?.docsReceivedAt; };
+
   // Map of tripId → invoice (excluding the invoice being edited and cancelled invoices)
   const invoicedTripMap = useMemo(() => {
     const m = new Map();
@@ -143,10 +149,14 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
 
   const clientTrips = useMemo(() => {
     if (!clientId) return [];
+    // Solo lo facturable: viajes del cliente, con ingreso, recibidos en oficina (si el cliente exige referencia)
+    // y que no estén ya en otra factura (los de la factura que se edita sí se muestran)
     return trips
       .filter(tr => tr.clientId === clientId && tr.status !== "cancelled" && (tr.revenue || 0) > 0)
+      .filter(tr => isReceived(tr) || form.tripIds.includes(tr.id))
+      .filter(tr => !invoicedTripMap.has(tr.id))
       .sort((a, b) => (b.date||"").localeCompare(a.date||""));
-  }, [clientId, trips]);
+  }, [clientId, trips, invoicedTripMap, form.tripIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Per-trip broker deductions for pass-through clients (shown in trip selector)
   const tripBrokerDeductions = useMemo(() => {
@@ -185,10 +195,6 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     setForm(prev => ({ ...prev, date: val, dueDate: due }));
   };
 
-  // Cliente que exige referencia: solo se factura lo que la oficina marcó como RECIBIDO (con eso te pagan).
-  // Cliente sin esa regla: se factura normal.
-  const needsRef = (cl) => cl?.rules?.requiresInvoiceRef === true;
-  const isReceived = (tr) => { const cl = clients.find(c => c.id === tr?.clientId); return !needsRef(cl) || tr?.docStatus === "delivered" || !!tr?.docsReceivedAt; };
   const exportInvoiceXlsx = async (inv, cl) => {
     const XLSX = await import("xlsx");
     const rows = invoiceSheet({ inv, client: cl, trips, trucks, brokers });
@@ -260,10 +266,35 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     setEditId(null);
   };
 
+  // Recalcula un cobro a partir de los viajes cobrados (monto neto, estado, reparto Profit First)
+  const rebuildCobro = (cobro, cl, collectedIds) => {
+    const tripNetAmt = (tr) => {
+      const gross = tr?.revenue || 0;
+      if (!(cl?.rules?.brokerPassThrough === true) || !tr?.brokerId) return gross;
+      const broker = brokers.find(b => b.id === tr.brokerId);
+      return broker ? gross - Math.round(gross * (broker.commissionPct || 10) / 100) : gross;
+    };
+    const ids = [...new Set(collectedIds)].filter(id => trips.some(t => t.id === id));
+    const periodTrips = trips.filter(tr => tr.clientId === cl.id && tr.revenue > 0 && tr.status !== "cancelled" && getPeriodInfo(tr.date, cl).key === cobro.periodKey);
+    const allCollected = periodTrips.length > 0 && periodTrips.every(tr => ids.includes(tr.id));
+    const amount = ids.reduce((sum, id) => sum + tripNetAmt(trips.find(t => t.id === id)), 0);
+    const status = ids.length === 0 ? "pending" : allCollected ? "collected" : "partial";
+    return { ...cobro, collectedTripIds: ids, amount, status,
+      collectedDate: allCollected ? (cobro.collectedDate || today) : null,
+      pf: ids.length ? allocateCobro({ amount, tripIds: ids, trips, trucks, partners, clients, brokers, settings: pfSettings }) : null };
+  };
+
   const deleteInvoice = (id) => {
-    if (!window.confirm("¿Eliminar esta factura? Los viajes quedarán disponibles para facturar de nuevo.")) return;
-    setInvoices(prev => prev.filter(inv => inv.id !== id));
-    setCobros(prev => prev.filter(c => c.invoiceId !== id));
+    const inv = invoices.find(x => x.id === id);
+    if (!inv) return;
+    if (!window.confirm("¿Eliminar esta factura? Los viajes quedarán disponibles para facturar de nuevo" + (inv.status === "paid" ? " y se quitará su cobro registrado" : "") + ".")) return;
+    const cl = clients.find(c => c.id === inv.clientId);
+    const ids = new Set(inv.tripIds || []);
+    setInvoices(prev => prev.filter(x => x.id !== id));
+    // Los viajes de la factura dejan de contar como cobrados (si lo estaban)
+    if (cl) setCobros(prev => prev
+      .map(c => c.clientId !== inv.clientId || !(c.collectedTripIds || []).some(tid => ids.has(tid)) ? c : rebuildCobro(c, cl, (c.collectedTripIds || []).filter(tid => !ids.has(tid))))
+      .filter(c => c.status !== "pending" || (c.collectedTripIds || []).length > 0 || c.note));
   };
 
   const setStatus = (id, status) => {
@@ -275,46 +306,20 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   const markInvoicePaid = (inv) => {
     const cl = clients.find(c => c.id === inv.clientId);
     if (!cl) return;
-    const isPassThrough = cl?.rules?.brokerPassThrough === true;
-    // Net amount per trip (gross minus broker commission for pass-through clients)
-    const tripNetAmt = (tr) => {
-      const gross = tr?.revenue || 0;
-      if (!isPassThrough || !tr?.brokerId) return gross;
-      const broker = brokers.find(b => b.id === tr.brokerId);
-      if (!broker) return gross;
-      return gross - Math.round(gross * (broker.commissionPct || 10) / 100);
-    };
-    // Group invoice trips by periodKey
     const byPeriod = new Map();
     (inv.tripIds || []).forEach(tid => {
       const tr = trips.find(t => t.id === tid);
       if (!tr) return;
       const { key } = getPeriodInfo(tr.date, cl);
-      if (!byPeriod.has(key)) byPeriod.set(key, []);
-      byPeriod.get(key).push(tid);
+      byPeriod.set(key, [...(byPeriod.get(key) || []), tid]);
     });
-    // Update cobros — mark these trips as collected in each period
     setCobros(prev => {
       let next = [...prev];
       byPeriod.forEach((tripIds, periodKey) => {
         const idx = next.findIndex(c => c.clientId === inv.clientId && c.periodKey === periodKey);
-        if (idx >= 0) {
-          const existing = next[idx];
-          const merged = [...new Set([...(existing.collectedTripIds || []), ...tripIds])];
-          const allTripsInPeriod = trips.filter(tr => {
-            if (tr.clientId !== inv.clientId || !(tr.revenue > 0)) return false;
-            const { key } = getPeriodInfo(tr.date, cl);
-            return key === periodKey;
-          });
-          const allCollected = allTripsInPeriod.every(tr => merged.includes(tr.id));
-          next[idx] = { ...existing, collectedTripIds: merged, status: allCollected ? "collected" : "partial", collectedDate: allCollected ? inv.date : existing.collectedDate };
-        } else {
-          const tripRevenue = tripIds.reduce((s, tid) => {
-            const tr = trips.find(t => t.id === tid);
-            return s + tripNetAmt(tr);
-          }, 0);
-          next.push({ id: nxId(next), clientId: inv.clientId, periodKey, status: "partial", collectedDate: null, amount: tripRevenue, collectedTripIds: tripIds });
-        }
+        const base = idx >= 0 ? next[idx] : { id: nxId(next), clientId: inv.clientId, periodKey, status: "pending", collectedDate: null, amount: 0, collectedTripIds: [] };
+        const rebuilt = rebuildCobro(base, cl, [...(base.collectedTripIds || []), ...tripIds]);
+        if (idx >= 0) next[idx] = rebuilt; else next.push(rebuilt);
       });
       return next;
     });
