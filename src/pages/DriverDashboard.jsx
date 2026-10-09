@@ -3,6 +3,7 @@ import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown } 
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
 import { calcDriverPay } from "../utils/driverPay.js";
+import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
 import { Card, StatCard, PageHeader, Inp, Sel, Btn, Th, Td, DestinationSelect } from "../components/ui/index.jsx";
 
 export default function DriverDashboard({ t, user, trips = [], trucks = [], expenses = [], clients = [], drivers = [], driverObj, setTrips, setExpenses, brokers = [], isMobile }) {
@@ -11,7 +12,7 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
   const [rateMsg, setRateMsg] = useState("");
   const [formError, setFormError] = useState("");
 
-  const emptyForm = { date: today(), province: "", municipality: "", truckId: driverObj?.truckId || trucks[0]?.id || "", driverId: driverObj?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [] };
+  const emptyForm = { date: today(), province: "", municipality: "", truckId: driverObj?.truckId || trucks[0]?.id || "", driverId: driverObj?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [], joint: false, jointWith: null };
 
   const openNew = () => { setForm({ ...emptyForm, createdBy: user?.name || driverObj?.name || "" }); setShowForm(true); setRateMsg(""); setFormError(""); };
 
@@ -51,12 +52,16 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
     if (!form.province || !form.municipality) { setFormError(t.destinationRequired || "Destino requerido"); return; }
     const cl = clients.find(c => c.id === Number(form.clientId));
     if (cl?.rules?.requiresInvoiceRef && !form.invoiceRef) { setFormError(t.invoiceRefRequired); return; }
+    const refCheck = checkTripRef({ ...form, id: null, clientId: Number(form.clientId), truckId: Number(form.truckId) }, trips, { drivers, trucks });
+    if (!refCheck.ok) { setFormError(refCheck.error); return; }
     setFormError("");
     const helpersPay = Number(form.helperPayEach) || 0;
     const helpersArr = Array.from({ length: Number(form.numHelpers) || 0 }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
     const data = { ...form, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr };
     const newId = nxId(trips);
-    setTrips([...trips, { ...data, id: newId }]);
+    let saved = { ...data, id: newId }, linked = null;
+    if (refCheck.linkWith) { const l = linkJoint(saved, refCheck.linkWith); saved = l.trip; linked = l.other; }
+    setTrips([...trips.map(tr => linked && tr.id === linked.id ? linked : tr), saved]);
     const newExpenses = [];
     const tripClient = clients.find(c => c.id === Number(data.clientId));
     const broker = data.brokerId ? brokers.find(b => b.id === data.brokerId) : null;
@@ -181,8 +186,14 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
             <option value="in_transit">{t.inTransit}</option>
             <option value="delivered">{t.delivered}</option>
           </Sel>
-          {selectedClient?.rules?.requiresInvoiceRef && <Inp label={t.invoiceRef + " *"} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: !form.invoiceRef ? colors.red : colors.border }} />}
+          <Inp label={t.invoiceRef + (selectedClient?.rules?.requiresInvoiceRef ? " *" : "")} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: selectedClient?.rules?.requiresInvoiceRef && !form.invoiceRef ? colors.red : colors.border }} />
         </div>
+        {form.invoiceRef && (() => {
+          const others = sameRefTrips({ ...form, id: null, clientId: Number(form.clientId) }, trips);
+          return <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, border: `1px solid ${others.length ? colors.orange + "80" : colors.border}`, background: others.length ? colors.orange + "0d" : "transparent", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: 12 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}><input type="checkbox" checked={!!form.joint} onChange={e => setForm({ ...form, joint: e.target.checked })} /> Viaje conjunto (2 camiones para la misma factura)</label>
+            {others.length > 0 && <span style={{ color: colors.orange }}>Esa referencia ya fue registrada en el viaje #{others[0].id} ({others[0].date}). {form.joint || others[0].joint ? "Se enlazará como viaje conjunto." : "Si fueron dos camiones para la misma factura, marca «Viaje conjunto»; si no, revisa la referencia."}</span>}
+          </div>; })()}
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22`, display: "grid", gridTemplateColumns: Number(form.numHelpers) > 0 ? "1fr 1fr" : "1fr", gap: 10 }}>
           <Sel label={t.numHelpers} value={form.numHelpers ?? 0} onChange={e => setForm({ ...form, numHelpers: Number(e.target.value) })}>
             {[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n === 0 ? "0 — " + t.none : `${n} ayudante${n > 1 ? "s" : ""}`}</option>)}

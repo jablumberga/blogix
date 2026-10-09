@@ -154,6 +154,7 @@ export async function saveData(data, version = 0) {
       return { saved: "api", version: json._version || 0 };
     }
     if (res.status === 409) { return { saved: "conflict" }; }
+    if (res.status === 422) { const j = await res.json().catch(() => ({})); return { saved: "rejected", error: j.error || "Datos rechazados por el servidor", code: j.code, tripId: j.tripId }; }
     if (res.status === 401) {
       // Token expired or invalid — force re-login, don't show "offline"
       localStorage.removeItem(key);

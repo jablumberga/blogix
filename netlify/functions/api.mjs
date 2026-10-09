@@ -16,6 +16,7 @@
  * Optional env var (set AFTER running migration SQL):
  *   BLOGIX_RELATIONAL=true  → use relational bl_* tables instead of JSON blob
  */
+import { validateTripWrites, linkJoint } from "../../src/utils/tripRef.js";
 
 const ALLOWED_ORIGINS = new Set([
   "https://blogix.do",
@@ -194,6 +195,28 @@ const defaultData = {
 };
 
 // ── Relational table helpers ──────────────────────────────────────────────────
+
+
+// ── Referencia de factura única por cliente (salvo viaje conjunto de 2 camiones) ──
+// Valida solo viajes nuevos o cambiados; aplica el enlace de conjunto en ambos viajes.
+// Devuelve { error } si hay conflicto, o { trips, extraUpserts } con los enlaces aplicados.
+async function enforceTripRefs(url, key, incoming) {
+  let existing = [];
+  try { existing = await readTable(url, key, "bl_trips"); } catch { existing = []; }
+  const [drivers, trucks] = await Promise.all([readTable(url, key, "bl_drivers").catch(() => []), readTable(url, key, "bl_trucks").catch(() => [])]);
+  const { errors, links } = validateTripWrites({ incoming, existing, drivers, trucks });
+  if (errors.length) return { error: errors[0].error, tripId: errors[0].tripId };
+  const byId = new Map(incoming.map(t => [t.id, t]));
+  const extra = new Map();
+  for (const { tripId, otherId } of links) {
+    const tr = byId.get(tripId); const other = byId.get(otherId) || extra.get(otherId) || existing.find(t => t.id === otherId);
+    if (!tr || !other) continue;
+    const l = linkJoint(tr, other);
+    byId.set(tripId, l.trip);
+    if (byId.has(otherId)) byId.set(otherId, l.other); else extra.set(otherId, l.other);
+  }
+  return { trips: [...byId.values()], extraUpserts: [...extra.values()] };
+}
 
 async function readTable(url, key, table) {
   const res = await fetch(`${url}/rest/v1/${table}?select=rec&order=id`, {
@@ -504,6 +527,13 @@ export default async (request) => {
         .filter(e => { const n = Number(e.id); return Number.isInteger(n) && n > 0; });
 
       if (useRelational) {
+        // Referencia de factura: no repetida, salvo viaje conjunto (se enlaza aquí, el chofer no ve otros viajes)
+        const refs = await enforceTripRefs(SUPABASE_URL, SUPABASE_SERVICE_KEY, driverTrips);
+        if (refs.error) return Response.json({ error: refs.error, code: "duplicate_ref", tripId: refs.tripId }, { status: 422, headers: corsHeaders });
+        driverTrips.length = 0; driverTrips.push(...refs.trips);
+        if (refs.extraUpserts.length > 0) {
+          await fetch(`${SUPABASE_URL}/rest/v1/bl_trips`, { method: "POST", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify(refs.extraUpserts.map(tr => ({ id: tr.id, rec: tr }))) });
+        }
         // Upsert driver's trips (skip upsert if none, but always delete stale)
         if (driverTrips.length > 0) {
           await fetch(`${SUPABASE_URL}/rest/v1/bl_trips`, {
@@ -657,6 +687,11 @@ export default async (request) => {
       if (body.partners) body.partners = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.partners, "bl_partners");
       if (body.drivers)  body.drivers  = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.drivers,  "bl_drivers");
       if (body.staff)    body.staff    = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.staff,    "bl_staff");
+      if (Array.isArray(body.trips)) {
+        const refs = await enforceTripRefs(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.trips);
+        if (refs.error) return Response.json({ error: refs.error, code: "duplicate_ref", tripId: refs.tripId }, { status: 422, headers: corsHeaders });
+        body.trips = refs.trips;
+      }
 
       try {
         await syncAllTables(SUPABASE_URL, SUPABASE_SERVICE_KEY, body);

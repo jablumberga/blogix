@@ -5,6 +5,7 @@ import { USERS, initSettlementStatus } from "../constants/users.js";
 import { computeAlerts, today } from "../utils/helpers.js";
 import { calcDriverPay } from "../utils/driverPay.js";
 import { DEFAULT_PF_SETTINGS, allocateCobro, COLLECTED } from "../utils/profitFirst.js";
+import { autoLinkJointPairs } from "../utils/tripRef.js";
 
 const AppContext = createContext(null);
 
@@ -78,6 +79,7 @@ export function AppProvider({ children }) {
   const [bankReconciliation, setBankReconciliation] = useState({});
   const [pfSettings, setPfSettings] = useState(DEFAULT_PF_SETTINGS); // Profit First: % a Reserva y fecha de arranque
   const [syncStatus, setSyncStatus] = useState("idle");
+  const [syncError, setSyncError] = useState(null); // mensaje del servidor cuando rechaza un dato (p. ej. referencia repetida)
 
   const saveTimerRef   = useRef(null);
   const dataLoadedRef  = useRef(false);
@@ -148,6 +150,13 @@ export function AppProvider({ children }) {
             bankAccount, bankReconciliation, pfSettings };
       const result = await saveData(payload, versionRef.current);
       if (result.saved === "unauthorized") { setUser(null); return; }
+      if (result.saved === "rejected") {
+        // El servidor no aceptó un dato: se avisa y se recarga lo que sí está guardado
+        setSyncError(result.error); setSyncStatus("rejected");
+        isReloadingRef.current = true;
+        loadData().then(({ source, data, version = 0 }) => { applyData(data, setters); versionRef.current = version; isReloadingRef.current = false; setSyncStatus(source === "api" ? "saved" : "offline"); });
+        return;
+      }
       if (result.saved === "conflict") {
         setSyncStatus("conflict");
         // Reload from server to get the winning version; user's unsaved changes are lost
@@ -315,6 +324,10 @@ export function AppProvider({ children }) {
       });
     }
 
+    // ── Step 2a: viajes conjuntos históricos (misma referencia, camiones distintos) ──
+    const jointFix = autoLinkJointPairs(trips);
+    if (jointFix.changed > 0) setTrips(jointFix.trips);
+
     // ── Step 2b: Profit First — cobros viejos sin asignación ────────────────
     const cobrosToFix = cobros.filter(c => COLLECTED.includes(c.status) && Number(c.amount) > 0 && !(c.pf && typeof c.pf.opex === "number"));
     if (cobrosToFix.length > 0) {
@@ -351,7 +364,7 @@ export function AppProvider({ children }) {
       }));
     }
 
-    return { added: toAdd.length, removed: staleExpIds.size, invoicesPatched: invoicesToPatch.length, cobrosAllocated: cobrosToFix.length };
+    return { added: toAdd.length, removed: staleExpIds.size, invoicesPatched: invoicesToPatch.length, cobrosAllocated: cobrosToFix.length, jointLinked: jointFix.changed };
   };
 
   const forceSync = async () => {
@@ -362,6 +375,7 @@ export function AppProvider({ children }) {
       bankAccount, bankReconciliation, pfSettings,
     }, versionRef.current);
     if (result.saved === "unauthorized") { setUser(null); return; }
+    if (result.saved === "rejected") { setSyncError(result.error); setSyncStatus("rejected"); return result; }
     if (result.saved === "conflict") { setSyncStatus("conflict"); return result; }
     if (result.saved === "api") versionRef.current = result.version || 0;
     setSyncStatus(result.saved === "api" ? "saved" : "offline");
@@ -371,7 +385,7 @@ export function AppProvider({ children }) {
   const value = {
     // UI
     lang, setLang, t, user, login, logout, forceSync, syncAll,
-    sidebarOpen, setSidebarOpen, isMobile, syncStatus,
+    sidebarOpen, setSidebarOpen, isMobile, syncStatus, syncError, setSyncError,
     // Auth
     isAdmin, isPartner, isDriver, isAssistant, allUsers,
     // Data

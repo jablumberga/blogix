@@ -33,9 +33,11 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 function SyncAllButton({ syncAll, sidebarOpen }) {
   const [msg, setMsg] = useState(null);
   const handle = () => {
-    const { added, removed, invoicesPatched } = syncAll();
+    const { added, removed, invoicesPatched, cobrosAllocated = 0, jointLinked = 0 } = syncAll();
     const parts = [];
     if (added > 0) parts.push(`+${added} nómina`);
+    if (cobrosAllocated > 0) parts.push(`${cobrosAllocated} cobro${cobrosAllocated !== 1 ? "s" : ""} con Profit First`);
+    if (jointLinked > 0) parts.push(`${jointLinked} viaje${jointLinked !== 1 ? "s" : ""} conjunto${jointLinked !== 1 ? "s" : ""} enlazado${jointLinked !== 1 ? "s" : ""}`);
     if (removed > 0) parts.push(`−${removed} gasto${removed !== 1 ? "s" : ""} broker`);
     if (invoicesPatched > 0) parts.push(`${invoicesPatched} factura${invoicesPatched !== 1 ? "s" : ""} actualizadas`);
     const text = parts.length > 0 ? `✅ ${parts.join(", ")}` : "✅ Todo sincronizado";
@@ -95,7 +97,7 @@ export default function App() {
     cobros, setCobros, invoices, setInvoices,
     bankAccount, setBankAccount, bankReconciliation, setBankReconciliation,
     pfSettings, setPfSettings,
-    syncStatus, partner, partnerTruckIds, driverObj, alerts,
+    syncStatus, syncError, setSyncError, partner, partnerTruckIds, driverObj, alerts,
   } = useApp();
 
   const [page, setPage] = useState(() => {
@@ -351,6 +353,12 @@ export default function App() {
             <button onClick={() => window.location.reload()} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
               🔄 Reconectar
             </button>
+          </div>
+        )}
+        {syncError && (
+          <div style={{ position: "sticky", top: 0, zIndex: 100, background: colors.red, color: "#fff", padding: "10px 16px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 8, marginBottom: 12 }}>
+            <span>⚠ No se guardó: {syncError}</span>
+            <button onClick={() => setSyncError(null)} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontWeight: 700 }}>Entendido</button>
           </div>
         )}
         {isDriver && syncStatus === "offline" && (
