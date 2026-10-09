@@ -10,7 +10,7 @@ function applyData(data, setters) {
   const { setClients, setPartners, setTrucks, setDrivers, setTrips,
           setExpenses, setBrokers, setSuppliers, setFixedTemplates,
           setSettlementStatus, setCobros, setInvoices,
-          setBankAccount, setBankReconciliation } = setters;
+          setBankAccount, setBankReconciliation, setStaff } = setters;
   if (!data || Object.keys(data).length === 0) return;
   const hasAnyData = Object.values(data).some(v =>
     Array.isArray(v) ? v.length > 0 : (v && typeof v === "object" ? Object.keys(v).length > 0 : Boolean(v))
@@ -28,6 +28,7 @@ function applyData(data, setters) {
   if (data.settlementStatus)              setSettlementStatus(data.settlementStatus);
   if (Array.isArray(data.cobros))         setCobros(data.cobros);
   if (Array.isArray(data.invoices))       setInvoices(data.invoices);
+  if (Array.isArray(data.staff))          setStaff(data.staff);
   if (data.bankAccount != null)           setBankAccount(data.bankAccount);
   if (data.bankReconciliation != null)    setBankReconciliation(data.bankReconciliation);
 }
@@ -69,6 +70,7 @@ export function AppProvider({ children }) {
   const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
   const [cobros, setCobros] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [staff, setStaff] = useState([]); // usuarios de oficina (asistente administrativa)
   const [bankAccount, setBankAccount] = useState({ name: "Cuenta Principal", bank: "", openingBalance: 0, openingDate: today() });
   const [bankReconciliation, setBankReconciliation] = useState({});
   const [syncStatus, setSyncStatus] = useState("idle");
@@ -84,7 +86,7 @@ export function AppProvider({ children }) {
     setClients, setPartners, setTrucks, setDrivers, setTrips,
     setExpenses, setBrokers, setSuppliers, setFixedTemplates,
     setSettlementStatus, setCobros, setInvoices,
-    setBankAccount, setBankReconciliation,
+    setBankAccount, setBankReconciliation, setStaff,
   };
 
   // ── Load on mount ─────────────────────────────────────────────────────────
@@ -109,9 +111,10 @@ export function AppProvider({ children }) {
     if (!dataLoadedRef.current) return;
     currentDataRef.current = {
       clients, partners, trucks, drivers, trips, expenses,
-      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
+      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff,
+      bankAccount, bankReconciliation,
     };
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, bankAccount, bankReconciliation]);
 
   // ── Flush to localStorage on tab close / Android OS kill (admin only) ────
   useEffect(() => {
@@ -128,14 +131,16 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (!dataLoadedRef.current) return;
     if (isReloadingRef.current) return;
-    if (user?.role !== "admin" && user?.role !== "driver") return; // partners read-only; drivers can save own trips
+    if (user?.role !== "admin" && user?.role !== "driver" && user?.role !== "assistant") return; // partners read-only
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSyncStatus("saving");
       const payload = user?.role === "driver"
         ? { trips, expenses }
+        : user?.role === "assistant"
+        ? { trips }
         : { clients, partners, trucks, drivers, trips, expenses,
-            brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
+            brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff,
             bankAccount, bankReconciliation };
       const result = await saveData(payload, versionRef.current);
       if (result.saved === "unauthorized") { setUser(null); return; }
@@ -155,19 +160,21 @@ export function AppProvider({ children }) {
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, bankAccount, bankReconciliation]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, bankAccount, bankReconciliation]);
 
   // ── Dynamic user list ─────────────────────────────────────────────────────
   const allUsers = useMemo(() => [
     ...USERS.filter(u => u.role === "admin"),
     ...partners.map(p => ({ id: `p-${p.id}`, username: p.username, role: "partner", name: p.name, refId: p.id })),
     ...drivers.map(d => ({ id: `d-${d.id}`, username: d.username, role: "driver", name: d.name, refId: d.id })),
-  ], [partners, drivers]);
+    ...staff.map(s => ({ id: `s-${s.id}`, username: s.username, role: s.role || "assistant", name: s.name, refId: s.id })),
+  ], [partners, drivers, staff]);
 
   // ── Computed helpers ──────────────────────────────────────────────────────
   const isAdmin = user?.role === "admin";
   const isPartner = user?.role === "partner";
   const isDriver = user?.role === "driver";
+  const isAssistant = user?.role === "assistant";
 
   const partner = isPartner ? partners.find(p => p.id === user?.refId) : null;
   const partnerTruckIds = useMemo(
@@ -212,7 +219,8 @@ export function AppProvider({ children }) {
     clearToken();
     setClients([]); setPartners([]); setTrucks([]); setDrivers([]);
     setTrips([]); setExpenses([]); setBrokers([]); setSuppliers([]);
-    setFixedTemplates([]); setSettlementStatus({}); setCobros([]); setInvoices([]);
+    setFixedTemplates([]); setSettlementStatus({}); setCobros([]); setInvoices([]); setStaff([]);
+    setBankAccount({ name: "Cuenta Principal", bank: "", openingBalance: 0, openingDate: today() }); setBankReconciliation({});
     versionRef.current = 0;
     dataLoadedRef.current = false;
     setUser(null);
@@ -344,7 +352,8 @@ export function AppProvider({ children }) {
     setSyncStatus("saving");
     const result = await saveData({
       clients, partners, trucks, drivers, trips, expenses,
-      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
+      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff,
+      bankAccount, bankReconciliation,
     }, versionRef.current);
     if (result.saved === "unauthorized") { setUser(null); return; }
     if (result.saved === "conflict") { setSyncStatus("conflict"); return result; }
@@ -358,7 +367,7 @@ export function AppProvider({ children }) {
     lang, setLang, t, user, login, logout, forceSync, syncAll,
     sidebarOpen, setSidebarOpen, isMobile, syncStatus,
     // Auth
-    isAdmin, isPartner, isDriver, allUsers,
+    isAdmin, isPartner, isDriver, isAssistant, allUsers,
     // Data
     clients, setClients,
     partners, setPartners,
@@ -372,6 +381,7 @@ export function AppProvider({ children }) {
     settlementStatus, setSettlementStatus,
     cobros, setCobros,
     invoices, setInvoices,
+    staff, setStaff,
     bankAccount, setBankAccount,
     bankReconciliation, setBankReconciliation,
     // Computed

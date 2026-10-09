@@ -172,21 +172,27 @@ export default async (request) => {
         // Relational mode — bl_* tables use { id, rec } column layout (api.mjs pattern)
         try {
           const sbHeaders = { "Content-Type": "application/json", "apikey": SUPABASE_SERVICE_KEY, "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}` };
-          const [pRes, dRes] = await Promise.all([
+          const [pRes, dRes, sRes] = await Promise.all([
             fetch(`${SUPABASE_URL}/rest/v1/bl_partners?select=id,rec`, { headers: sbHeaders }),
             fetch(`${SUPABASE_URL}/rest/v1/bl_drivers?select=id,rec`,  { headers: sbHeaders }),
+            fetch(`${SUPABASE_URL}/rest/v1/bl_staff?select=id,rec`,    { headers: sbHeaders }),
           ]);
           const partners = pRes.ok
             ? (await pRes.json())
-                .filter(row => row.rec?.username && row.rec?.password)
+                .filter(row => row.rec?.username && row.rec?.password && row.rec?.status !== "inactive")
                 .map(row => ({ id: `p-${row.id}`, _dbId: row.id, _role: "partner", username: row.rec.username, password: row.rec.password, role: "partner", name: row.rec.name, refId: row.id }))
             : [];
           const drivers = dRes.ok
             ? (await dRes.json())
-                .filter(row => row.rec?.username && row.rec?.password)
+                .filter(row => row.rec?.username && row.rec?.password && row.rec?.status !== "inactive")
                 .map(row => ({ id: `d-${row.id}`, _dbId: row.id, _role: "driver", username: row.rec.username, password: row.rec.password, role: "driver", name: row.rec.name, refId: row.id }))
             : [];
-          dynamicUsers = [...partners, ...drivers];
+          const staff = sRes.ok
+            ? (await sRes.json())
+                .filter(row => row.rec?.username && row.rec?.password && row.rec?.status !== "inactive")
+                .map(row => ({ id: `s-${row.id}`, _dbId: row.id, _role: "staff", username: row.rec.username, password: row.rec.password, role: row.rec.role || "assistant", name: row.rec.name, refId: row.id }))
+            : [];
+          dynamicUsers = [...partners, ...drivers, ...staff];
         } catch (err) {
           console.warn("[auth] Failed to load users from relational tables:", err.message);
         }
@@ -220,7 +226,7 @@ export default async (request) => {
     }
 
     const allUsers = [...adminUsers, ...dynamicUsers];
-    const candidate = allUsers.find(u => u.username === username);
+    const candidate = allUsers.find(u => String(u.username).toLowerCase() === username.trim().toLowerCase());
 
     if (!candidate) {
       return Response.json({ ok: false, error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
@@ -252,7 +258,7 @@ export default async (request) => {
         const newHash = await bcrypt.hash(password, 10);
         if (BLOGIX_RELATIONAL === "true") {
           // bl_* tables store all fields inside rec JSONB — must read current rec then merge
-          const table = candidate._role === "partner" ? "bl_partners" : "bl_drivers";
+          const table = candidate._role === "partner" ? "bl_partners" : candidate._role === "staff" ? "bl_staff" : "bl_drivers";
           const getRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${candidate._dbId}&select=rec`, {
             headers: { "Content-Type": "application/json", "apikey": SUPABASE_SERVICE_KEY, "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}` },
           });

@@ -25,6 +25,8 @@ import SettlementsPage from "./pages/SettlementsPage.jsx";
 import CxCPage from "./pages/CxCPage.jsx";
 import InvoicesPage from "./pages/InvoicesPage.jsx";
 import BancoPage from "./pages/BancoPage.jsx";
+import AssistantDashboard from "./pages/AssistantDashboard.jsx";
+import StaffPage from "./pages/StaffPage.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -84,7 +86,8 @@ async function initPushNotifications(userRole) {
 export default function App() {
   const {
     lang, setLang, t, user, login, logout, forceSync, syncAll,
-    isAdmin, isPartner, isDriver, allUsers,
+    isAdmin, isPartner, isDriver, isAssistant, allUsers,
+    staff, setStaff,
     clients, setClients, partners, setPartners, trucks, setTrucks,
     drivers, setDrivers, trips, setTrips, expenses, setExpenses,
     brokers, setBrokers, suppliers, setSuppliers,
@@ -100,6 +103,7 @@ export default function App() {
       const u = s ? JSON.parse(s) : null;
       if (u?.role === "driver") return "driverDash";
       if (u?.role === "partner") return "partnerDash";
+      if (u?.role === "assistant") return "assistantDash";
     } catch {}
     return "dashboard";
   });
@@ -154,7 +158,7 @@ export default function App() {
   if (!user) return <LoginPage t={t} onLogin={(u, remember, token) => {
     login(u, remember, token);
     setShowLanding(true);
-    setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : "dashboard");
+    setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : u.role === "assistant" ? "assistantDash" : "dashboard");
     initPushNotifications(u.role);
   }} />;
 
@@ -172,6 +176,7 @@ export default function App() {
     { id: "fleet",       icon: Truck,            label: t.fleet },
     { id: "drivers",     icon: Users,            label: t.drivers },
     { id: "partners",    icon: UserCog,          label: t.partners },
+    { id: "staff",       icon: UserCheck,        label: "Oficina" },
     { id: "brokers",     icon: Briefcase,        label: t.brokers },
     { divider: true },
     { id: "expenses",    icon: Receipt,          label: t.expenses },
@@ -190,14 +195,19 @@ export default function App() {
   const driverNav = [
     { id: "driverDash", icon: LayoutDashboard, label: t.dashboard },
   ];
-  const navItems = isAdmin ? adminNav : isPartner ? partnerNav : driverNav;
+  const assistantNav = [
+    { id: "assistantDash", icon: LayoutDashboard, label: "Oficina" },
+  ];
+  const navItems = isAdmin ? adminNav : isPartner ? partnerNav : isAssistant ? assistantNav : driverNav;
 
-  const ctx = { t, user, isMobile, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, partner, partnerTruckIds, driverObj, alerts };
+  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, partner, partnerTruckIds, driverObj, alerts };
 
   const pageTitles = {
     dashboard:   t.dashboard,
     partnerDash: t.partnerDashboard,
     driverDash:  t.dashboard,
+    assistantDash: "Oficina — documentos y nómina",
+    staff:       "Usuarios de oficina",
     clients:     t.clients,
     invoices:    "Facturas",
     cxc:         "Cuentas x Cobrar",
@@ -351,6 +361,8 @@ export default function App() {
         {page === "dashboard"   && isAdmin   && <AdminDashboard   {...ctx} setPage={setPage} />}
         {page === "partnerDash" && isPartner  && <PartnerDashboard {...ctx} />}
         {page === "driverDash"  && isDriver   && <DriverDashboard  {...ctx} />}
+        {page === "assistantDash" && isAssistant && <AssistantDashboard {...ctx} />}
+        {page === "staff"       && isAdmin    && <StaffPage        {...ctx} />}
         {page === "clients"     && isAdmin    && <ClientsPage      {...ctx} />}
         {page === "invoices"    && isAdmin    && <InvoicesPage      {...ctx} />}
         {page === "cxc"         && isAdmin    && <CxCPage          {...ctx} setPage={setPage} />}

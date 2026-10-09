@@ -132,6 +132,23 @@ function applyRLS(data, user) {
     };
   }
 
+  if (user.role === "assistant") {
+    // Oficina: ve viajes, choferes, socios, camiones y clientes (sin tarifas ni contactos),
+    // y los adelantos (para la nómina). No ve dinero de la empresa: facturas, cobros, banco.
+    const slimClient = c => ({ id: c.id, companyName: c.companyName, status: c.status, rules: c.rules || {} });
+    const slimDriver = d => { const { password, phone, license, ...rest } = d; return rest; };
+    const slimPartner = p => ({ id: p.id, name: p.name, status: p.status, model: p.model });
+    return {
+      trips:            data.trips || [],
+      drivers:          (data.drivers || []).map(slimDriver),
+      partners:         (data.partners || []).map(slimPartner),
+      trucks:           data.trucks || [],
+      clients:          (data.clients || []).map(slimClient),
+      expenses:         (data.expenses || []).filter(e => e.category === "adelanto_conductor" || e.category === "driverPay" || e.category === "nominaTotalOverride"),
+      brokers: [], suppliers: [], fixedTemplates: [], cobros: [], invoices: [], settlementStatus: {},
+    };
+  }
+
   if (user.role === "driver") {
     const driver    = (data.drivers || []).find(d => d.id === user.refId);
     if (!driver) return { error: "Driver not found" };
@@ -209,7 +226,7 @@ async function readSettlementStatus(url, key) {
 async function readAllTables(url, key) {
   const [
     trips, expenses, trucks, drivers, clients, partners,
-    brokers, suppliers, invoices, cobros, fixedTemplates, settlementStatus,
+    brokers, suppliers, invoices, cobros, fixedTemplates, settlementStatus, staff,
   ] = await Promise.all([
     readTable(url, key, "bl_trips"),
     readTable(url, key, "bl_expenses"),
@@ -223,12 +240,13 @@ async function readAllTables(url, key) {
     readTable(url, key, "bl_cobros"),
     readTable(url, key, "bl_fixed_templates"),
     readSettlementStatus(url, key),
+    readTable(url, key, "bl_staff").catch(() => []), // tabla nueva: puede no existir aún
   ]);
   // Extract bank config stored in the settlement_status blob under __ keys
   const { __bankAccount, __bankReconciliation, ...cleanSettlementStatus } = settlementStatus;
   return {
     trips, expenses, trucks, drivers, clients, partners, brokers, suppliers,
-    invoices, cobros, fixedTemplates,
+    invoices, cobros, fixedTemplates, staff,
     settlementStatus: cleanSettlementStatus,
     bankAccount: __bankAccount || null,
     bankReconciliation: __bankReconciliation || null,
@@ -301,6 +319,7 @@ async function syncAllTables(url, key, body) {
   await run("bl_invoices",         () => syncTable(url, key, "bl_invoices",        body.invoices));
   await run("bl_cobros",           () => syncTable(url, key, "bl_cobros",          body.cobros));
   await run("bl_fixed_templates",  () => syncTable(url, key, "bl_fixed_templates", body.fixedTemplates));
+  await run("bl_staff",            () => syncTable(url, key, "bl_staff",           body.staff));
   if (errors.length > 0) throw new Error(errors.join("; "));
   // syncSettlementStatus is intentionally NOT called here — the POST handler is the sole writer
   // of the version stamp so _version is always set atomically after all tables confirm success.
@@ -361,8 +380,11 @@ async function relationalSafetyCheck(url, key, body, coreKeys) {
 
 function stripPasswords(data) {
   const strip = arr => Array.isArray(arr) ? arr.map(({ password: _pw, ...rest }) => rest) : arr;
-  return { ...data, partners: strip(data.partners), drivers: strip(data.drivers) };
+  return { ...data, partners: strip(data.partners), drivers: strip(data.drivers), staff: strip(data.staff) };
 }
+
+// Campos que la asistente de oficina puede cambiar en un viaje
+const ASSISTANT_TRIP_FIELDS = ["docs", "docStatus", "podDelivered", "docsReceivedAt", "docsReceivedBy", "invoiceRef"];
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 export default async (request) => {
@@ -540,6 +562,42 @@ export default async (request) => {
       return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "driver-write" }, { headers: corsHeaders });
     }
 
+    // ── Asistente de oficina: solo documentos de viajes existentes ───────
+    if (sessionUser.role === "assistant") {
+      let body;
+      try { body = await request.json(); }
+      catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
+      const incoming = (body.trips || []).filter(tr => Number.isInteger(Number(tr.id)) && Number(tr.id) > 0);
+      if (!useRelational) return Response.json({ error: "Modo blob no soportado para asistente" }, { status: 400, headers: corsHeaders });
+      const errors = [];
+      let changed = 0;
+      for (const tr of incoming) {
+        const getRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_trips?id=eq.${Number(tr.id)}&select=rec`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+        if (!getRes.ok) { errors.push(`viaje ${tr.id}: lectura ${getRes.status}`); continue; }
+        const rows = await getRes.json();
+        const current = rows[0]?.rec;
+        if (!current) continue; // la asistente no crea viajes
+        const patch = {};
+        for (const k of ASSISTANT_TRIP_FIELDS) if (k in tr && JSON.stringify(tr[k]) !== JSON.stringify(current[k])) patch[k] = tr[k];
+        if (Object.keys(patch).length === 0) continue;
+        const upRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_trips?id=eq.${Number(tr.id)}`, {
+          method: "PATCH", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "return=minimal" },
+          body: JSON.stringify({ rec: { ...current, ...patch } }),
+        });
+        if (!upRes.ok) errors.push(`viaje ${tr.id}: ${upRes.status}`); else changed++;
+      }
+      if (errors.length) return Response.json({ error: errors.join("; ") }, { status: 500, headers: corsHeaders });
+      // Sube la versión para que un admin con el app abierto reciba conflicto y recargue
+      let newVersion = 0;
+      if (changed > 0) {
+        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_settlement_status?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+        const cur = sRes.ok ? ((await sRes.json())[0]?.data || {}) : {};
+        newVersion = Date.now();
+        await syncSettlementStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY, { ...cur, _version: newVersion });
+      }
+      return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "assistant-write", changed, ...(newVersion ? { _version: newVersion } : {}) }, { headers: corsHeaders });
+    }
+
     if (sessionUser.role !== "admin") {
       return Response.json({ error: "Forbidden" }, { status: 403, headers: corsHeaders });
     }
@@ -597,6 +655,7 @@ export default async (request) => {
       // Restore passwords that GET strips — prevents every admin save from wiping login credentials
       if (body.partners) body.partners = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.partners, "bl_partners");
       if (body.drivers)  body.drivers  = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.drivers,  "bl_drivers");
+      if (body.staff)    body.staff    = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.staff,    "bl_staff");
 
       try {
         await syncAllTables(SUPABASE_URL, SUPABASE_SERVICE_KEY, body);
