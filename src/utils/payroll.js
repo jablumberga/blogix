@@ -94,6 +94,41 @@ export function buildPayroll({ period, drivers = [], trips = [], trucks = [], cl
   return { period, drivers: rows, totals };
 }
 
+/** Clave estable de un período de nómina (se guarda en los gastos que lo pagan). */
+export const payrollKey = (period) => `${period.mStr}-H${period.half}`;
+
+/**
+ * Estado de pago de una fila de nómina según los gastos registrados.
+ * - líneas por viaje: monto efectivo (override por viaje si existe) y si ya está pagada
+ * - override total (gasto `nominaTotalOverride` con payrollKey)
+ * - fijo: gasto driverPay sin viaje con payrollKey
+ * Devuelve { key, lines, override, driverTotal, grossEff, net, paid, partial, paidCount, payExps, helperExps, fixedExp }
+ */
+export function payrollPayment({ row, period, expenses = [] }) {
+  const key = payrollKey(period);
+  const tripIds = new Set(row.trips.map(x => x.trip.id));
+  const payExps = expenses.filter(e => e.category === "driverPay" && (
+    (e.tripId && tripIds.has(e.tripId)) || (!e.tripId && e.driverId === row.driver.id && e.payrollKey === key)));
+  const helperExps = expenses.filter(e => e.category === "helper" && tripIds.has(e.tripId));
+  const override = expenses.find(e => e.category === "nominaTotalOverride" && e.driverId === row.driver.id && e.payrollKey === key) || null;
+  const fixedExp = payExps.find(e => !e.tripId) || null;
+  const lines = row.trips.map(x => {
+    const exp = payExps.find(e => e.tripId === x.trip.id) || null;
+    const overridden = !!exp && exp.calcAmount !== undefined && exp.calcAmount !== null && Number(exp.amount) !== Number(exp.calcAmount);
+    const amount = overridden ? Number(exp.amount) || 0 : x.calc.driverNet;
+    return { ...x, exp, amount, overridden, paid: exp?.status === "paid" };
+  });
+  const driverTotal = row.payType === "fixed" ? row.gross : lines.reduce((s, l) => s + l.amount, 0);
+  const grossEff = override ? Number(override.amount) || 0 : driverTotal;
+  const net = Math.max(0, grossEff - row.advances);
+  const paidCount = lines.filter(l => l.paid).length;
+  const paid = row.payType === "fixed"
+    ? fixedExp?.status === "paid"
+    : lines.length > 0 && lines.every(l => l.paid) && (!override || override.status === "paid");
+  const partial = !paid && (paidCount > 0 || fixedExp?.status === "paid");
+  return { key, lines, override, driverTotal, grossEff, net, paid, partial, paidCount, payExps, helperExps, fixedExp };
+}
+
 /** Viajes del período en camiones de un socio (para la vista de la asistente). */
 export function partnerTripsInPeriod({ partner, period, trips, trucks, clients = [], drivers = [] }) {
   const truckIds = new Set(trucks.filter(tk => tk.partnerId === partner.id).map(tk => tk.id));

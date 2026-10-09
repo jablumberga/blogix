@@ -3,6 +3,7 @@ import { loadData, saveData, saveToken, clearToken, resetApiCache } from "../api
 import { translations } from "../constants/translations.js";
 import { USERS, initSettlementStatus } from "../constants/users.js";
 import { computeAlerts, today } from "../utils/helpers.js";
+import { calcDriverPay } from "../utils/driverPay.js";
 
 const AppContext = createContext(null);
 
@@ -256,35 +257,28 @@ export function AppProvider({ children }) {
     // against the live `expenses` array minus the stale ones we're removing.
     const toAdd = [];
     trips.forEach(tr => {
-      // ── Driver pay ────────────────────────────────────────────────────────
-      if (tr.driverId) {
+      // ── Driver pay + ayudantes (misma función que Viajes y Nómina) ─────────
+      if (tr.driverId && tr.status !== "cancelled") {
         const driver = driverMap.get(tr.driverId);
         const existingPay = expenses.find(e => e.category === "driverPay" && e.tripId === tr.id);
         // If the trip date changed after driverPay was created, patch the date in place
-        if (existingPay && existingPay.date !== tr.date) {
+        if (existingPay && existingPay.date !== tr.date && existingPay.status !== "paid") {
           setExpenses(prev => prev.map(e => e.id === existingPay.id ? { ...e, date: tr.date } : e));
         }
-        const hasDriverPay = !!existingPay;
-        if (driver && driver.salaryType !== "fixed" && !hasDriverPay) {
-          let pay = 0;
-          if (driver.salaryType === "porcentaje") {
-            pay = Math.round((tr.revenue || 0) * (driver.percentageAmount ?? 20) / 100);
-          } else if (driver.salaryType === "perTrip") {
-            const rate = (driver.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality);
-            if (rate) {
-              const tk = truckMap.get(tr.truckId);
-              const size = tr.tarifaOverride || tk?.size || "T1";
-              pay = size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) : (rate.priceT1 ?? 0);
-            }
-            // No rate configured → leave pay=0 so admin knows to set up the rate table
-          }
-          const tripDiscounts = (tr.discounts || []).reduce((s, d) => s + (d.amount || 0), 0);
-          pay = Math.max(0, pay - tripDiscounts);
-          if (pay > 0) {
-            const label = driver.salaryType === "porcentaje" ? `${driver.percentageAmount ?? 20}%` : "por viaje";
+        if (driver) {
+          const calc = calcDriverPay({ driver, trip: tr, truck: truckMap.get(tr.truckId), clientId: tr.clientId });
+          if (!existingPay && calc.payType !== "fixed" && calc.driverNet > 0) {
             toAdd.push({
-              tripId: tr.id, date: tr.date, category: "driverPay", amount: pay,
-              description: `Nómina (${label}): ${driver.name}`,
+              tripId: tr.id, date: tr.date, category: "driverPay", amount: calc.driverNet,
+              description: `Pago chofer ${driver.name} · ${tr.municipality || ""}`,
+              paymentMethod: "transfer", driverId: driver.id, status: "pending", supplierId: null,
+            });
+          }
+          const hasHelper = expenses.some(e => e.category === "helper" && e.tripId === tr.id);
+          if (!hasHelper && calc.helpersTotal > 0) {
+            toAdd.push({
+              tripId: tr.id, date: tr.date, category: "helper", amount: calc.helpersTotal,
+              description: `Ayudantes (${calc.numHelpers}) · ${tr.municipality || ""}`,
               paymentMethod: "transfer", driverId: driver.id, status: "pending", supplierId: null,
             });
           }

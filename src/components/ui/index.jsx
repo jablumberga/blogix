@@ -240,9 +240,9 @@ export function Th({ children, align = "left" }) {
   );
 }
 
-export function Td({ children, align = "left", bold, color: c }) {
+export function Td({ children, align = "left", bold, color: c, colSpan, style }) {
   return (
-    <td style={{ padding: "11px 12px", textAlign: align, fontWeight: bold ? 600 : 400, color: c || colors.text, fontSize: font.base }}>
+    <td colSpan={colSpan} style={{ padding: "11px 12px", textAlign: align, fontWeight: bold ? 600 : 400, color: c || colors.text, fontSize: font.base, ...(style || {}) }}>
       {children}
     </td>
   );

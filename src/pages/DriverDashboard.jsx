@@ -2,6 +2,7 @@ import { useState, Fragment } from "react";
 import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
+import { calcDriverPay } from "../utils/driverPay.js";
 import { Card, StatCard, PageHeader, Inp, Sel, Btn, Th, Td, DestinationSelect } from "../components/ui/index.jsx";
 
 export default function DriverDashboard({ t, user, trips = [], trucks = [], expenses = [], clients = [], drivers = [], driverObj, setTrips, setExpenses, brokers = [], isMobile }) {
@@ -64,27 +65,15 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
       const fee = Math.round(data.revenue * broker.commissionPct / 100);
       newExpenses.push({ category: "broker_commission", amount: fee, description: `${t.brokerAutoDeducted}: ${broker.name} (${broker.commissionPct}%)`, paymentMethod: "transfer", brokerId: data.brokerId, status: "paid" });
     }
-    if (driverObj && driverObj.salaryType !== "fixed") {
-      let driverPay = 0;
-      if (driverObj.salaryType === "porcentaje") {
-        driverPay = Math.round((data.revenue || 0) * (driverObj.percentageAmount ?? 20) / 100);
-      } else if (driverObj.salaryType === "perTrip") {
-        const rate = (driverObj.rates || []).find(r => r.province === data.province && r.municipality === data.municipality);
-        if (rate) {
-          const tk = trucks.find(t2 => t2.id === Number(data.truckId));
-          const size = tk?.size || "T1";
-          driverPay = size === "T2"
-            ? (rate.priceT2 ?? rate.priceT1 ?? 0) + (rate.dietaT2 || 0) + (rate.helperT2 || 0) * 2
-            : (rate.priceT1 ?? 0) + (rate.dietaT1 || 0) + (rate.helperT1 || 0);
-        }
-      } else {
-        driverPay = Math.round((data.revenue || 0) * 0.20);
+    if (driverObj) {
+      // Misma función de pago que Viajes/Nómina: tarifario por cliente, dieta incluida, ayudantes aparte
+      const tk = trucks.find(t2 => t2.id === Number(data.truckId));
+      const calc = calcDriverPay({ driver: driverObj, trip: data, truck: tk, clientId: data.clientId });
+      if (calc.payType !== "fixed" && calc.driverNet > 0) {
+        newExpenses.push({ category: "driverPay", amount: calc.driverNet, description: `Pago chofer ${driverObj.name} · ${data.municipality}`, paymentMethod: "transfer", driverId: driverObj.id, status: "pending" });
       }
-      const discountTotal = (data.discounts || []).reduce((s, d) => s + (Number(d?.amount) || 0), 0);
-      driverPay = Math.max(0, driverPay - discountTotal);
-      if (driverPay > 0) {
-        const desc = driverObj.salaryType === "perTrip" ? `Pago por viaje: ${driverObj.name}` : `Nómina ${driverObj.salaryType === "porcentaje" ? (driverObj.percentageAmount || 0) : 20}%: ${driverObj.name}`;
-        newExpenses.push({ category: "driverPay", amount: driverPay, description: desc, paymentMethod: "transfer", driverId: driverObj.id, status: "pending" });
+      if (calc.helpersTotal > 0) {
+        newExpenses.push({ category: "helper", amount: calc.helpersTotal, description: `Ayudantes (${calc.numHelpers}) · ${data.municipality}`, paymentMethod: "transfer", driverId: driverObj.id, status: "pending" });
       }
     }
     if (newExpenses.length > 0) {

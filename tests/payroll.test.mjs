@@ -69,3 +69,49 @@ test("el PDF del chofer no contiene montos y escapa HTML; el de nómina sí tien
   assert.ok(pay.includes("Total nómina del período"));
   assert.ok(pay.includes("RD$"));
 });
+
+// ── payrollPayment ─────────────────────────────────────────────────────────
+import { payrollPayment, payrollKey } from "../src/utils/payroll.js";
+const pdKey = { ...period, mStr: "2026-10" };
+
+test("payrollPayment: pendiente sin gastos, pagado cuando todos los driverPay de los viajes están pagados", () => {
+  const p = buildPayroll({ period: pdKey, drivers, trips, trucks, clients, expenses });
+  const row = p.drivers.find(x => x.driver.id === 1);
+  let pay = payrollPayment({ row, period: pdKey, expenses });
+  assert.equal(pay.paid, false); assert.equal(pay.partial, false);
+  assert.equal(pay.driverTotal, row.gross - row.discounts);
+  assert.equal(pay.net, row.net);
+  const paidExps = [...expenses,
+    { id: 2, category: "driverPay", tripId: 15, driverId: 1, amount: 2500, status: "paid" },
+    { id: 3, category: "driverPay", tripId: 10, driverId: 1, amount: 2500, status: "paid" }];
+  pay = payrollPayment({ row, period: pdKey, expenses: paidExps });
+  assert.equal(pay.paid, true);
+  // uno solo pagado → parcial
+  pay = payrollPayment({ row, period: pdKey, expenses: paidExps.slice(0, 2) });
+  assert.equal(pay.paid, false); assert.equal(pay.partial, true); assert.equal(pay.paidCount, 1);
+});
+
+test("payrollPayment: override por viaje y override total", () => {
+  const p = buildPayroll({ period: pdKey, drivers, trips, trucks, clients, expenses });
+  const row = p.drivers.find(x => x.driver.id === 1);
+  const withLine = [...expenses, { id: 2, category: "driverPay", tripId: 15, driverId: 1, amount: 1000, calcAmount: 2500, overrideNote: "daño", status: "pending" }];
+  let pay = payrollPayment({ row, period: pdKey, expenses: withLine });
+  const l = pay.lines.find(x => x.trip.id === 15);
+  assert.equal(l.overridden, true); assert.equal(l.amount, 1000);
+  assert.equal(pay.driverTotal, 1000 + 2500);
+  const withTotal = [...withLine, { id: 3, category: "nominaTotalOverride", driverId: 1, payrollKey: payrollKey(pdKey), amount: 9000, status: "pending" }];
+  pay = payrollPayment({ row, period: pdKey, expenses: withTotal });
+  assert.ok(pay.override); assert.equal(pay.grossEff, 9000); assert.equal(pay.net, 9000 - 700);
+  // override de otro período no aplica
+  const other = [...withLine, { id: 3, category: "nominaTotalOverride", driverId: 1, payrollKey: "2026-09-H2", amount: 9000 }];
+  assert.equal(payrollPayment({ row, period: pdKey, expenses: other }).override, null);
+});
+
+test("payrollPayment: chofer fijo se paga con un driverPay sin viaje con payrollKey", () => {
+  const p = buildPayroll({ period: pdKey, drivers, trips, trucks, clients, expenses });
+  const row = p.drivers.find(x => x.driver.id === 2);
+  assert.equal(payrollPayment({ row, period: pdKey, expenses }).paid, false);
+  const paid = [...expenses, { id: 9, category: "driverPay", driverId: 2, tripId: null, payrollKey: payrollKey(pdKey), amount: 20000, status: "paid" }];
+  const pay = payrollPayment({ row, period: pdKey, expenses: paid });
+  assert.equal(pay.paid, true); assert.equal(pay.net, 20000);
+});
