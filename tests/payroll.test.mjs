@@ -52,8 +52,8 @@ test("un viaje recibido después del cierre se paga en la quincena siguiente, no
 
 test("documentos requeridos según reglas del cliente", () => {
   assert.deepEqual(docsRequired(clients[0]).map(d => d.key), ["factura", "pod"]);
-  assert.equal(docsComplete(trips[0], clients[0]), true);
-  assert.equal(docsComplete(trips[1], clients[0]), false);
+  assert.equal(docsComplete(trips.find(t => t.id === 10), clients[0]), true);
+  assert.equal(docsComplete(trips.find(t => t.id === 11), clients[0]), false);
   assert.deepEqual(docsRequired({ rules: {} }).map(d => d.key), ["factura", "conduce", "pod"]);
 });
 
@@ -62,7 +62,7 @@ test("el PDF del chofer no contiene montos y escapa HTML; el de nómina sí tien
   const html = driverPeriodReportHTML({ row: p.drivers[0], period, generatedBy: "Ana" });
   assert.ok(!html.includes("RD$"), "sin montos");
   assert.ok(html.includes("pendiente(s) de entrega"), "avisa de los pendientes");
-  assert.ok(!html.includes("2026-10-14"), "el viaje pendiente no sale en la relación");
+  assert.ok(!html.includes(">B2<"), "el viaje pendiente (camión B2) no sale en la relación");
   assert.ok(!html.includes("<img src=x"), "escapado");
   assert.ok(html.includes("&lt;img"));
   const pay = payrollReportHTML({ payroll: p, generatedBy: "Ana" });
