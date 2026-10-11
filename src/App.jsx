@@ -6,7 +6,6 @@ import { colors } from "./constants/theme.js";
 import { Badge } from "./components/ui/index.jsx";
 import LoginPage from "./components/LoginPage.jsx";
 import LandingPage from "./pages/LandingPage.jsx";
-import CfoChat from "./components/CfoChat.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AgentsPage from "./pages/AgentsPage.jsx";
 import PartnerDashboard from "./pages/PartnerDashboard.jsx";
@@ -280,7 +279,6 @@ export default function App() {
         </nav>
 
         <div style={{ padding: "8px 6px", borderTop: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", gap: 2 }}>
-          {isAdmin && <CfoChat data={{ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, settlementStatus }} t={t} sidebarOpen={sidebarOpen} isMobile={isMobile} />}
           {isAdmin && <SyncAllButton syncAll={syncAll} sidebarOpen={sidebarOpen} />}
 
           {/* User info row — visible only when sidebar is open */}

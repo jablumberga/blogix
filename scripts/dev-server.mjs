@@ -157,7 +157,6 @@ async function restHandler(req, url) {
 const FUNCTIONS = [
   ["api.mjs",        ["/api/data", "/api/data/export", "/api/data/check-ref"]],
   ["auth.mjs",       ["/api/auth/login", "/api/auth/logout"]],
-  ["chat.mjs",       ["/api/chat"]],
   ["push-token.mjs", ["/api/push/token"]],
   ["send-push.mjs",  ["/api/push/send"]],
 ];
