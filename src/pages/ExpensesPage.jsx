@@ -4,6 +4,7 @@ import { colors } from "../constants/theme.js";
 import { fmt, nxId, expenseTruckId, getSupplierDueDate, today } from "../utils/helpers.js";
 import { normalizePartner, expenseChargedToPartner, PARTNER_MODELS } from "../utils/partnerModels.js";
 import { fuelNeedsTruck } from "../utils/costPerKm.js";
+import { activeAyudantes } from "../utils/ayudantes.js";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td, Chk } from "../components/ui/index.jsx";
 
@@ -15,7 +16,7 @@ const settlementKey = (partnerId, date) => `${partnerId}-${(date || "").slice(0,
 // Categories where a direct truck link makes sense
 const TRUCK_CATEGORIES = ["fuel", "repair", "maintenance", "insurance", "tire", "loan", "other", "toll", "salary"];
 
-export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers, partners = [], settlementStatus = {}, fixedTemplates, setFixedTemplates, isMobile }) {
+export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers, partners = [], settlementStatus = {}, fixedTemplates, setFixedTemplates, ayudantes = [], isMobile }) {
 
   const [filterCat, setFilterCat] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -39,7 +40,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   };
   // ¿Este gasto se le descuenta al socio en su liquidación (reembolso a la empresa)?
   const isChargedToPartner = (e) => {
-    if (["driverPay", "nominaTotalOverride", "adelanto_conductor", "broker_commission", "partner_settlement", "cash_withdrawal", "reserve_withdrawal"].includes(e.category)) return false;
+    if (["driverPay", "nominaTotalOverride", "adelanto_conductor", "adelanto_ayudante", "broker_commission", "partner_settlement", "cash_withdrawal", "reserve_withdrawal"].includes(e.category)) return false;
     const p = partnerOfExpense(e);
     return !!p && expenseChargedToPartner(e, p);
   };
@@ -81,9 +82,10 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   const save = () => {
     if (!form.amount || !form.date) return;
     if (form.category === "adelanto_conductor" && !form.driverId) { alert("Selecciona el conductor para el adelanto."); return; }
+    if (form.category === "adelanto_ayudante" && !form.ayudanteId) { alert("Selecciona el ayudante para el adelanto."); return; }
     if (fuelNeedsTruck(form)) { alert("Selecciona el camión (o el viaje) de este combustible. Sin camión no cuenta en el costo por km."); return; }
     const instant = INSTANT_METHODS.includes(form.paymentMethod);
-    const status = form.category === "adelanto_conductor" || instant ? "paid" : form.status;
+    const status = form.category === "adelanto_conductor" || form.category === "adelanto_ayudante" || instant ? "paid" : form.status;
     const supplierId = form.supplierId ? Number(form.supplierId) : null;
     const sup = supplierId ? (suppliers || []).find(s => s.id === supplierId) : null;
     const dueDate = getSupplierDueDate(form.date, sup);
@@ -135,6 +137,11 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{editId !== null ? "Editar Gasto" : t.addExpense}</h3>
         <button onClick={() => { setShowForm(false); setEditId(null); }} style={{ background: "none", border: "none", color: colors.textMuted, cursor: "pointer" }}><X size={16} /></button>
       </div>
+      {form.category === "adelanto_ayudante" && (
+        <div style={{ marginBottom: 12, padding: "8px 12px", background: colors.orange + "12", border: `1px solid ${colors.orange}40`, borderRadius: 8, fontSize: 12, color: colors.orange, fontWeight: 600 }}>
+          💵 Adelanto al Ayudante — se registra como pagado y se descuenta de su pago en la nómina de ayudantes del corte correspondiente.
+        </div>
+      )}
       {form.category === "adelanto_conductor" && (
         <div style={{ marginBottom: 12, padding: "8px 12px", background: colors.orange + "12", border: `1px solid ${colors.orange}40`, borderRadius: 8, fontSize: 12, color: colors.orange, fontWeight: 600 }}>
           💵 Adelanto al Conductor — se registra como pagado y se descuenta automáticamente de su nómina en el corte correspondiente.
@@ -144,7 +151,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
         <Inp label={t.expenseDate} type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
         <Sel label={t.expenseCategory} value={form.category} onChange={e => {
           const cat = e.target.value;
-          setForm({ ...form, category: cat, status: cat === "adelanto_conductor" ? "paid" : form.status, driverId: cat === "adelanto_conductor" ? form.driverId : null });
+          setForm({ ...form, category: cat, status: cat === "adelanto_conductor" || cat === "adelanto_ayudante" ? "paid" : form.status, driverId: cat === "adelanto_conductor" ? form.driverId : null, ...(cat !== "adelanto_ayudante" && form.category === "adelanto_ayudante" ? { ayudanteId: null } : {}) });
         }}>
           {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{t[c] || c}</option>)}
         </Sel>
@@ -153,7 +160,12 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
         <Sel label={t.paymentMethod} value={form.paymentMethod} onChange={e => setForm({ ...form, paymentMethod: e.target.value })}>
           {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t[m] || m}</option>)}
         </Sel>
-        {form.category === "adelanto_conductor"
+        {form.category === "adelanto_ayudante"
+          ? <Sel label="Ayudante *" value={form.ayudanteId || ""} onChange={e => setForm({ ...form, ayudanteId: Number(e.target.value) || null })}>
+              <option value="">— Seleccionar ayudante —</option>
+              {activeAyudantes(ayudantes).filter(a => a.payMode === "direct" || a.id === Number(form.ayudanteId)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </Sel>
+          : form.category === "adelanto_conductor"
           ? <Sel label="Conductor *" value={form.driverId || ""} onChange={e => setForm({ ...form, driverId: Number(e.target.value) || null })}>
               <option value="">— Seleccionar chofer —</option>
               {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -180,7 +192,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
       </div>
 
       {/* Cargar al socio (camión de socio) */}
-      {formPartner && form.category !== "adelanto_conductor" && (() => {
+      {formPartner && form.category !== "adelanto_conductor" && form.category !== "adelanto_ayudante" && (() => {
         const m = PARTNER_MODELS[formPartner.model] || PARTNER_MODELS.profit_share;
         return <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 8, background: formCharge ? colors.orange + "12" : colors.inputBg, border: `1px solid ${formCharge ? colors.orange + "55" : colors.border}` }}>
           <Chk label={`Reembolsar de la liquidación de ${formPartner.name} (modelo: ${m.label})`} checked={formCharge} onChange={() => setForm({ ...form, chargeToPartner: !formCharge })} />
@@ -199,7 +211,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
       })()}
 
       {/* Supplier row — always visible, full width */}
-      {form.category !== "adelanto_conductor" && (() => {
+      {form.category !== "adelanto_conductor" && form.category !== "adelanto_ayudante" && (() => {
         const selSup = (suppliers||[]).find(s => s.id === Number(form.supplierId));
         const dueDate = getSupplierDueDate(form.date, selSup);
         const isCutoff = selSup?.billingCycle === "cutoff_period";

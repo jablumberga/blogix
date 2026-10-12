@@ -43,7 +43,7 @@ export function tripKm(trip, distances = []) {
   return ref > 0 ? { km: ref, source: "estimated" } : { km: 0, source: "none" };
 }
 
-const NOT_COST = new Set(["nominaTotalOverride", "adelanto_conductor", "broker_commission", "partner_settlement", "cash_withdrawal", "reserve_withdrawal"]);
+const NOT_COST = new Set(["nominaTotalOverride", "adelanto_conductor", "adelanto_ayudante", "broker_commission", "partner_settlement", "cash_withdrawal", "reserve_withdrawal"]);
 const inRange = (d, from, to) => !!d && d >= from && d <= to;
 const daysBetween = (a, b) => Math.max(1, Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000) + 1);
 

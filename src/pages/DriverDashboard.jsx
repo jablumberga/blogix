@@ -2,12 +2,14 @@ import { useState, useEffect, Fragment } from "react";
 import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
-import { calcDriverPay } from "../utils/driverPay.js";
+import { calcDriverPay, DEFAULT_HELPERS, tripSize } from "../utils/driverPay.js";
+import { crewSlots, buildHelperLines, helperExpensePlan, planToNewExpenses, clientHelpersMode, clientSkipsHelpers, isDirectLine } from "../utils/ayudantes.js";
+import HelperSlots from "../components/HelperSlots.jsx";
 import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
 import { checkRef } from "../api.js";
 import { Card, StatCard, PageHeader, Inp, Sel, Btn, Th, Td, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function DriverDashboard({ t, user, trips = [], trucks = [], expenses = [], clients = [], drivers = [], driverObj, setTrips, setExpenses, brokers = [], isMobile }) {
+export default function DriverDashboard({ t, user, trips = [], trucks = [], expenses = [], clients = [], drivers = [], driverObj, setTrips, setExpenses, brokers = [], ayudantes = [], isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [rateMsg, setRateMsg] = useState("");
@@ -29,7 +31,7 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
 
   const emptyForm = { date: today(), province: "", municipality: "", truckId: driverObj?.truckId || trucks.find(tk => tk.mine)?.id || trucks[0]?.id || "", driverId: driverObj?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: null, helperPayEach: "", discounts: [], joint: false, jointWith: null, jointDriverId: "", jointTruckId: "" };
 
-  const openNew = () => { setForm({ ...emptyForm, createdBy: user?.name || driverObj?.name || "" }); setShowForm(true); setRateMsg(""); setFormError(""); };
+  const openNew = () => { const crew = crewSlots(trucks.find(tk => tk.id === Number(emptyForm.truckId)), ayudantes); setForm({ ...emptyForm, ...(crew.helperIds.length ? crew : {}), createdBy: user?.name || driverObj?.name || "" }); setShowForm(true); setRateMsg(""); setFormError(""); };
 
   const handleClientChange = (cid) => {
     const cl = clients.find(c => c.id === Number(cid));
@@ -38,6 +40,10 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
       if (cl.rules?.defaultBrokerId) f.brokerId = cl.rules.defaultBrokerId;
       tryApplyRate(f, cl);
     }
+    // Cliente que no lleva ayudantes o que los paga él: 0 ayudantes a cargo de la empresa
+    const prevCl = clients.find(c => c.id === Number(form.clientId));
+    if (clientSkipsHelpers(cl)) f.numHelpers = 0;
+    else if (clientSkipsHelpers(prevCl) && Number(form.numHelpers) === 0) f.numHelpers = null;
     setForm(f);
   };
 
@@ -90,8 +96,13 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
     const preH = driverObj ? calcDriverPay({ driver: driverObj, trip: { ...form, revenue: Number(form.revenue) || 0, numHelpers: form.numHelpers === null || form.numHelpers === "" ? null : Number(form.numHelpers), helperPayEach: form.helperPayEach === "" ? null : Number(form.helperPayEach) }, truck: tkH, clientId: Number(form.clientId) }) : null;
     const numHelpers = form.numHelpers === null || form.numHelpers === "" ? (preH?.numHelpers ?? 0) : Number(form.numHelpers);
     const helpersPay = form.helperPayEach === "" ? (preH?.helperEach ?? 0) : Number(form.helperPayEach) || 0;
-    const helpersArr = Array.from({ length: numHelpers }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
-    const data = { ...form, numHelpers, helperPayEach: helpersPay, odoStart: Number(form.odoStart) || null, odoEnd: Number(form.odoEnd) || null, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr,
+    // Ayudantes de la lista (directos o por el chofer) u otros con nombre; sin elegir ninguno, como siempre
+    const usesList = (form.helperIds || []).slice(0, numHelpers).some(Boolean) || (form.helperNames || []).slice(0, numHelpers).some(Boolean);
+    const helpersArr = usesList
+      ? buildHelperLines({ count: numHelpers, pay: helpersPay, helperIds: form.helperIds, helperNames: form.helperNames, ayudantes })
+      : Array.from({ length: numHelpers }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
+    const { helperIds: _hIds, ...formData } = form;
+    const data = { ...formData, ...(usesList ? { helperNames: helpersArr.map((h, i) => (form.helperIds?.[i] ? h.name : (form.helperNames?.[i] || ""))) } : {}), numHelpers, helperPayEach: helpersPay, odoStart: Number(form.odoStart) || null, odoEnd: Number(form.odoEnd) || null, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr,
       jointDriverId: form.joint && form.jointDriverId ? Number(form.jointDriverId) : null, jointTruckId: form.joint && form.jointTruckId ? Number(form.jointTruckId) : null,
       createdAt: new Date().toISOString(), history: [{ at: new Date().toISOString(), by: driverObj?.name || "", action: "creado (panel chofer)" }] };
     const newId = nxId(trips);
@@ -113,9 +124,9 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
       if (calc.payType !== "fixed" && calc.driverNet > 0) {
         newExpenses.push({ category: "driverPay", amount: calc.driverNet, description: `Pago chofer ${driverObj.name} · ${data.municipality}`, paymentMethod: "transfer", driverId: driverObj.id, status: "pending" });
       }
-      if (calc.helpersTotal > 0) {
-        newExpenses.push({ category: "helper", amount: calc.helpersTotal, description: `Ayudantes (${calc.numHelpers}) · ${data.municipality}`, paymentMethod: "transfer", driverId: driverObj.id, status: "pending" });
-      }
+      // Ayudantes: lo que va por el chofer (como siempre) + uno por cada ayudante directo
+      const plan = helperExpensePlan({ trip: { ...data, driverId: driverObj.id }, calc, driverDescription: (n) => `Ayudantes (${n}) · ${data.municipality}` });
+      for (const e of planToNewExpenses(plan, { tripId: newId, date: data.date })) newExpenses.push(e);
     }
     if (newExpenses.length > 0) {
       setExpenses(prev => {
@@ -205,7 +216,7 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
         </div>
         <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} extra={(form.clientId ? clients.filter(c => c.id === Number(form.clientId)) : clients).flatMap(c => c.rates || [])} />
         <div style={{ marginTop: 10 }}>
-          <Sel label={t.truck} value={form.truckId} onChange={e => setForm({ ...form, truckId: e.target.value })}>
+          <Sel label={t.truck} value={form.truckId} onChange={e => { const tk = trucks.find(x => x.id === Number(e.target.value)); const crew = crewSlots(tk, ayudantes); setForm({ ...form, truckId: e.target.value, ...(crew.helperIds.length || (form.helperIds || []).some(Boolean) ? crew : {}) }); }}>
             {trucks.length === 0 && <option value="">— Sin camión asignado (contacta al admin) —</option>}
             {[...trucks].sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0)).map(tk => <option key={tk.id} value={tk.id}>{tk.plate} ({tk.size}){tk.mine === false ? " · otro camión" : ""}</option>)}
           </Sel>
@@ -256,6 +267,15 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
           </Sel>
           {Number(form.numHelpers) > 0 && <Inp label="Pago por ayudante" type="number" value={form.helperPayEach} onChange={e => setForm({ ...form, helperPayEach: e.target.value })} placeholder="0.00" />}
         </div>
+        {(() => {
+          const tkS = trucks.find(t2 => t2.id === Number(form.truckId));
+          const nS = form.numHelpers === null || form.numHelpers === undefined || form.numHelpers === "" ? DEFAULT_HELPERS[tripSize(form, tkS)] : Number(form.numHelpers) || 0;
+          const clS = clients.find(c => c.id === Number(form.clientId));
+          return <>
+            {nS > 0 && <HelperSlots n={nS} helperIds={form.helperIds} helperNames={form.helperNames} ayudantes={ayudantes} onChange={({ helperIds, helperNames }) => setForm({ ...form, helperIds, helperNames })} />}
+            {clientHelpersMode(clS) !== "normal" && <div style={{ marginTop: 6, fontSize: 11, color: colors.cyan }}>{clientHelpersMode(clS) === "none" ? "Este cliente no lleva ayudantes." : "A los ayudantes de este cliente los paga el cliente."}</div>}
+          </>;
+        })()}
         {formError && <div style={{ color: colors.red, fontSize: 12, marginTop: 8, padding: "6px 10px", background: colors.red + "12", borderRadius: 6, border: `1px solid ${colors.red}33` }}>{formError}</div>}
         <div style={{ display: "flex", gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${colors.border}33` }}>
           <Btn onClick={saveTrip} style={{ flex: 1, justifyContent: "center" }}>{t.save}</Btn>
@@ -289,7 +309,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
   );
   const brutoPay = totalOverrideExp ? totalOverrideExp.amount : calcBruto;
 
-  const helperPay = driverObj?.salaryType === "perTrip" ? 0 : periodTrips.reduce((s, tr) => s + (tr.helpers || []).reduce((h, x) => h + (x.pay || 0), 0), 0);
+  const helperPay = driverObj?.salaryType === "perTrip" ? 0 : periodTrips.reduce((s, tr) => s + (tr.helpers || []).filter(x => !isDirectLine(x)).reduce((h, x) => h + (x.pay || 0), 0), 0);
   const discountsTotal = periodTrips.reduce((s, tr) => s + (tr.discounts || []).reduce((d, x) => d + (x.amount || 0), 0), 0);
 
   const adelantoExps = (expenses || []).filter(e =>
@@ -349,7 +369,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                     : ((expenses || []).find(e => e.category === "driverPay" && e.tripId === tr.id)?.amount ?? 0);
                   const dieta = trRate ? (trSize === "T2" ? (trRate.dietaT2 || 0) : (trRate.dietaT1 || 0)) : 0;
                   const ayudanteRef = trRate ? (trSize === "T2" ? (trRate.helperT2 || 0) * 2 : (trRate.helperT1 || 0)) : 0;
-                  const tripHelpers = (tr.helpers || []).reduce((s, x) => s + (x.pay || 0), 0);
+                  const tripHelpers = (tr.helpers || []).filter(x => !isDirectLine(x)).reduce((s, x) => s + (x.pay || 0), 0);
                   const tripDiscounts = (tr.discounts || []).reduce((s, x) => s + (x.amount || 0), 0);
                   const stColor = tr.status === "delivered" ? colors.green : tr.status === "in_transit" ? colors.yellow : colors.accent;
                   const nextStatus = { pending: "in_transit", in_transit: "delivered" };

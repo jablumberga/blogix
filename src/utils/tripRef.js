@@ -97,7 +97,7 @@ export function autoLinkJointPairs(trips = []) {
  *  - se conservan campos que solo pone el servidor/admin (enlace de conjunto, bitácora)
  * Devuelve { trips, errors:[{tripId, error}], ignored:[ids] }.
  */
-export function sanitizeDriverTrips({ incoming = [], existing = [], driverId, clients = [], trucks = [], invoices = [], cobros = [], today = new Date(), maxDays = 60 }) {
+export function sanitizeDriverTrips({ incoming = [], existing = [], driverId, clients = [], trucks = [], invoices = [], cobros = [], today = new Date(), maxDays = 60, ayudantes = null }) {
   const prevById = new Map(existing.map(t => [t.id, t]));
   const locked = new Set();
   for (const inv of invoices) if (inv?.status !== "cancelled") for (const id of inv.tripIds || []) locked.add(Number(id));
@@ -111,6 +111,8 @@ export function sanitizeDriverTrips({ incoming = [], existing = [], driverId, cl
     const tr = { ...raw, driverId };
     if (prev) {
       for (const k of ["jointWith", "jointAuto", "createdAt", "createdBy", "history"]) if (prev[k] !== undefined && tr[k] === undefined) tr[k] = prev[k];
+      // Ayudantes de un viaje ya registrado: solo los cambia la oficina (el panel del chofer no los edita; una copia vieja no los pisa)
+      if (Array.isArray(ayudantes)) for (const k of ["numHelpers", "helperPayEach", "helperNames", "helpers"]) { if (prev[k] !== undefined) tr[k] = prev[k]; else delete tr[k]; }
       // Sin cambios reales → se conserva tal cual, sin volver a validar (viajes viejos no se bloquean)
       const strip = (o) => { const c = { ...o }; for (const k of ["history", "updatedAt", "updatedBy"]) delete c[k]; return JSON.stringify(Object.keys(c).sort().map(k => [k, c[k]])); };
       if (strip(tr) === strip(prev)) { out.push(prev); continue; }

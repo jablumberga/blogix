@@ -4,6 +4,7 @@
  */
 import { fmt } from "./helpers.js";
 import { TRIP_DOCS } from "./payroll.js";
+import { isDirectLine } from "./ayudantes.js";
 import { COMPANY } from "../constants/company.js";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -79,8 +80,45 @@ export function driverPeriodReportHTML({ row, period, generatedBy, minRows = 14 
     <div class="sig"><div>Entregado por: ${esc(generatedBy || "")}</div><div>Recibí conforme: ${esc(d.name)}</div><div>Fecha</div></div>`;
 }
 
+/** Relación de pago de un ayudante directo en un período (con montos: es lo que se le entrega a él). */
+export function helperPeriodReportHTML({ row, period, generatedBy, minRows = 10 }) {
+  const a = row.ayudante;
+  const lines = row.trips.map(x => `
+    <tr>
+      <td>${esc(x.trip.date)}</td>
+      <td>${esc(x.client?.companyName || "—")}</td>
+      <td>${esc(x.trip.municipality)}, ${esc(x.trip.province)}</td>
+      <td>${esc(x.truck?.plate || "")}</td>
+      <td>${esc(x.driver?.name || "")}</td>
+      <td class="right">${fmt(x.amount)}</td>
+    </tr>`);
+  while (lines.length < minRows) lines.push(`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`);
+  return `
+    ${companyHeaderHTML("RELACIÓN DE PAGO — AYUDANTE")}
+    <table class="fields">
+      <tr><td>Nombre:</td><td>${esc(a.name)}</td></tr>
+      ${a.cedula ? `<tr><td>Cédula:</td><td>${esc(a.cedula)}</td></tr>` : ""}
+      <tr><td>Período:</td><td>${esc(period.label)} (${esc(period.dateFrom)} a ${esc(period.dateTo)})</td></tr>
+      <tr><td>Fecha:</td><td>${new Date().toLocaleDateString("es-DO")}</td></tr>
+      ${a.phone ? `<tr><td>Contacto:</td><td>${esc(a.phone)}</td></tr>` : ""}
+      ${a.bank || a.account ? `<tr><td>Cuenta:</td><td>${esc([a.bank, a.account].filter(Boolean).join(" · "))}</td></tr>` : ""}
+    </table>
+    <table class="grid">
+      <thead><tr><th>Fecha</th><th>Cliente</th><th>Destino</th><th>Camión</th><th>Chofer</th><th>Pago</th></tr></thead>
+      <tbody>${lines.join("")}</tbody>
+      <tfoot><tr><td colspan="5" class="right"><b>Total viajes (${row.tripCount}):</b></td><td class="right"><b>${fmt(row.gross)}</b></td></tr></tfoot>
+    </table>
+    <table class="sum">
+      <tr><td class="lbl">Pago por viajes</td><td class="right">${fmt(row.gross)}</td></tr>
+      ${row.advances ? `<tr><td class="lbl">Adelantos recibidos</td><td class="right">− ${fmt(row.advances)}</td></tr>` : ""}
+      <tr class="total"><td class="lbl">Neto a recibir</td><td class="right">${fmt(row.net)}</td></tr>
+    </table>
+    ${row.pendingCount ? `<div class="small muted" style="margin-top:6px">${row.pendingCount} viaje(s) de este período todavía sin documentos en la oficina: no incluidos; se pagan en la quincena en que se entreguen.</div>` : ""}
+    <div class="sig"><div>Entregado por: ${esc(generatedBy || "")}</div><div>Recibí conforme: ${esc(a.name)}</div><div>Fecha</div></div>`;
+}
+
 /** Reporte de nómina del período con todos los choferes y ayudantes (para contabilidad). */
-export function payrollReportHTML({ payroll, company = "B-Logix", generatedBy }) {
+export function payrollReportHTML({ payroll, helperPayroll = null, company = "B-Logix", generatedBy }) {
   const { period, drivers, totals } = payroll;
   const rows = drivers.map(r => `
     <tr>
@@ -91,8 +129,10 @@ export function payrollReportHTML({ payroll, company = "B-Logix", generatedBy })
       <td class="right">${r.helperCount}</td><td class="right">${fmt(r.helpers)}</td>
       <td class="small">${r.pendingCount ? `<span class="no">${r.pendingCount} pendiente(s), no pagados</span>` : `<span class="ok">todo recibido</span>`}${r.missingRates ? ` <span class="no">${r.missingRates} sin tarifa</span>` : ""}</td>
     </tr>`).join("");
-  const helperDetail = drivers.flatMap(r => r.trips.filter(x => x.calc.numHelpers > 0).map(({ trip, calc }) =>
-    `<tr><td>${esc(trip.date)}</td><td>#${esc(trip.id)} ${esc(trip.municipality)}</td><td>${esc(r.driver.name)}</td><td>${esc((trip.helpers || []).map(h => h.name).filter(Boolean).join(", ") || "—")}</td><td class="right">${calc.numHelpers}</td><td class="right">${fmt(calc.helperEach)}</td><td class="right">${fmt(calc.helpersTotal)}</td></tr>`)).join("");
+  const viaOf = (x) => x.split ? x.split.viaDriver : { count: x.calc.numHelpers, amount: x.calc.helpersTotal };
+  const helperDetail = drivers.flatMap(r => r.trips.filter(x => viaOf(x).count > 0).map((x) => { const { trip, calc } = x; const v = viaOf(x); return `<tr><td>${esc(trip.date)}</td><td>#${esc(trip.id)} ${esc(trip.municipality)}</td><td>${esc(r.driver.name)}</td><td>${esc((trip.helpers || []).filter(h => !isDirectLine(h)).map(h => h.name).filter(Boolean).join(", ") || "—")}</td><td class="right">${v.count}</td><td class="right">${fmt(calc.helperEach)}</td><td class="right">${fmt(v.amount)}</td></tr>`; })).join("");
+  const hp = helperPayroll && helperPayroll.rows.length ? helperPayroll : null;
+  const directRows = hp ? hp.rows.map(h => `<tr><td>${esc(h.ayudante.name)}</td><td>${esc(h.ayudante.cedula || "")}</td><td class="right">${h.tripCount}</td><td class="right">${fmt(h.gross)}</td><td class="right">${h.advances ? "−" + fmt(h.advances) : "—"}</td><td class="right"><b>${fmt(h.net)}</b></td><td class="small">${esc([h.ayudante.bank, h.ayudante.account].filter(Boolean).join(" · "))}</td><td class="small">${h.pendingCount ? `<span class="no">${h.pendingCount} pendiente(s), no pagados</span>` : `<span class="ok">todo recibido</span>`}</td></tr>`).join("") : "";
   return `
     ${companyHeaderHTML("NÓMINA DEL PERÍODO")}
     <div class="muted">${esc(period.label)} (${esc(period.dateFrom)} a ${esc(period.dateTo)})${generatedBy ? ` · Generado por ${esc(generatedBy)}` : ""} · ${new Date().toLocaleString("es-DO")}</div>
@@ -103,20 +143,31 @@ export function payrollReportHTML({ payroll, company = "B-Logix", generatedBy })
       <tfoot><tr><td colspan="2">Totales</td><td class="right">${totals.trips}</td><td class="right">${fmt(totals.gross)}</td><td class="right">−${fmt(totals.discounts)}</td><td class="right">−${fmt(totals.advances)}</td><td class="right">${fmt(totals.net)}</td><td></td><td class="right">${fmt(totals.helpers)}</td><td></td></tr></tfoot>
     </table>
     <div class="small muted" style="margin-top:6px">Cada viaje se paga en la quincena en que la oficina recibió sus documentos. Los pendientes se liquidan cuando se entreguen.</div>
-    <div class="box"><div>Total choferes: <b>${fmt(totals.net)}</b></div><div>Total ayudantes: <b>${fmt(totals.helpers)}</b></div><div style="font-size:15px;margin-top:6px">Total nómina del período: <b>${fmt(totals.total)}</b></div></div>
-    <h2>Detalle de ayudantes por viaje</h2>
+    ${hp ? `<h2>Ayudantes con pago directo</h2>
+    <table>
+      <thead><tr><th>Ayudante</th><th>Cédula</th><th class="right">Viajes</th><th class="right">Bruto</th><th class="right">Adelantos</th><th class="right">Neto a pagar</th><th>Cuenta</th><th>Estado</th></tr></thead>
+      <tbody>${directRows}</tbody>
+      <tfoot><tr><td colspan="2">Totales</td><td class="right">${hp.totals.trips}</td><td class="right">${fmt(hp.totals.gross)}</td><td class="right">−${fmt(hp.totals.advances)}</td><td class="right">${fmt(hp.totals.net)}</td><td></td><td></td></tr></tfoot>
+    </table>
+    ` : ""}<div class="box"><div>Total choferes: <b>${fmt(totals.net)}</b></div><div>Total ayudantes${hp ? " (por el chofer)" : ""}: <b>${fmt(totals.helpers)}</b></div>${hp ? `<div>Total ayudantes directos: <b>${fmt(hp.totals.net)}</b></div>` : ""}<div style="font-size:15px;margin-top:6px">Total nómina del período: <b>${fmt(totals.total + (hp ? hp.totals.net : 0))}</b></div></div>
+    <h2>Detalle de ayudantes por viaje${hp ? " (pagados por el chofer)" : ""}</h2>
     <table><thead><tr><th>Fecha</th><th>Viaje</th><th>Chofer</th><th>Ayudantes</th><th class="right">Cant.</th><th class="right">Pago c/u</th><th class="right">Total</th></tr></thead>
       <tbody>${helperDetail || `<tr><td colspan="7" class="muted">Sin ayudantes en el período</td></tr>`}</tbody></table>`;
 }
 
 /** Filas para el Excel de contabilidad. */
-export function payrollSheets(payroll) {
+export function payrollSheets(payroll, helperPayroll = null) {
   const { drivers } = payroll;
   const resumen = [["Chofer", "Tipo de pago", "Viajes pagados", "Bruto (chofer+dieta)", "Descuentos", "Adelantos", "Neto a pagar", "Ayudantes (cant.)", "Pago ayudantes", "Viajes pendientes (no pagados)"],
     ...drivers.map(r => [r.driver.name, r.payType, r.tripCount, r.gross, r.discounts, r.advances, r.net, r.helperCount, r.helpers, r.pendingCount])];
   const detalle = [["Fecha", "Viaje", "Chofer", "Cliente", "Destino", "Camión", "Tamaño", "Pago chofer", "Dieta", "Ayudantes", "Pago c/u", "Total ayudantes", "Descuentos", "Neto chofer", "Factura", "Conduce", "POD"],
-    ...drivers.flatMap(r => r.trips.map(({ trip, calc, client, truck }) => [trip.date, trip.id, r.driver.name, client?.companyName || "", `${trip.municipality}, ${trip.province}`, truck?.plate || "", calc.size, calc.base, calc.dieta, calc.numHelpers, calc.helperEach, calc.helpersTotal, calc.discounts, calc.driverNet, trip.docs?.factura ? "Sí" : "No", trip.docs?.conduce ? "Sí" : "No", trip.docs?.pod ? "Sí" : "No"]))];
-  return { resumen, detalle };
+    ...drivers.flatMap(r => r.trips.map(({ trip, calc, client, truck, split }) => [trip.date, trip.id, r.driver.name, client?.companyName || "", `${trip.municipality}, ${trip.province}`, truck?.plate || "", calc.size, calc.base, calc.dieta, split ? split.viaDriver.count : calc.numHelpers, calc.helperEach, split ? split.viaDriver.amount : calc.helpersTotal, calc.discounts, calc.driverNet, trip.docs?.factura ? "Sí" : "No", trip.docs?.conduce ? "Sí" : "No", trip.docs?.pod ? "Sí" : "No"]))];
+  const hp = helperPayroll && helperPayroll.rows.length ? helperPayroll : null;
+  const ayudantes = hp ? [["Ayudante", "Cédula", "Banco", "Cuenta", "Viajes pagados", "Bruto", "Adelantos", "Neto a pagar", "Viajes pendientes (no pagados)"],
+    ...hp.rows.map(h => [h.ayudante.name, h.ayudante.cedula || "", h.ayudante.bank || "", h.ayudante.account || "", h.tripCount, h.gross, h.advances, h.net, h.pendingCount]),
+    [], ["Fecha", "Viaje", "Ayudante", "Chofer", "Cliente", "Destino", "Camión", "Monto"],
+    ...hp.rows.flatMap(h => h.trips.map(x => [x.trip.date, x.trip.id, h.ayudante.name, x.driver?.name || "", x.client?.companyName || "", `${x.trip.municipality}, ${x.trip.province}`, x.truck?.plate || "", x.amount]))] : null;
+  return { resumen, detalle, ayudantes };
 }
 
 /** Tamaño del camión como lo lee el cliente: T1 = 16 pies, T2 = 26 pies. */

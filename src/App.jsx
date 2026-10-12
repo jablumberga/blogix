@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, Gauge, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, Gauge, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark, HardHat } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { getToken } from "./api.js";
 import { colors } from "./constants/theme.js";
@@ -26,6 +26,7 @@ import InvoicesPage from "./pages/InvoicesPage.jsx";
 import BancoPage from "./pages/BancoPage.jsx";
 import AssistantDashboard from "./pages/AssistantDashboard.jsx";
 import StaffPage from "./pages/StaffPage.jsx";
+import AyudantesPage from "./pages/AyudantesPage.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -88,7 +89,7 @@ export default function App() {
   const {
     lang, setLang, t, user, login, logout, forceSync, syncAll,
     isAdmin, isPartner, isDriver, isAssistant, allUsers,
-    staff, setStaff, gpsKm, setGpsKm, distances, setDistances,
+    staff, setStaff, gpsKm, setGpsKm, distances, setDistances, ayudantes, setAyudantes,
     clients, setClients, partners, setPartners, trucks, setTrucks,
     drivers, setDrivers, trips, setTrips, expenses, setExpenses,
     brokers, setBrokers, suppliers, setSuppliers,
@@ -177,6 +178,7 @@ export default function App() {
     { id: "trips",       icon: Route,            label: t.trips },
     { id: "fleet",       icon: Truck,            label: t.fleet },
     { id: "drivers",     icon: Users,            label: t.drivers },
+    { id: "ayudantes",   icon: HardHat,          label: "Ayudantes" },
     { id: "partners",    icon: UserCog,          label: t.partners },
     { id: "staff",       icon: UserCheck,        label: "Usuarios" },
     { id: "brokers",     icon: Briefcase,        label: t.brokers },
@@ -201,7 +203,7 @@ export default function App() {
   ];
   const navItems = isAdmin ? adminNav : isPartner ? partnerNav : isAssistant ? assistantNav : driverNav;
 
-  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, gpsKm, setGpsKm, distances, setDistances, partner, partnerTruckIds, driverObj, alerts };
+  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, gpsKm, setGpsKm, distances, setDistances, ayudantes, setAyudantes, partner, partnerTruckIds, driverObj, alerts };
 
   const pageTitles = {
     dashboard:   t.dashboard,
@@ -215,6 +217,7 @@ export default function App() {
     trips:       t.trips,
     fleet:       t.fleet,
     drivers:     t.drivers,
+    ayudantes:   "Ayudantes",
     partners:    t.partners,
     brokers:     t.brokers,
     expenses:    t.expenses,
@@ -381,6 +384,7 @@ export default function App() {
         {page === "trips"       && isAdmin    && <TripsPage        {...ctx} />}
         {page === "fleet"       && isAdmin    && <FleetPage        {...ctx} />}
         {page === "drivers"     && isAdmin    && <DriversPage      {...ctx} />}
+        {page === "ayudantes"   && isAdmin    && <AyudantesPage    {...ctx} />}
         {page === "partners"    && isAdmin    && <PartnersPage     {...ctx} />}
         {page === "brokers"     && isAdmin    && <BrokersPage      {...ctx} />}
         {page === "expenses"    && isAdmin    && <ExpensesPage     {...ctx} />}

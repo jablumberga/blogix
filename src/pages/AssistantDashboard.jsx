@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Printer, FileSpreadsheet, ClipboardCheck, Users, UserCog, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Printer, FileSpreadsheet, ClipboardCheck, Users, UserCog, AlertTriangle, HardHat } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { genBillingPeriods, today } from "../utils/helpers.js";
-import { buildPayroll, partnerTripsInPeriod, TRIP_DOCS } from "../utils/payroll.js";
-import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow } from "../utils/printReport.js";
+import { buildPayroll, buildHelperPayroll, partnerTripsInPeriod, TRIP_DOCS } from "../utils/payroll.js";
+import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow, helperPeriodReportHTML } from "../utils/printReport.js";
 import { applyReceived } from "../utils/jointTrip.js";
 import { Card, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
@@ -14,7 +14,7 @@ import { Card, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
  *  - relación de viajes por chofer (PDF, sin montos)
  *  - nómina del período para contabilidad (PDF y Excel)
  */
-export default function AssistantDashboard({ user, trips, setTrips, drivers = [], partners = [], trucks = [], clients = [], expenses = [], isMobile }) {
+export default function AssistantDashboard({ user, trips, setTrips, drivers = [], partners = [], trucks = [], clients = [], expenses = [], ayudantes = [], isMobile }) {
   const periods = useMemo(() => genBillingPeriods([...trips.map(t => t.date), today()]), [trips]);   // Oficina: siempre 1–15 y 16–31
   const [pIdx, setPIdx] = useState(0);            // 0 = período en curso
   const period = periods[pIdx] || periods[0];
@@ -22,6 +22,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
 
   const payroll = useMemo(() => buildPayroll({ period, drivers, trips, trucks, clients, expenses, partners }), [period, drivers, trips, trucks, clients, expenses, partners]);
   const clientMap = useMemo(() => new Map(clients.map(c => [c.id, c])), [clients]);
+  const helperPayroll = useMemo(() => buildHelperPayroll({ period, ayudantes, drivers, trips, trucks, clients, expenses }), [period, ayudantes, drivers, trips, trucks, clients, expenses]);
 
   const activePartners = partners.filter(p => p.status !== "inactive");
   const partnerRows = activePartners.map(p => ({ partner: p, items: partnerTripsInPeriod({ partner: p, period, trips, trucks, clients, drivers }) })).filter(r => r.items.length > 0);
@@ -38,13 +39,15 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
 
   // ── Reportes ────────────────────────────────────────────────────────────
   const printDriver = (row) => openPrintWindow(`Viajes ${row.driver.name} ${period.label}`, driverPeriodReportHTML({ row, period, generatedBy: user?.name }));
-  const printPayroll = () => openPrintWindow(`Nómina ${period.label}`, payrollReportHTML({ payroll, generatedBy: user?.name }));
+  const printPayroll = () => openPrintWindow(`Nómina ${period.label}`, payrollReportHTML({ payroll, helperPayroll, generatedBy: user?.name }));
+  const printHelper = (row) => openPrintWindow(`Pago ${row.ayudante.name} ${period.label}`, helperPeriodReportHTML({ row, period, generatedBy: user?.name }));
   const exportPayrollXlsx = async () => {
     const XLSX = await import("xlsx");
-    const { resumen, detalle } = payrollSheets(payroll);
+    const { resumen, detalle, ayudantes: ayud } = payrollSheets(payroll, helperPayroll);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), "Detalle viajes");
+    if (ayud) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ayud), "Ayudantes directos");
     XLSX.writeFile(wb, `nomina-${period.dateFrom}-a-${period.dateTo}.xlsx`);
   };
 
@@ -85,6 +88,14 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
             </button>;
           })}
         </Card>
+        {helperPayroll.rows.length > 0 && <Card style={{ marginBottom: 14 }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><HardHat size={14} color={colors.orange} /> Ayudantes (pago directo)</h3>
+          {helperPayroll.rows.map(r => <div key={r.ayudante.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", borderBottom: `1px solid ${colors.border}11` }}>
+            <span style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>{r.ayudante.name}</span>
+            <span style={{ fontSize: 11, color: colors.textMuted }}>{r.tripCount} viaje{r.tripCount !== 1 ? "s" : ""}{r.pendingCount ? ` · ${r.pendingCount} pend.` : ""}</span>
+            <Btn variant="ghost" onClick={() => printHelper(r)} style={{ fontSize: 11, padding: "4px 8px" }}><Printer size={11} /> Su relación</Btn>
+          </div>)}
+        </Card>}
         <Card>
           <h3 style={{ margin: "0 0 8px", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><UserCog size={14} color={colors.orange} /> Socios</h3>
           {partnerRows.length === 0 && <div style={{ fontSize: 12, color: colors.textMuted }}>Sin viajes de camiones de socios en este período.</div>}

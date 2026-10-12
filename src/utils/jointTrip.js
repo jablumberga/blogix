@@ -6,6 +6,7 @@
  * Lo usan Viajes (admin, en el navegador) y el servidor (cuando lo registra un chofer).
  */
 import { calcDriverPay, tripSize } from "./driverPay.js";
+import { clientSkipsHelpers, crewSlots, buildHelperLines, helperExpensePlan, planToNewExpenses } from "./ayudantes.js";
 
 /** Tarifa del cliente para el destino y tamaño del camión (0 si no hay). */
 export function clientRateFor(client, trip, truck) {
@@ -23,7 +24,7 @@ const COPY_FIELDS = ["date", "province", "municipality", "clientId", "brokerId",
  * Construye el viaje del compañero y sus gastos (pago chofer + ayudantes).
  * Devuelve { trip, expenses, revenueEstimated } o null si faltan datos.
  */
-export function buildCompanionTrip({ trip, companionDriverId, companionTruckId, drivers = [], trucks = [], clients = [], nextTripId, nextExpenseId, createdBy }) {
+export function buildCompanionTrip({ trip, companionDriverId, companionTruckId, drivers = [], trucks = [], clients = [], ayudantes = [], nextTripId, nextExpenseId, createdBy }) {
   const driver = drivers.find(d => d.id === Number(companionDriverId));
   const truck = trucks.find(t => t.id === Number(companionTruckId));
   if (!driver || !truck || !trip) return null;
@@ -37,13 +38,22 @@ export function buildCompanionTrip({ trip, companionDriverId, companionTruckId, 
     joint: true, jointWith: trip.id, jointAuto: true, createdBy: createdBy || trip.createdBy || null,
     ...(rated > 0 ? {} : { revenueEstimated: true }),
   };
+  // Cliente que no lleva ayudantes o los paga él: 0 ayudantes a cargo de la empresa
+  if (clientSkipsHelpers(client)) companion.numHelpers = 0;
   const calc = calcDriverPay({ driver, trip: companion, truck, clientId: companion.clientId });
   companion.numHelpers = calc.numHelpers; companion.helperPayEach = calc.helperEach;
-  companion.helpers = Array.from({ length: calc.numHelpers }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: calc.helperEach }));
+  // Tripulación fija del camión del compañero (si tiene); el resto, por el chofer como siempre
+  const already = new Set((trip.helpers || []).map(h => Number(h?.ayudanteId)).filter(Boolean));
+  const crew0 = crewSlots(truck, ayudantes);
+  const keep = crew0.helperIds.map((id, i) => (already.has(id) ? -1 : i)).filter(i => i >= 0);
+  const crew = { helperIds: keep.map(i => crew0.helperIds[i]), helperNames: keep.map(i => crew0.helperNames[i]) };
+  companion.helpers = buildHelperLines({ count: calc.numHelpers, pay: calc.helperEach, ...crew, ayudantes });
+  if (crew.helperIds.length) companion.helperNames = companion.helpers.map(h => h.name);
   const expenses = [];
   let eid = nextExpenseId;
   if (calc.payType !== "fixed" && calc.driverNet > 0) expenses.push({ id: eid++, tripId: companion.id, date: companion.date, category: "driverPay", amount: calc.driverNet, description: `Pago chofer ${driver.name} · ${companion.municipality || ""}`, paymentMethod: "transfer", driverId: driver.id, status: "pending", supplierId: null });
-  if (calc.helpersTotal > 0) expenses.push({ id: eid++, tripId: companion.id, date: companion.date, category: "helper", amount: calc.helpersTotal, description: `Ayudantes (${calc.numHelpers}) · ${companion.municipality || ""}`, paymentMethod: "transfer", driverId: driver.id, status: "pending", supplierId: null });
+  const plan = helperExpensePlan({ trip: companion, calc, driverDescription: (n) => `Ayudantes (${n}) · ${companion.municipality || ""}` });
+  for (const e of planToNewExpenses(plan, { tripId: companion.id, date: companion.date })) expenses.push({ id: eid++, ...e });
   return { trip: companion, expenses, revenueEstimated: rated <= 0 };
 }
 

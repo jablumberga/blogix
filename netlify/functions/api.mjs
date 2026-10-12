@@ -19,6 +19,7 @@
 import { validateTripWrites, linkJoint, checkTripRef, sameRefTrips, sanitizeDriverTrips } from "../../src/utils/tripRef.js";
 import bcrypt from "bcryptjs";
 import { buildCompanionTrip } from "../../src/utils/jointTrip.js";
+import { normalizeDriverHelpers } from "../../src/utils/ayudantes.js";
 
 const ALLOWED_ORIGINS = new Set([
   "https://blogix.do",
@@ -147,7 +148,8 @@ function applyRLS(data, user) {
       partners:         (data.partners || []).map(slimPartner),
       trucks:           data.trucks || [],
       clients:          (data.clients || []).map(slimClient),
-      expenses:         (data.expenses || []).filter(e => e.category === "adelanto_conductor" || e.category === "driverPay" || e.category === "nominaTotalOverride"),
+      expenses:         (data.expenses || []).filter(e => e.category === "adelanto_conductor" || e.category === "adelanto_ayudante" || e.category === "driverPay" || e.category === "nominaTotalOverride"),
+      ayudantes:        (data.ayudantes || []).filter(a => a && a.status !== "deleted").map(a => ({ id: a.id, name: a.name, cedula: a.cedula, phone: a.phone, bank: a.bank, account: a.account, payMode: a.payMode, status: a.status })),
       brokers: [], suppliers: [], fixedTemplates: [], cobros: [], invoices: [], settlementStatus: {},
     };
   }
@@ -158,8 +160,8 @@ function applyRLS(data, user) {
     const myTrips   = (data.trips   || []).filter(tr => tr.driverId === driver.id);
     const myTripIds = new Set(myTrips.map(tr => tr.id));
     const myExp     = (data.expenses|| []).filter(e =>
-      myTripIds.has(e.tripId) ||
-      (e.driverId === driver.id && !e.tripId)
+      (myTripIds.has(e.tripId) || (e.driverId === driver.id && !e.tripId)) &&
+      !(e.category === "helper" && e.ayudanteId != null && e.ayudanteId !== "") // pago de un ayudante directo: no es del chofer
     );
     // Return trucks by driver.truckId OR by truck.driverId — whichever is set
     const myTrucks  = (data.trucks || []).filter(tk =>
@@ -171,13 +173,15 @@ function applyRLS(data, user) {
     // (id, nombre, camión) y todos los camiones activos (los suyos marcados `mine`).
     const colleagues = (data.drivers || []).filter(d => d.id !== driver.id && d.status !== "inactive").map(d => ({ id: d.id, name: d.name, truckId: d.truckId || null, slim: true }));
     const myTruckIds = new Set(myTrucks.map(tk => tk.id));
-    const allTrucks = (data.trucks || []).filter(tk => tk.status !== "inactive" || myTruckIds.has(tk.id)).map(tk => ({ id: tk.id, plate: tk.plate, size: tk.size, driverId: tk.driverId || null, partnerId: tk.partnerId || null, mine: myTruckIds.has(tk.id) }));
+    const allTrucks = (data.trucks || []).filter(tk => tk.status !== "inactive" || myTruckIds.has(tk.id)).map(tk => ({ id: tk.id, plate: tk.plate, size: tk.size, driverId: tk.driverId || null, partnerId: tk.partnerId || null, helperIds: Array.isArray(tk.helperIds) ? tk.helperIds : [], mine: myTruckIds.has(tk.id) }));
     return {
       drivers:          [driver, ...colleagues],
       trips:            myTrips,
       expenses:         myExp,
       trucks:           allTrucks.length ? allTrucks : myTrucks,
       clients:          activeClients,
+      // Ayudantes activos: solo id y nombre (para elegir quién fue en el viaje); nada de cuentas ni cédulas
+      ayudantes:        (data.ayudantes || []).filter(a => a && a.status !== "inactive" && a.status !== "deleted").map(a => ({ id: a.id, name: a.name, payMode: a.payMode === "driver" ? "driver" : "direct", status: "active" })),
       partners:         [], brokers: [], suppliers: [],
       settlementStatus: {}, fixedTemplates: [], cobros: [], invoices: [],
     };
@@ -239,6 +243,14 @@ async function readTable(url, key, table) {
   return rows.map(r => r.rec);
 }
 
+/** Como readTable, pero falla ante CUALQUIER error: para decisiones donde una lista vacía sería peligrosa. */
+async function readTableStrict(url, key, table) {
+  const res = await fetch(`${url}/rest/v1/${table}?select=rec&order=id`, { headers: supabaseHeaders(key) });
+  if (!res.ok) throw new Error(`${table} read failed (HTTP ${res.status})`);
+  const rows = await res.json();
+  return rows.map(r => r.rec);
+}
+
 async function readSettlementStatus(url, key) {
   const res = await fetch(`${url}/rest/v1/bl_settlement_status?id=eq.1&select=data`, {
     headers: supabaseHeaders(key),
@@ -274,7 +286,7 @@ async function readAllTables(url, key) {
     readTable(url, key, "bl_gps_km").catch(() => []), // km diarios por GPS (TrackSolid); puede no existir aún
   ]);
   // Extract bank config stored in the settlement_status blob under __ keys
-  const { __bankAccount, __bankReconciliation, __pfSettings, __distances, ...cleanSettlementStatus } = settlementStatus;
+  const { __bankAccount, __bankReconciliation, __pfSettings, __distances, __ayudantes, ...cleanSettlementStatus } = settlementStatus;
   return {
     trips, expenses, trucks, drivers, clients, partners, brokers, suppliers,
     invoices, cobros, fixedTemplates, staff, gpsKm,
@@ -283,6 +295,7 @@ async function readAllTables(url, key) {
     bankReconciliation: __bankReconciliation || null,
     pfSettings: __pfSettings || null,
     distances: __distances || null,
+    ayudantes: Array.isArray(__ayudantes) ? __ayudantes : [],
   };
 }
 
@@ -566,10 +579,15 @@ export default async (request) => {
       if (useRelational) {
         // El chofer solo crea o edita viajes suyos válidos; nunca borra ni toca lo facturado/cobrado/recibido
         {
-          const [exTrips, exClients, exTrucks, exInvoices, exCobros, exExps] = await Promise.all([
-            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trips"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_clients").catch(() => []),
-            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trucks").catch(() => []), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_invoices").catch(() => []),
-            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_cobros").catch(() => []), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_expenses").catch(() => [])]);
+          // Viajes y gastos existentes: si no se pueden leer, NO se guarda (error temporal; el teléfono reintenta).
+          // Con una lista vacía los viajes viejos parecerían nuevos y se duplicarían pagos.
+          let exTrips, exClients, exTrucks, exInvoices, exCobros, exExps;
+          try {
+            [exTrips, exClients, exTrucks, exInvoices, exCobros, exExps] = await Promise.all([
+              readTableStrict(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trips"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_clients").catch(() => []),
+              readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trucks").catch(() => []), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_invoices").catch(() => []),
+              readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_cobros").catch(() => []), readTableStrict(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_expenses")]);
+          } catch { return Response.json({ error: "No se pudieron leer los viajes o gastos; se reintentará solo" }, { status: 503, headers: corsHeaders }); }
           // ── Ids: el chofer solo ve sus propios registros, así que su app puede numerar un viaje o gasto
           //    nuevo con un id que ya usa OTRO chofer. Aquí se detecta y se asigna un id libre; la app
           //    recibe el mapa (remap) y adopta los ids nuevos. Nunca se sobrescribe lo de otro.
@@ -583,15 +601,38 @@ export default async (request) => {
           const expById = new Map(exExps.map(e => [e.id, e]));
           const myTripIdsNow = new Set(driverTrips.map(t => t.id));
           let nextExp = Math.max(0, ...exExps.map(e => Number(e.id) || 0), ...driverExps.map(e => Number(e.id) || 0)) + 1;
+          // Mismo id = mismo registro (misma categoría, viaje y ayudante). Si no, el teléfono numeró un gasto nuevo
+          // con el id de otro que no ve (p. ej. el pago de un ayudante directo): se le da un id libre, nunca se pisa.
+          const sameRecord = (ex, e) => ex.category === e.category && (ex.tripId ?? null) === (e.tripId ?? null) && (ex.ayudanteId ?? null) === (e.ayudanteId ?? null);
           for (const e of driverExps) {
             const ex = expById.get(e.id);
             const isMine = ex && ((ex.tripId && myTripIdsNow.has(ex.tripId)) || (!ex.tripId && ex.driverId === driverId));
-            if (ex && !isMine) { remap.expenses[e.id] = nextExp; e.id = nextExp++; }
+            if (ex && (!isMine || !sameRecord(ex, e))) { remap.expenses[e.id] = nextExp; e.id = nextExp++; }
           }
           const mine = exTrips.filter(t => t.driverId === driverId);
-          const san = sanitizeDriverTrips({ incoming: driverTrips, existing: mine, driverId, clients: exClients, trucks: exTrucks, invoices: exInvoices, cobros: exCobros });
+          // Lista de ayudantes: para validar quién va en los viajes nuevos del chofer
+          let stAy;
+          try { stAy = await readSettlementStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY); }
+          catch { return Response.json({ error: "No se pudo leer la lista de ayudantes; se reintentará solo" }, { status: 503, headers: corsHeaders }); }
+          const ayudantesList = Array.isArray(stAy?.__ayudantes) ? stAy.__ayudantes : [];
+          const san = sanitizeDriverTrips({ incoming: driverTrips, existing: mine, driverId, clients: exClients, trucks: exTrucks, invoices: exInvoices, cobros: exCobros, ayudantes: ayudantesList });
           if (san.errors.length) return Response.json({ error: san.errors[0].error, code: "invalid_trip", tripId: san.errors[0].tripId }, { status: 422, headers: corsHeaders });
           driverTrips.length = 0; driverTrips.push(...san.trips);
+          // Pago del chofer y de ayudantes: el chofer solo los crea con un viaje nuevo; los de viajes ya registrados
+          // los maneja la oficina (una copia vieja del teléfono no los revive ni los cambia)
+          const existingIds = new Set(mine.map(t => t.id));
+          // El chofer no registra adelantos de ayudantes (eso es de la oficina)
+          const keepExps = driverExps.filter(e => e.category !== "adelanto_ayudante" && !((e.category === "helper" || e.category === "driverPay") && existingIds.has(e.tripId)));
+          driverExps.length = 0; driverExps.push(...keepExps);
+          // Viajes nuevos con la lista vieja del teléfono: se corrigen con la actual y se rehacen sus gastos de ayudantes
+          const norm = normalizeDriverHelpers({ trips: driverTrips.filter(t => !existingIds.has(t.id)), expenses: driverExps, ayudantes: ayudantesList, nextExpenseId: nextExp });
+          if (norm.fixedTripIds.length) {
+            const byId = new Map(norm.trips.map(t => [t.id, t]));
+            const fixedTrips = driverTrips.map(t => byId.get(t.id) || t);
+            driverTrips.length = 0; driverTrips.push(...fixedTrips);
+            driverExps.length = 0; driverExps.push(...norm.expenses);
+            nextExp = norm.nextExpenseId;
+          }
         }
         // Referencia de factura: no repetida, salvo viaje conjunto (se enlaza aquí, el chofer no ve otros viajes)
         const refs = await enforceTripRefs(SUPABASE_URL, SUPABASE_SERVICE_KEY, driverTrips);
@@ -600,9 +641,11 @@ export default async (request) => {
         // Viaje conjunto registrado por este chofer: el servidor crea el viaje del compañero
         const needCompanion = driverTrips.filter(tr => tr.joint && tr.jointDriverId && tr.jointTruckId && !tr.jointWith && tr.status !== "cancelled");
         if (needCompanion.length > 0) {
-          const [allTrips, allDrivers, allTrucks, allClients, allExps] = await Promise.all([
+          const [allTrips, allDrivers, allTrucks, allClients, allExps, stBlob] = await Promise.all([
             readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trips"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_drivers"),
-            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trucks"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_clients"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_expenses")]);
+            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trucks"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_clients"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_expenses"),
+            readSettlementStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY).catch(() => ({}))]);
+          const allAyudantes = Array.isArray(stBlob?.__ayudantes) ? stBlob.__ayudantes : [];
           let nextTripId = Math.max(0, ...allTrips.map(t => Number(t.id) || 0), ...driverTrips.map(t => Number(t.id) || 0)) + 1;
           let nextExpId = Math.max(0, ...allExps.map(e => Number(e.id) || 0), ...driverExps.map(e => Number(e.id) || 0)) + 1;
           const newTrips = [], newExps = [];
@@ -610,7 +653,7 @@ export default async (request) => {
             if (Number(tr.jointDriverId) === driverId) continue; // no puede enlazarse consigo mismo
             const already = allTrips.find(t => t.jointWith === tr.id && t.status !== "cancelled");
             if (already) { tr.jointWith = already.id; continue; }   // ya se creó en un guardado anterior
-            const built = buildCompanionTrip({ trip: tr, companionDriverId: tr.jointDriverId, companionTruckId: tr.jointTruckId, drivers: allDrivers, trucks: allTrucks, clients: allClients, nextTripId, nextExpenseId: nextExpId, createdBy: tr.createdBy });
+            const built = buildCompanionTrip({ trip: tr, companionDriverId: tr.jointDriverId, companionTruckId: tr.jointTruckId, drivers: allDrivers, trucks: allTrucks, clients: allClients, ayudantes: allAyudantes, nextTripId, nextExpenseId: nextExpId, createdBy: tr.createdBy });
             if (!built) continue;
             nextTripId += 1; nextExpId += built.expenses.length;
             newTrips.push(built.trip); newExps.push(...built.expenses);
@@ -646,7 +689,7 @@ export default async (request) => {
         // state doesn't have them yet
         // Solo puede retirar gastos que él mismo registra (combustible, peajes…) y que sigan PENDIENTES;
         // nunca nómina, ayudantes, adelantos, comisiones ni nada ya pagado.
-        const protectedCats = ["nominaTotalOverride", "driverPay", "adelanto_conductor", "helper", "broker_commission", "partner_settlement"];
+        const protectedCats = ["nominaTotalOverride", "driverPay", "adelanto_conductor", "adelanto_ayudante", "helper", "broker_commission", "partner_settlement"];
         const catFilter = protectedCats.map(c => `rec->>category=neq.${c}`).join("&");
         const expDeleteUrl = expIds.length > 0
           ? `${SUPABASE_URL}/rest/v1/bl_expenses?rec->>driverId=eq.${driverId}&${catFilter}&rec->>status=neq.paid&id=not.in.(${expIds.join(",")})`
@@ -806,7 +849,7 @@ export default async (request) => {
         }
         const sRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_settlement_status?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
         const cur = sRes.ok ? ((await sRes.json())[0]?.data || {}) : {};
-        const { _version: _v, __bankAccount, __bankReconciliation, __pfSettings, __distances, ...curStatus } = cur;
+        const { _version: _v, __bankAccount, __bankReconciliation, __pfSettings, __distances, __ayudantes, ...curStatus } = cur;
         const newVersion = Date.now();
         await syncSettlementStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
           ...(body.settlementStatus != null ? body.settlementStatus : curStatus),
@@ -815,6 +858,7 @@ export default async (request) => {
           __bankReconciliation: body.bankReconciliation != null ? body.bankReconciliation : __bankReconciliation,
           __pfSettings: body.pfSettings != null ? body.pfSettings : __pfSettings,
           __distances: body.distances != null ? body.distances : __distances,
+          __ayudantes: Array.isArray(body.ayudantes) ? body.ayudantes : __ayudantes,
         });
         return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "patch", changed, _version: newVersion }, { headers: corsHeaders });
       } catch (err) {
@@ -844,6 +888,16 @@ export default async (request) => {
         body.trips = refs.trips;
       }
 
+      // Lista de ayudantes: viaja en el mismo registro; si este guardado no la trae (o la trae vacía), se conserva la que hay.
+      // Se lee ANTES de escribir nada: si no se puede leer, no se guarda (error temporal, la app reintenta) para no borrarla.
+      let keepAyudantes = null;
+      if (!Array.isArray(body.ayudantes) || body.ayudantes.length === 0) {
+        const aRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_settlement_status?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) }).catch(() => null);
+        if (!aRes || !aRes.ok) return Response.json({ error: "No se pudo leer la lista de ayudantes; se reintentará solo" }, { status: 503, headers: corsHeaders });
+        const aCur = (await aRes.json())[0]?.data || {};
+        if (Array.isArray(aCur.__ayudantes)) keepAyudantes = aCur.__ayudantes;
+      }
+
       try {
         await syncAllTables(SUPABASE_URL, SUPABASE_SERVICE_KEY, body);
         // Stamp the new version so the next writer can detect a concurrent edit
@@ -855,6 +909,7 @@ export default async (request) => {
           ...(body.bankReconciliation != null     ? { __bankReconciliation: body.bankReconciliation } : {}),
           ...(body.pfSettings != null             ? { __pfSettings: body.pfSettings }             : {}),
           ...(body.distances != null              ? { __distances: body.distances }               : {}),
+          ...(keepAyudantes && keepAyudantes.length ? { __ayudantes: keepAyudantes } : Array.isArray(body.ayudantes) ? { __ayudantes: body.ayudantes } : {}),
         });
         return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "relational", _version: newVersion }, { headers: corsHeaders });
       } catch (err) {
