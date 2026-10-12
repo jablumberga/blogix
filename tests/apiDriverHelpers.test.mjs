@@ -260,3 +260,58 @@ test("el chofer ve solo nombre y forma de pago de los ayudantes activos (sin cé
   assert.deepEqual(g.body.ayudantes, [{ id: 1, name: "Pedro", payMode: "direct", status: "active" }]);
   assert.deepEqual(g.body.trucks.find(t => t.id === 1)?.helperIds, [1], "el chofer ve la tripulación fija de su camión");
 });
+
+// ── Recibos por foto y el guardado ──────────────────────────────────────────
+test("un gasto aprobado de un recibo NO lo cambia una copia vieja (ni alterada) del teléfono del chofer", async () => {
+  seedBase([]);
+  db.bl_trips.set(30, { id: 30, driverId: 5, truckId: 1, clientId: 3, province: "S", municipality: "S", revenue: 9000, status: "pending", date: today, numHelpers: 0 });
+  db.bl_expenses.set(900, { id: 900, tripId: 30, category: "fuel", amount: 7000, truckId: 1, status: "paid", receiptId: 555, ncf: "B02" });
+  const stale = { id: 900, tripId: 30, category: "fuel", amount: 71400, truckId: 2, status: "paid", chargeToPartner: true }; // sin receiptId
+  const r = await call("POST", DRIVER, { trips: [db.bl_trips.get(30)], expenses: [stale] });
+  assert.equal(r.status, 200);
+  assert.deepEqual(db.bl_expenses.get(900), { id: 900, tripId: 30, category: "fuel", amount: 7000, truckId: 1, status: "paid", receiptId: 555, ncf: "B02" });
+});
+
+test("el chofer no puede «aprobar» su propio recibo creando un gasto con receiptId", async () => {
+  seedBase([]);
+  const r = await call("POST", DRIVER, { trips: [], expenses: [{ id: 501, category: "fuel", amount: 9999, driverId: 5, status: "paid", receiptId: 555, receiptDriverId: 5, date: today }] });
+  assert.equal(r.status, 200);
+  const e = db.bl_expenses.get(501);
+  assert.ok(e, "el gasto se guarda como gasto normal del chofer");
+  assert.equal(e.receiptId, undefined); assert.equal(e.receiptDriverId, undefined);
+});
+
+test("el chofer no marca documentos recibidos: viaje nuevo queda pendiente aunque el teléfono diga recibido", async () => {
+  seedBase([]);
+  const trip = { id: 40, driverId: 5, truckId: 1, clientId: 3, province: "S", municipality: "S", revenue: 9000, status: "delivered", date: today, numHelpers: 0,
+    docs: { factura: true, conduce: true, pod: true }, docStatus: "delivered", podDelivered: true, docsReceivedAt: today, docsReceivedBy: "Ana (oficina)", docsReceivedTs: new Date().toISOString() };
+  const r = await call("POST", DRIVER, { trips: [trip], expenses: [] });
+  assert.equal(r.status, 200);
+  const t = db.bl_trips.get(40);
+  assert.equal(t.docsReceivedAt, undefined); assert.equal(t.docsReceivedBy, undefined); assert.equal(t.docsReceivedTs, undefined); assert.equal(t.docs, undefined);
+  assert.equal(t.docStatus, "pending"); assert.equal(t.podDelivered, false);
+});
+
+const ADMIN_USER = { id: "admin", role: "admin", name: "Alexander" };
+test("oficina: un recibo solo puede quedar aprobado en UN gasto (el servidor lo impide aunque la pantalla falle)", async () => {
+  seedBase([]);
+  db.bl_expenses.set(900, { id: 900, category: "fuel", amount: 7140, receiptId: 555 });
+  let r = await call("POST", ADMIN_USER, { patch: true, _version: 0, tables: { expenses: { upserts: [{ id: 901, category: "fuel", amount: 7140, receiptId: 555 }], deletes: [] } } });
+  assert.equal(r.status, 422); assert.equal(r.body.code, "receipt_used");
+  assert.equal(db.bl_expenses.has(901), false);
+  r = await call("POST", ADMIN_USER, { patch: true, _version: 0, tables: { expenses: { upserts: [{ id: 900, category: "fuel", amount: 7000, receiptId: 555 }], deletes: [] } } });
+  assert.equal(r.status, 200, "corregir el mismo gasto sí se puede");
+  assert.equal(db.bl_expenses.get(900).amount, 7000);
+  r = await call("POST", ADMIN_USER, { patch: true, _version: 0, tables: { expenses: { upserts: [{ id: 910, receiptId: 777, amount: 1 }, { id: 911, receiptId: 777, amount: 1 }], deletes: [] } } });
+  assert.equal(r.status, 422, "el mismo recibo dos veces en el mismo guardado");
+});
+
+test("oficina: re-aprobar o mover el recibo en el MISMO guardado (borrando o cambiando el gasto viejo) sí se permite", async () => {
+  seedBase([]);
+  db.bl_expenses.set(900, { id: 900, category: "fuel", amount: 7140, receiptId: 555 });
+  let r = await call("POST", ADMIN_USER, { patch: true, _version: 0, tables: { expenses: { upserts: [{ id: 901, category: "fuel", amount: 7000, receiptId: 555 }], deletes: [900] } } });
+  assert.equal(r.status, 200, "borra el 900 y aprueba en el 901");
+  db.bl_expenses.set(902, { id: 902, category: "fuel", amount: 1, receiptId: 556 });
+  r = await call("POST", ADMIN_USER, { patch: true, _version: 0, tables: { expenses: { upserts: [{ id: 902, category: "fuel", amount: 1 }, { id: 903, category: "fuel", amount: 1, receiptId: 556 }], deletes: [] } } });
+  assert.equal(r.status, 200, "mueve el recibo del 902 al 903");
+});

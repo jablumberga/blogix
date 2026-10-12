@@ -44,7 +44,7 @@ export default function MyReceipts({ onNew }) {
           <ReceiptPhoto id={r.id} height={52} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ fontWeight: 700, fontSize: 13 }}>{fmt(r.expense?.amount ?? f.amount)}</span>
+              <span style={{ fontWeight: 700, fontSize: 13 }}>{r.expense ? fmt(r.expense.amount) : f.currency && f.currency !== "DOP" ? `${f.currency} ${Number(f.amount || 0).toLocaleString("en-US")}` : fmt(f.amount)}</span>
               <span style={{ fontSize: 11, color: colors.textMuted }}>{CAT[f.category] || f.category} · {f.date}</span>
               <Badge label={label} color={color} />
             </div>

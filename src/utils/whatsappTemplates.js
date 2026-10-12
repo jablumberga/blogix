@@ -16,8 +16,8 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 export const WA_TEMPLATES = {
   constancia_entrega: {
     label: "Constancia de entrega",
-    body: "Hola {{1}}, {{2}} recibió hoy {{3}} documento(s) tuyos (entrega {{4}} de la quincena {{5}}). Acumulado de la quincena: {{6}}. Pendientes por entregar: {{7}}.",
-    params: (d) => [d.name, d.company, d.newCount, d.visitNo, d.period, d.totalCount, d.pendingCount],
+    body: "Hola {{1}}, {{2}} recibió {{3}} documento(s) tuyos el {{4}} (entrega {{5}} de la quincena {{6}}). Acumulado de la quincena: {{7}}. Pendientes por entregar: {{8}}.",
+    params: (d) => [d.name, d.company, d.newCount, d.date, d.visitNo, d.period, d.totalCount, d.pendingCount],
     text: (d) => d.fullText,
   },
   documentos_pendientes: {

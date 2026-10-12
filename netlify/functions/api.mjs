@@ -190,6 +190,27 @@ function applyRLS(data, user) {
   return { error: "Unknown role" };
 }
 
+// ── Recibos por foto: un recibo = un gasto ────────────────────────────────────
+/** Devuelve el texto del error si algún gasto que se guarda usa un recibo que ya tiene OTRO gasto (o se repite en el lote). */
+async function receiptGuard(url, key, upserts = [], deletes = []) {
+  const rc = (upserts || []).filter(e => e && e.receiptId != null && e.receiptId !== "");
+  if (!rc.length) return null;
+  // Lo que este mismo guardado reescribe o borra ya no cuenta como «otro gasto» (re-aprobar o mover el recibo)
+  const overridden = new Set([...(upserts || []).map(e => Number(e?.id)), ...(deletes || []).map(Number)]);
+  const ids = rc.map(e => Number(e.receiptId));
+  if (ids.some(n => !Number.isFinite(n))) return "Recibo inválido";
+  if (new Set(ids).size !== ids.length) return "El mismo recibo por foto va en dos gastos";
+  const res = await fetch(`${url}/rest/v1/bl_expenses?rec->>receiptId=in.(${[...new Set(ids)].join(",")})&select=id,rec`, { headers: supabaseHeaders(key) });
+  if (!res.ok) throw new Error(`bl_expenses ${res.status}`);
+  for (const row of await res.json()) {
+    const mine = rc.find(e => Number(e.receiptId) === Number(row.rec?.receiptId));
+    const rowId = row.rec?.id ?? row.id;
+    if (overridden.has(Number(rowId))) continue;
+    if (mine && Number(mine.id) !== Number(rowId)) return `Ese recibo por foto ya se aprobó en el gasto #${rowId}`;
+  }
+  return null;
+}
+
 // ── Supabase helpers ──────────────────────────────────────────────────────────
 function supabaseHeaders(key) {
   return {
@@ -576,6 +597,7 @@ export default async (request) => {
         .filter(e => Number(e.amount) >= 0 && Number.isFinite(Number(e.amount)));
 
       const remap = { trips: {}, expenses: {} };
+      let existingExpIds = new Set(); // gastos que ya están en la base: el chofer no los cambia (los maneja la oficina)
       if (useRelational) {
         // El chofer solo crea o edita viajes suyos válidos; nunca borra ni toca lo facturado/cobrado/recibido
         {
@@ -609,6 +631,11 @@ export default async (request) => {
             const isMine = ex && ((ex.tripId && myTripIdsNow.has(ex.tripId)) || (!ex.tripId && ex.driverId === driverId));
             if (ex && (!isMine || !sameRecord(ex, e))) { remap.expenses[e.id] = nextExp; e.id = nextExp++; }
           }
+          // Un gasto que ya existe no se reescribe desde el teléfono (una copia vieja no deshace correcciones de la
+          // oficina ni cambia un gasto aprobado de un recibo). El chofer solo crea gastos nuevos, y nunca «aprueba»
+          // un recibo: el enlace receiptId lo pone solo la oficina.
+          existingExpIds = new Set(driverExps.filter(e => expById.has(e.id)).map(e => e.id));
+          for (const e of driverExps) if (!existingExpIds.has(e.id)) { delete e.receiptId; delete e.receiptDriverId; }
           const mine = exTrips.filter(t => t.driverId === driverId);
           // Lista de ayudantes: para validar quién va en los viajes nuevos del chofer
           let stAy;
@@ -675,12 +702,13 @@ export default async (request) => {
         }
         // Un chofer NUNCA borra viajes: si quiere anular uno, lo marca cancelado (y el admin decide).
 
-        // Upsert driver's expenses (skip upsert if none, but always delete stale)
-        if (driverExps.length > 0) {
+        // Upsert driver's expenses (solo los nuevos; los que ya existen quedan como están en la base)
+        const newDriverExps = driverExps.filter(e => !existingExpIds.has(e.id));
+        if (newDriverExps.length > 0) {
           await fetch(`${SUPABASE_URL}/rest/v1/bl_expenses`, {
             method: "POST",
             headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" },
-            body: JSON.stringify(driverExps.map(e => ({ id: e.id, rec: e }))),
+            body: JSON.stringify(newDriverExps.map(e => ({ id: e.id, rec: e }))),
           });
         }
         const expIds = driverExps.map(e => e.id);
@@ -825,6 +853,8 @@ export default async (request) => {
       const up = (k) => Array.isArray(tables[k]?.upserts) ? tables[k].upserts : [];
       const del = (k) => (Array.isArray(tables[k]?.deletes) ? tables[k].deletes : []).map(Number).filter(n => Number.isInteger(n) && n > 0);
       try {
+        const rcErr = await receiptGuard(SUPABASE_URL, SUPABASE_SERVICE_KEY, up("expenses"), del("expenses"));
+        if (rcErr) return Response.json({ error: rcErr, code: "receipt_used" }, { status: 422, headers: corsHeaders });
         for (const k of ["partners", "drivers", "staff"]) if (up(k).length) tables[k].upserts = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, up(k), TABLES[k]);
         let extraTrips = [];
         if (up("trips").length) {
@@ -837,7 +867,12 @@ export default async (request) => {
           const rows = [...up(k), ...(k === "trips" ? extraTrips : [])].filter(r => r && r.id != null).map(r => ({ id: r.id, rec: r }));
           if (rows.length) {
             const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method: "POST", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify(rows) });
-            if (!r.ok) throw new Error(`upsert ${table}: ${await r.text()}`);
+            if (!r.ok) {
+              const txt = await r.text();
+              // Índice único «un recibo = un gasto»: dos guardados a la vez → se avisa en vez de reintentar sin fin
+              if (table === "bl_expenses" && /23505|duplicate key/i.test(txt) && /receipt/i.test(txt)) return Response.json({ error: "Ese recibo por foto ya se aprobó en otro gasto; recarga", code: "receipt_used" }, { status: 422, headers: corsHeaders });
+              throw new Error(`upsert ${table}: ${txt}`);
+            }
             changed += rows.length;
           }
           const ids = del(k);
@@ -868,6 +903,11 @@ export default async (request) => {
 
     const coreKeys = ["trips", "clients", "trucks", "drivers", "expenses", "partners", "invoices", "cobros"];
     const anyEmpty = coreKeys.some(k => Array.isArray(body[k]) && body[k].length === 0);
+    // Un recibo por foto solo puede tener UN gasto (guardado completo: se revisa dentro de lo que se manda)
+    if (Array.isArray(body.expenses)) {
+      const rc = body.expenses.filter(e => e && e.receiptId != null && e.receiptId !== "").map(e => Number(e.receiptId));
+      if (new Set(rc).size !== rc.length) return Response.json({ error: "Un recibo por foto quedó aprobado en dos gastos; recarga y revisa", code: "receipt_used" }, { status: 422, headers: corsHeaders });
+    }
 
     if (useRelational) {
       // Safety guard against accidental wipe — checks relational tables

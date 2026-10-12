@@ -36,7 +36,7 @@ export default async (request) => {
   let body;
   try { body = await request.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
   const key = String(body.template || "");
-  if (!WA_TEMPLATES[key]) return json({ error: "Plantilla desconocida" }, 400);
+  if (!Object.hasOwn(WA_TEMPLATES, key)) return json({ error: "Plantilla desconocida" }, 400);
   const params = Array.isArray(body.params) ? body.params.map(v => clean(v)) : [];
   if (params.length !== templateArity(key)) return json({ error: `La plantilla ${key} lleva ${templateArity(key)} datos` }, 400);
   const to = waPhone(body.to);

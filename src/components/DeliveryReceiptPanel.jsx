@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ClipboardCheck, Printer, ChevronLeft, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { today } from "../utils/helpers.js";
-import { deliveryReceipt, deliveryReceiptText, quincenaOf, fmtTime, personTrips } from "../utils/deliveryReceipt.js";
+import { deliveryReceipt, deliveryReceiptText, quincenaOf, fmtTime, personTrips, payNote } from "../utils/deliveryReceipt.js";
 import { docsComplete } from "../utils/payroll.js";
 import { deliveryReceiptHTML, openPrintWindow } from "../utils/printReport.js";
 import WhatsAppButton from "./WhatsAppButton.jsx";
@@ -36,10 +36,10 @@ export default function DeliveryReceiptPanel({ kind, person, trips, trucks, clie
   const last = r.visits[r.visits.length - 1];
   const todayVisit = isCurrent && last && last.date === today() ? last : null;
 
-  const print = () => openPrintWindow(`Constancia ${person.name} ${r.period.label} entrega ${r.visit.no}`, deliveryReceiptHTML({ r, kind, person, generatedBy: user?.name, fmtTime }));
+  const print = () => openPrintWindow(`Constancia ${person.name} ${r.period.label} entrega ${r.visit.no}`, deliveryReceiptHTML({ r, kind, person, generatedBy: user?.name, fmtTime, payNote: payNote(r, kind) }));
   const company = COMPANY.brand || "B-Logix";
-  const waConstancia = r.visit ? { name: person.name, company, newCount: r.newCount, visitNo: r.visit.no, period: r.period.label, totalCount: r.totalCount, pendingCount: r.pending.length, fullText: deliveryReceiptText(r, { name: person.name, company }) } : null;
   const dmyFull = (x) => { const [y, m, d] = String(x || "").split("-"); return y ? `${d}/${m}/${y}` : ""; };
+  const waConstancia = r.visit ? { name: person.name, company, newCount: r.newCount, date: dmyFull(r.visit.date), visitNo: r.visit.no, period: r.period.label, totalCount: r.totalCount, pendingCount: r.pending.length, fullText: deliveryReceiptText(r, { name: person.name, company, kind }) } : null;
 
   return <div data-delivery-panel style={{ marginBottom: 12, padding: 10, borderRadius: 8, border: `1px solid ${colors.accent}40`, background: colors.accent + "0a" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>

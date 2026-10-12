@@ -84,7 +84,7 @@ export function driverPeriodReportHTML({ row, period, generatedBy, minRows = 14 
  * Constancia de entrega de documentos (sin montos), acumulada por quincena: lo de entregas anteriores de la quincena
  * + lo nuevo de esta entrega (marcado), y lo que falta por entregar. r = deliveryReceipt(...).
  */
-export function deliveryReceiptHTML({ r, kind, person, generatedBy, fmtTime = () => "" }) {
+export function deliveryReceiptHTML({ r, kind, person, generatedBy, fmtTime = () => "", payNote = "" }) {
   const isPartner = kind === "partner";
   const d = (x) => { const [y, m, dd] = String(x || "").split("-"); return y ? `${dd}/${m}/${y}` : ""; };
   const lines = r.items.map((x, i) => `
@@ -96,7 +96,7 @@ export function deliveryReceiptHTML({ r, kind, person, generatedBy, fmtTime = ()
       <td>${esc(x.trip.municipality || "")}${x.trip.province ? `, ${esc(x.trip.province)}` : ""}</td>
       <td>${esc(x.truck?.plate || "")}</td>
       ${isPartner ? `<td>${esc(x.driver?.name || "")}</td>` : ""}
-      <td style="text-align:center">${x.isNew ? `<span class="pill no">NUEVO HOY</span>` : `<span class="small muted">entrega ${x.visitNo} · ${esc(d(x.receivedDate))}</span>`}</td>
+      <td style="text-align:center">${x.isNew ? `<span class="pill no">NUEVO · esta entrega</span>` : `<span class="small muted">entrega ${x.visitNo} · ${esc(d(x.receivedDate))}</span>`}</td>
     </tr>`).join("");
   const pend = r.pending.map(x => `<tr><td>${esc(d(x.trip.date))}</td><td>${esc(x.client?.companyName || "—")}</td><td>${esc(x.trip.invoiceRef || "")}</td><td>${esc(x.trip.municipality || "")}</td><td>${esc(x.truck?.plate || "")}</td>${isPartner ? `<td>${esc(x.driver?.name || "")}</td>` : ""}</tr>`).join("");
   const cols = isPartner ? 8 : 7;
@@ -121,7 +121,7 @@ export function deliveryReceiptHTML({ r, kind, person, generatedBy, fmtTime = ()
     </table>
     ${r.pending.length ? `<div class="section">Pendientes por entregar</div>
     <table><thead><tr><th>Fecha viaje</th><th>Cliente</th><th>Referencia</th><th>Destino</th><th>Camión</th>${isPartner ? "<th>Chofer</th>" : ""}</tr></thead><tbody>${pend}</tbody></table>` : `<div class="small ok" style="margin-top:10px">No tiene documentos pendientes hasta esta fecha.</div>`}
-    <div class="small muted" style="margin-top:10px">Los viajes recibidos se pagan en la quincena ${esc(r.period.label)}. Este documento no incluye montos.</div>
+    <div class="small muted" style="margin-top:10px">${esc(payNote || `Los viajes recibidos se pagan en la quincena ${r.period.label}.`)} Este documento no incluye montos.</div>
     <div class="sig"><div>Entregó: ${esc(person.name)}</div><div>Recibió: ${esc(r.visit.by || generatedBy || "")}</div><div>Fecha: ${esc(d(r.visit.date))}</div></div>`;
 }
 

@@ -92,15 +92,22 @@ export function deliveryReceipt({ kind, person, trips = [], trucks = [], clients
 const fmtDate = (d) => { const [y, m, dd] = String(d || "").split("-"); return y ? `${dd}/${m}/${y}` : ""; };
 export const fmtTime = (ts) => { try { return new Intl.DateTimeFormat("es-DO", { timeZone: "America/Santo_Domingo", hour: "numeric", minute: "2-digit" }).format(new Date(ts)); } catch { return ""; } };
 
+const drToday = () => { try { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santo_Domingo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); } catch { return new Date().toISOString().slice(0, 10); } };
+/** Cuándo se pagan o liquidan los viajes recibidos (el chofer por la fecha de recepción; el socio por la fecha del viaje). */
+export const payNote = (r, kind) => (kind === "partner"
+  ? "En la liquidación del socio cada viaje cuenta en la quincena de su fecha de viaje."
+  : `Estos viajes entran en la nómina de la quincena ${r.period.label}.`);
+
 /** Texto corto para WhatsApp (sin montos). */
-export function deliveryReceiptText(r, { name, company = "B-Logix" } = {}) {
+export function deliveryReceiptText(r, { name, company = "B-Logix", kind = "driver", today = drToday() } = {}) {
   if (!r?.visit) return "";
+  const when = r.visit.date === today ? "hoy" : `el ${fmtDate(r.visit.date)}`;
   const lines = [];
   lines.push(`*${company} — Constancia de entrega de documentos*`);
   lines.push(`${name} · Quincena ${r.period.label}`);
   lines.push(`Entrega ${r.visit.no} de la quincena · ${fmtDate(r.visit.date)}${r.visit.legacy ? "" : ` ${fmtTime(r.visit.endTs)}`}${r.visit.by ? ` · Recibió: ${r.visit.by}` : ""}`);
   lines.push("");
-  lines.push(`Entregaste hoy: *${r.newCount}* · Acumulado de la quincena: *${r.totalCount}*`);
+  lines.push(`Entregaste ${when}: *${r.newCount}* · Acumulado de la quincena: *${r.totalCount}*`);
   for (const x of r.items) lines.push(`${x.isNew ? "🆕" : "✔"} ${fmtDate(x.trip.date)} · ${x.client?.companyName || "—"}${x.trip.invoiceRef ? ` · Ref ${x.trip.invoiceRef}` : ""} · ${x.trip.municipality || ""}`);
   if (r.pending.length) {
     lines.push("");
@@ -109,6 +116,6 @@ export function deliveryReceiptText(r, { name, company = "B-Logix" } = {}) {
     if (r.pending.length > 15) lines.push(`… y ${r.pending.length - 15} más`);
   }
   lines.push("");
-  lines.push(`Estos viajes entran en la quincena ${r.period.label}.`);
+  lines.push(payNote(r, kind));
   return lines.join("\n");
 }

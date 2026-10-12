@@ -39,6 +39,17 @@ const isoDate = (v) => {
 };
 function validDate(s) { const d = new Date(`${s}T12:00:00Z`); return !isNaN(d) && d.toISOString().slice(0, 10) === s; }
 
+export const CURRENCIES = { DOP: "RD$", USD: "US$", HTG: "gourdes", EUR: "€" };
+/** Moneda del recibo: DOP por defecto; dólares, gourdes (frontera) o euros si así dice. */
+export function currencyOf(v) {
+  const s = String(v ?? "").toUpperCase().replace(/\s/g, "");
+  if (!s || s === "DOP" || s === "RD$" || s === "RD" || s === "PESOS") return "DOP";
+  if (s === "USD" || s === "US$" || s === "U$S" || s === "DOLARES" || s === "DÓLARES") return "USD";
+  if (s === "HTG" || s === "GOURDES" || s === "GDES") return "HTG";
+  if (s === "EUR" || s === "€") return "EUR";
+  return /^[A-Z]{3}$/.test(s) ? s : "DOP";
+}
+
 /** Lo que devuelve la IA (o null) → lectura limpia con nombres de la app. Nunca inventa: lo dudoso queda en null. */
 export function normalizeRead(raw) {
   const r = raw || {};
@@ -56,7 +67,7 @@ export function normalizeRead(raw) {
     issues: (Array.isArray(r.problemas ?? r.issues) ? (r.problemas ?? r.issues) : []).map(x => str(x, 140)).filter(Boolean).slice(0, 5),
     category,
     amount: amount > 0 ? Math.round(amount * 100) / 100 : null,
-    currency: (str(r.moneda ?? r.currency, 5) || "DOP").toUpperCase() === "USD" ? "USD" : "DOP",
+    currency: currencyOf(r.moneda ?? r.currency),
     date: isoDate(r.fecha ?? r.date),
     vendor: str(r.negocio ?? r.vendor, 80),
     rnc: str(r.rnc, 20),
@@ -89,7 +100,8 @@ const daysBetween = (a, b) => Math.round((new Date(`${a}T12:00:00Z`) - new Date(
 
 /**
  * Lo que el chofer envía (después de revisar lo leído). Devuelve { fields, errors }.
- * trucks/trips: los que puede usar ese chofer. today: "AAAA-MM-DD".
+ * trucks: camiones activos (un chofer a veces maneja otro camión, también de socio); trips: los viajes de ese chofer.
+ * today: "AAAA-MM-DD".
  */
 export function validateSubmit(input, { trucks = [], trips = [], today }) {
   const f = input || {};
@@ -124,6 +136,7 @@ export function validateSubmit(input, { trucks = [], trips = [], today }) {
     ncf: (str(f.ncf, 20) || "").toUpperCase().replace(/\s/g, "") || null,
     rnc: str(f.rnc, 20), itbis: num(f.itbis) > 0 ? Math.round(num(f.itbis) * 100) / 100 : null,
     note: str(f.note, 200),
+    currency: currencyOf(f.currency),
   };
   return { fields, errors };
 }
@@ -133,7 +146,7 @@ export function changedFromRead(read, fields) {
   if (!read || !fields) return [];
   const out = [];
   const same = (a, b) => (a === null || a === undefined || a === "" ? null : String(a).toLowerCase()) === (b === null || b === undefined || b === "" ? null : String(b).toLowerCase());
-  for (const k of ["category", "amount", "date", "vendor", "gallons", "ncf"]) {
+  for (const k of ["category", "amount", "currency", "date", "vendor", "gallons", "ncf"]) {
     if (k === "gallons" && fields.category !== "fuel") continue;
     if (read[k] === null || read[k] === undefined) continue; // la IA no lo leyó: no es un cambio
     if (!same(read[k], fields[k])) out.push({ field: k, read: read[k], sent: fields[k] ?? null });
@@ -171,13 +184,13 @@ export function receiptDuplicates(r, { receipts = [], expenses = [] }) {
   const ncf = f.ncf || r?.read?.ncf;
   if (ncf) {
     const sameNcf = (x) => x && String(x.ncf || "").toUpperCase() === ncf && (!f.rnc || !x.rnc || String(x.rnc) === String(f.rnc));
-    for (const o of receipts) if (o.id !== r.id && o.status !== "rejected" && sameNcf(o.fields || o.read)) out.push(`Mismo NCF que ${otherR(o)}`);
+    for (const o of receipts) if (o.id !== r.id && o.status !== "rejected" && o.status !== "deleted" && sameNcf(o.fields || o.read)) out.push(`Mismo NCF que ${otherR(o)}`);
     for (const e of expenses) if (e.receiptId !== r.id && sameNcf(e)) out.push(`Mismo NCF que ${otherE(e)}`);
   }
-  if (r?.photoHash) for (const o of receipts) if (o.id !== r.id && o.status !== "rejected" && hamming(o.photoHash, r.photoHash) <= SAME_PHOTO_MAX_DISTANCE) out.push(`La foto se parece a la de ${otherR(o)}`);
+  if (r?.photoHash) for (const o of receipts) if (o.id !== r.id && o.status !== "rejected" && o.status !== "deleted" && hamming(o.photoHash, r.photoHash) <= SAME_PHOTO_MAX_DISTANCE) out.push(`La foto se parece a la de ${otherR(o)}`);
   if (f.amount && f.date) {
     const truck = f.truckId || null;
-    for (const o of receipts) { const g = o.fields || {}; if (o.id !== r.id && o.status !== "rejected" && g.amount === f.amount && g.date === f.date && (g.truckId || null) === truck) out.push(`Mismo monto, fecha y camión que ${otherR(o)}`); }
+    for (const o of receipts) { const g = o.fields || {}; if (o.id !== r.id && o.status !== "rejected" && o.status !== "deleted" && g.amount === f.amount && g.date === f.date && (g.truckId || null) === truck) out.push(`Mismo monto, fecha y camión que ${otherR(o)}`); }
     for (const e of expenses) if (e.receiptId !== r.id && e.category !== "nominaTotalOverride" && Number(e.amount) === f.amount && e.date === f.date && truck && Number(e.truckId) === truck) out.push(`Mismo monto, fecha y camión que ${otherE(e)}`);
   }
   // Un gasto aprobado desde OTRO recibo aparece dos veces (como recibo y como gasto): basta con el aviso del recibo
@@ -198,9 +211,11 @@ export function receiptToExpenseForm(r, { suppliers = [], driverName = "" } = {}
   const f = r.fields || {};
   const sup = matchSupplier(f.vendor, suppliers);
   const cat = f.category === "fuel" ? "Combustible" : f.category === "toll" ? "Peaje" : f.category === "tire" ? "Gomas" : f.category === "repair" ? "Reparación" : f.category === "maintenance" ? "Mantenimiento" : "Gasto";
+  const foreign = f.currency && f.currency !== "DOP";
   return {
     date: f.date, category: f.category, amount: String(f.amount ?? ""), gallons: f.category === "fuel" ? (f.gallons ?? "") : null,
-    paymentMethod: "cash", status: "paid", description: [cat, f.vendor, driverName ? `(foto de ${driverName})` : ""].filter(Boolean).join(" · ") + (f.note ? ` — ${f.note}` : ""),
+    paymentMethod: "cash", status: "paid", description: [cat, f.vendor, driverName ? `(foto de ${driverName})` : ""].filter(Boolean).join(" · ") + (foreign ? ` [recibo en ${f.currency} ${f.amount}]` : "") + (f.note ? ` — ${f.note}` : ""),
+    receiptCurrency: foreign ? f.currency : null,
     tripId: f.tripId ? String(f.tripId) : "", truckId: f.truckId || null, supplierId: sup ? sup.id : null, driverId: null,
     receiptId: r.id, vendorName: f.vendor || null, ncf: f.ncf || null, rnc: f.rnc || null, itbis: f.itbis ?? null, receiptDriverId: r.driverId ?? null,
   };

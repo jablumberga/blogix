@@ -8,6 +8,7 @@ import { scanReceipt, submitReceipt, notifyReceiptsChanged } from "../utils/rece
 import { Inp, Sel, Btn } from "./ui/index.jsx";
 
 const CAT_LABEL = { fuel: "Combustible", toll: "Peaje", tire: "Gomas", repair: "Reparación / piezas", maintenance: "Mantenimiento (aceite, lavado…)", other: "Otro (comida, etc.)" };
+const CUR_LABEL = { DOP: "RD$", USD: "US$", HTG: "(gourdes)", EUR: "€" };
 const TIPS = ["Pon el recibo sobre una superficie oscura y plana.", "Que se vea completo, de arriba abajo.", "Buena luz, sin sombra ni reflejo.", "Sostén el teléfono firme y toca la pantalla para enfocar."];
 
 /**
@@ -36,7 +37,7 @@ export default function ReceiptCapture({ trucks = [], trips = [], defaultTruckId
       const rd = r.read || {};
       setForm({
         category: rd.category || "fuel", amount: rd.amount ?? "", date: rd.date || todayStr(), vendor: rd.vendor || "",
-        gallons: rd.gallons ?? "", ncf: rd.ncf || "", rnc: rd.rnc || "", itbis: rd.itbis ?? "",
+        gallons: rd.gallons ?? "", ncf: rd.ncf || "", rnc: rd.rnc || "", itbis: rd.itbis ?? "", currency: rd.currency || "DOP",
         truckId: defaultTruckId || (trucks.length === 1 ? trucks[0].id : ""), tripId: "", note: "",
       });
       setStep("form");
@@ -136,7 +137,7 @@ export default function ReceiptCapture({ trucks = [], trips = [], defaultTruckId
           <div style={{ gridColumn: "1 / -1" }}><Sel label={<>Tipo de gasto{tag("category")}</>} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} data-field="category">
             {RECEIPT_CATEGORIES.map(c => <option key={c} value={c}>{CAT_LABEL[c]}</option>)}
           </Sel></div>
-          <Inp label={<>Monto total RD$ *{tag("amount")}</>} type="number" inputMode="decimal" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} data-field="amount" />
+          <Inp label={<>Monto total {CUR_LABEL[form.currency] || form.currency} *{tag("amount")}</>} type="number" inputMode="decimal" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} data-field="amount" />
           <Inp label={<>Fecha *{tag("date")}</>} type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} data-field="date" />
           <div style={{ gridColumn: "1 / -1" }}><Inp label={<>Negocio / estación *{tag("vendor")}</>} value={form.vendor} onChange={e => setForm({ ...form, vendor: e.target.value })} data-field="vendor" /></div>
           {form.category === "fuel" && <Inp label={<>Galones *{tag("gallons")}</>} type="number" inputMode="decimal" value={form.gallons} onChange={e => setForm({ ...form, gallons: e.target.value })} data-field="gallons" />}
@@ -148,6 +149,9 @@ export default function ReceiptCapture({ trucks = [], trips = [], defaultTruckId
             <option value="">— Sin viaje (solo el camión) —</option>
             {myTrips.map(tr => <option key={tr.id} value={tr.id}>#{tr.id} · {tr.date} · {tr.municipality}</option>)}
           </Sel></div>
+          <Sel label="Moneda" value={form.currency || "DOP"} onChange={e => setForm({ ...form, currency: e.target.value })} data-field="currency">
+            <option value="DOP">Pesos (RD$)</option><option value="USD">Dólares (US$)</option><option value="HTG">Gourdes (Haití)</option><option value="EUR">Euros (€)</option>
+          </Sel>
           <Inp label={<>NCF (si tiene){tag("ncf")}</>} value={form.ncf} onChange={e => setForm({ ...form, ncf: e.target.value })} data-field="ncf" />
           <Inp label="Nota (opcional)" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} data-field="note" />
         </div>

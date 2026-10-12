@@ -25,7 +25,7 @@ test("waPhone: números de RD con o sin formato, con código de país, inválido
 });
 
 const samples = {
-  constancia_entrega: { name: "Edwin", company: "B-Logix", newCount: 1, visitNo: 2, period: "16–31 de octubre 2026", totalCount: 3, pendingCount: 2, fullText: "texto completo" },
+  constancia_entrega: { name: "Edwin", company: "B-Logix", newCount: 1, date: "24/10/2026", visitNo: 2, period: "16–31 de octubre 2026", totalCount: 3, pendingCount: 2, fullText: "texto completo" },
   documentos_pendientes: { name: "Edwin", company: "B-Logix", count: 2, list: "01/10 Bocel ref 1; 02/10 Bocel ref 2", lines: ["• 01/10", "• 02/10"] },
   recibo_rechazado: { name: "Edwin", category: "combustible", amount: 7140, date: "2026-10-12", reason: "Monto\nno coincide" },
   pago_quincena: { name: "Edwin", period: "1–15 oct", company: "B-Logix", trips: 5, advances: 1000, net: 12500.5, paid: false },

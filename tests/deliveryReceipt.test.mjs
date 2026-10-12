@@ -80,15 +80,18 @@ test("socio: viajes de sus camiones, con el chofer de cada uno", () => {
 
 test("texto de WhatsApp y PDF: sin montos, con lo nuevo marcado y lo pendiente; el PDF escapa el HTML", () => {
   const r = deliveryReceipt({ kind: "driver", person: drivers[0], trips, trucks, clients, drivers, date: "2026-10-25", at: 2 });
-  const txt = deliveryReceiptText(r, { name: "Edwin" });
+  const txt = deliveryReceiptText(r, { name: "Edwin", today: "2026-10-24" });
   assert.match(txt, /Entrega 2 de la quincena/);
   assert.match(txt, /Entregaste hoy: \*1\* · Acumulado de la quincena: \*3\*/);
+  assert.match(deliveryReceiptText(r, { name: "Edwin", today: "2026-10-30" }), /Entregaste el 24\/10\/2026: \*1\*/, "una entrega vieja no dice «hoy»");
+  assert.match(txt, /nómina de la quincena 16–31 de octubre 2026/);
+  assert.match(deliveryReceiptText(r, { name: "Robinson", kind: "partner", today: "2026-10-24" }), /quincena de su fecha de viaje/, "al socio no se le dice la quincena de recepción");
   assert.equal((txt.match(/🆕/g) || []).length, 1);
   assert.match(txt, /Te faltan por entregar \(3\)/);
   assert.doesNotMatch(txt, /RD\$|9,?000/);
   const html = deliveryReceiptHTML({ r, kind: "driver", person: drivers[0], generatedBy: "Ana" });
   assert.match(html, /CONSTANCIA DE ENTREGA DE DOCUMENTOS/);
-  assert.match(html, /NUEVO HOY/);
+  assert.match(html, /NUEVO · esta entrega/);
   assert.match(html, /Cliente &lt;A&gt;/);
   assert.doesNotMatch(html, /Cliente <A>/);
   assert.doesNotMatch(html, /RD\$/);

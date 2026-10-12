@@ -97,6 +97,8 @@ export function autoLinkJointPairs(trips = []) {
  *  - se conservan campos que solo pone el servidor/admin (enlace de conjunto, bitácora)
  * Devuelve { trips, errors:[{tripId, error}], ignored:[ids] }.
  */
+const OFFICE_DOC_FIELDS = ["docs", "docsReceivedAt", "docsReceivedBy", "docsReceivedTs", "docStatus", "podDelivered"];
+
 export function sanitizeDriverTrips({ incoming = [], existing = [], driverId, clients = [], trucks = [], invoices = [], cobros = [], today = new Date(), maxDays = 60, ayudantes = null }) {
   const prevById = new Map(existing.map(t => [t.id, t]));
   const locked = new Set();
@@ -109,6 +111,10 @@ export function sanitizeDriverTrips({ incoming = [], existing = [], driverId, cl
     const prev = prevById.get(raw.id);
     if (prev && (locked.has(Number(raw.id)) || prev.docsReceivedAt)) { ignored.push(raw.id); out.push(prev); continue; }
     const tr = { ...raw, driverId };
+    // Documentos recibidos los marca la oficina, no el chofer: en viajes nuevos van pendientes; en los ya
+    // registrados se conserva lo que tiene el servidor (así nadie se paga ni se «entrega» un viaje desde el teléfono)
+    for (const k of OFFICE_DOC_FIELDS) { if (prev && prev[k] !== undefined) tr[k] = prev[k]; else delete tr[k]; }
+    if (!prev) { tr.docStatus = "pending"; tr.podDelivered = false; }
     if (prev) {
       for (const k of ["jointWith", "jointAuto", "createdAt", "createdBy", "history"]) if (prev[k] !== undefined && tr[k] === undefined) tr[k] = prev[k];
       // Ayudantes de un viaje ya registrado: solo los cambia la oficina (el panel del chofer no los edita; una copia vieja no los pisa)

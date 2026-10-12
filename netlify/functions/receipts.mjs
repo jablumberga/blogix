@@ -33,6 +33,7 @@ Reglas:
 - categoria: fuel (combustible: gasoil, gasolina, GLP), toll (peaje), tire (gomas), repair (taller, piezas, reparación), maintenance (aceite, filtros, lavado, mantenimiento), other (comida u otro).
 - galones y precio_galon solo para combustible.
 - negocio: nombre del negocio o estación. rnc y ncf (comprobante fiscal, p. ej. B0100000123 o B0200000456) si aparecen.
+- moneda: DOP (pesos dominicanos, RD$), USD (dólares, US$), HTG (gourdes de Haití) o EUR. Si no se indica, DOP.
 - legible=false si la foto está borrosa, cortada, con reflejo, o si el total, la fecha o los galones (en combustible) no se leen con seguridad.
 - es_recibo=false si la imagen no es un recibo, factura o ticket.
 - problemas: frases cortas en español de lo que impide leerla (vacío si está bien).
@@ -144,12 +145,19 @@ export default async (request) => {
   try {
     // ── Lista ─────────────────────────────────────────────────────────────
     if (request.method === "GET" && path === "/api/receipts") {
-      const q = isDriver
-        ? `bl_receipts?rec->>driverId=eq.${driverId}&rec->>status=neq.draft&select=rec&order=id.desc&limit=60`
-        : `bl_receipts?rec->>status=neq.draft&select=rec&order=id.desc&limit=300`;
-      const r = await rest(q);
-      if (!r.ok) return json({ error: "No se pudieron leer los recibos" }, 503);
-      const recs = (await r.json()).map(x => x.rec);
+      const hidden = (x) => x.status === "draft" || x.status === "deleted";
+      let recs;
+      if (isDriver) {
+        const r = await rest(`bl_receipts?rec->>driverId=eq.${driverId}&select=rec&order=id.desc&limit=80`);
+        if (!r.ok) return json({ error: "No se pudieron leer los recibos" }, 503);
+        recs = (await r.json()).map(x => x.rec).filter(x => !hidden(x)).slice(0, 60);
+      } else {
+        // Todos los por revisar (sin límite: ninguno se pierde de la cola) + los 200 más recientes ya resueltos
+        const [p, o] = await Promise.all([rest("bl_receipts?rec->>status=eq.pending&select=rec&order=id.desc"), rest("bl_receipts?rec->>status=neq.pending&select=rec&order=id.desc&limit=260")]);
+        if (!p.ok || !o.ok) return json({ error: "No se pudieron leer los recibos" }, 503);
+        const others = (await o.json()).map(x => x.rec).filter(x => !hidden(x)).slice(0, 200);
+        recs = [...(await p.json()).map(x => x.rec), ...others].sort((a, b) => b.id - a.id);
+      }
       const exp = await expensesFor(recs.map(x => x.id));
       return json({ receipts: recs.map(x => withStatus(x, exp)), aiEnabled: !!(env.ANTHROPIC_API_KEY || MOCKS[env.RECEIPTS_AI_MOCK]) });
     }
@@ -157,7 +165,7 @@ export default async (request) => {
     // ── Foto ──────────────────────────────────────────────────────────────
     if (request.method === "GET" && path === "/api/receipts/photo") {
       const rec = await getRow(url.searchParams.get("id"));
-      if (!rec || !mine(rec)) return json({ error: "No existe" }, 404);
+      if (!rec || !mine(rec) || (isDriver && rec.status === "deleted")) return json({ error: "No existe" }, 404);
       if (!PHOTO_KEY_RE.test(rec.photoKey || "")) return json({ error: "Sin foto" }, 404);
       const r = await fetch(objUrl(rec.photoKey), { headers: H });
       if (!r.ok) return json({ error: "No se pudo leer la foto" }, 502);
@@ -206,7 +214,8 @@ export default async (request) => {
         photoMetrics: { width: Number(body.width) || null, height: Number(body.height) || null, sharpness: Number(m.sharpness) || null, brightness: Number(m.brightness) || null, contrast: Number(m.contrast) || null, bytes: bytes.length },
         read, ai,
       };
-      await putRow(rec);
+      try { await putRow(rec); }
+      catch (e) { await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}`, { method: "DELETE", headers: HJ, body: JSON.stringify({ prefixes: [photoKey] }) }).catch(() => {}); throw e; }
       // Borradores viejos de este usuario (fotos que nunca se enviaron)
       const old = await rest(`bl_receipts?rec->>createdBy=eq.${encodeURIComponent(String(user.id))}&rec->>status=eq.draft&select=rec`).then(r => (r.ok ? r.json() : [])).catch(() => []);
       for (const o of old) if (o.rec.id !== id && Date.now() - new Date(o.rec.createdAt).getTime() > DRAFT_TTL_MS) await deleteRow(o.rec).catch(() => {});
@@ -217,7 +226,7 @@ export default async (request) => {
     if (path === "/api/receipts/submit") {
       const rec = await getRow(body.id);
       if (!rec || !mine(rec) || (isAdmin && rec.role === "driver" && rec.status === "draft")) return json({ error: "No existe" }, 404);
-      if (rec.status !== "draft") return json({ error: "Este recibo ya se envió" }, 409);
+      if (rec.status !== "draft") return json({ error: rec.status === "deleted" ? "Este recibo se borró" : "Este recibo ya se envió" }, 409);
       const [tk, tr] = await Promise.all([rest("bl_trucks?select=rec"), isDriver ? rest(`bl_trips?rec->>driverId=eq.${driverId}&select=rec`) : rest("bl_trips?select=rec")]);
       if (!tk.ok || !tr.ok) return json({ error: "No se pudieron leer camiones o viajes; intenta de nuevo" }, 503);
       const trucks = (await tk.json()).map(x => x.rec).filter(t => t.status !== "inactive");
@@ -235,6 +244,7 @@ export default async (request) => {
       const rec = await getRow(body.id);
       if (!rec || rec.status === "draft") return json({ error: "No existe" }, 404);
       const exp = await expensesFor([rec.id]);
+      if (rec.status === "deleted" && !exp.has(rec.id)) return json({ error: "El chofer borró este recibo" }, 409);
       if (path === "/api/receipts/reject") {
         if (exp.has(rec.id)) return json({ error: "Ya se aprobó (tiene gasto); borra el gasto primero" }, 409);
         const reason = String(body.reason || "").trim().slice(0, 200);
@@ -243,6 +253,8 @@ export default async (request) => {
         await putRow(next);
         return json({ ok: true, receipt: withStatus(next, exp) });
       }
+      const already = exp.get(rec.id);
+      if (already && body.expenseId && Number(already.id) !== Number(body.expenseId)) return json({ error: `Ya está aprobado en el gasto #${already.id}` }, 409);
       const next = { ...rec, status: "approved", expenseId: Number(body.expenseId) || null, approvedAt: new Date().toISOString(), approvedBy: user.name || String(user.id) };
       await putRow(next);
       return json({ ok: true, receipt: withStatus(next, exp) });
@@ -255,7 +267,9 @@ export default async (request) => {
       const exp = await expensesFor([rec.id]);
       if (exp.has(rec.id)) return json({ error: "Ya está aprobado como gasto; no se puede borrar" }, 409);
       if (isDriver && rec.status === "rejected") return json({ error: "La oficina lo rechazó; queda en el historial" }, 409);
-      await deleteRow(rec);
+      if (rec.status === "draft") { await deleteRow(rec); return json({ ok: true }); } // nunca se envió: se va todo
+      // Enviado: se marca borrado y la foto se conserva (si la oficina lo estaba aprobando a la vez, su gasto no queda sin foto)
+      await putRow({ ...rec, status: "deleted", deletedAt: new Date().toISOString(), deletedBy: user.name || String(user.id) });
       return json({ ok: true });
     }
 

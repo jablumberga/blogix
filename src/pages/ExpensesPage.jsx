@@ -14,7 +14,7 @@ import ReceiptCapture from "../components/ReceiptCapture.jsx";
 import WhatsAppButton from "../components/WhatsAppButton.jsx";
 
 const RC_CAT = { fuel: "Combustible", toll: "Peaje", tire: "Gomas", repair: "Reparación", maintenance: "Mantenimiento", other: "Otro" };
-const RC_FIELD = { category: "tipo", amount: "monto", date: "fecha", vendor: "negocio", gallons: "galones", ncf: "NCF" };
+const RC_FIELD = { category: "tipo", amount: "monto", currency: "moneda", date: "fecha", vendor: "negocio", gallons: "galones", ncf: "NCF" };
 
 // Métodos que se pagan en el momento: el gasto nace como pagado
 const INSTANT_METHODS = ["cash", "credit_card"];
@@ -44,7 +44,11 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   const [showCapture, setShowCapture] = useState(false);
   const [lastRejected, setLastRejected] = useState(null); // { r, reason } para avisarle al chofer
   const loadReceipts = useCallback(() => { listReceipts().then(r => { setReceipts(r.receipts || []); setRcError(""); }).catch(e => setRcError(e.message)); }, []);
-  useEffect(() => { loadReceipts(); window.addEventListener("blogix:receipts-changed", loadReceipts); return () => window.removeEventListener("blogix:receipts-changed", loadReceipts); }, [loadReceipts]);
+  useEffect(() => {
+    loadReceipts(); window.addEventListener("blogix:receipts-changed", loadReceipts);
+    const iv = setInterval(loadReceipts, 60000); // otro usuario pudo aprobar o el chofer pudo borrar
+    return () => { window.removeEventListener("blogix:receipts-changed", loadReceipts); clearInterval(iv); };
+  }, [loadReceipts]);
   const approvedReceiptIds = useMemo(() => new Set((expenses || []).filter(e => e.receiptId).map(e => Number(e.receiptId))), [expenses]);
   const pendingReceipts = receipts.filter(r => r.status === "pending" && !approvedReceiptIds.has(r.id));
   const reviewing = form.receiptId ? receipts.find(r => r.id === form.receiptId) || null : null;
@@ -120,6 +124,18 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
     if (form.category === "adelanto_ayudante" && !form.ayudanteId) { alert("Selecciona el ayudante para el adelanto."); return; }
     if (fuelNeedsTruck(form)) { alert("Selecciona el camión (o el viaje) de este combustible. Sin camión no cuenta en el costo por km."); return; }
     if (form.receiptId && editId === null && expenses.some(e => Number(e.receiptId) === Number(form.receiptId))) { alert("Este recibo ya se aprobó (ya tiene su gasto)."); setShowForm(false); return; }
+    if (form.receiptId && editId === null && form.receiptCurrency && !window.confirm(`El recibo está en ${form.receiptCurrency}. ¿El monto (${form.amount}) ya está convertido a pesos (RD$)?`)) return;
+    if (form.receiptId && editId === null) {
+      // La liquidación del socio cuenta un gasto con viaje en la quincena del VIAJE; sin viaje, en la de su fecha
+      const trip = form.tripId ? tripMap.get(Number(form.tripId)) : null;
+      const probe = { ...form, tripId: trip ? trip.id : null, truckId: form.truckId ? Number(form.truckId) : null, date: trip ? trip.date : form.date };
+      if (isSettled(probe)) {
+        alert(trip
+          ? `El viaje #${trip.id} (${trip.date}) es de una quincena que ya se le liquidó al socio de ese camión. Quita el viaje (queda solo el camión y cuenta en la quincena de la fecha del recibo) o desmarca esa liquidación primero.`
+          : "La fecha de este recibo cae en una liquidación que ya se le transfirió al socio de ese camión. Cambia la fecha a la quincena actual (así se le descuenta en la próxima) o desmarca esa liquidación primero.");
+        return;
+      }
+    }
     const instant = INSTANT_METHODS.includes(form.paymentMethod);
     const status = form.category === "adelanto_conductor" || form.category === "adelanto_ayudante" || instant ? "paid" : form.status;
     const supplierId = form.supplierId ? Number(form.supplierId) : null;
@@ -191,6 +207,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
             ...(r.changes || []).map(c => [`El chofer cambió ${RC_FIELD[c.field] || c.field}: ${c.read} → ${c.sent ?? "—"}`, colors.orange]),
             ...(r.ai?.failed ? [["Sin lectura automática (falló): compara con la foto", colors.orange]] : !r.read ? [["Sin lectura automática: compara con la foto", colors.textMuted]] : []),
             ...(r.photoMetrics?.sharpness && r.photoMetrics.sharpness < 90 ? [["Foto algo borrosa", colors.textMuted]] : []),
+            ...(f.currency && f.currency !== "DOP" ? [[`⚠ Recibo en ${f.currency}: convierte el monto a RD$ al aprobar`, colors.red]] : []),
           ];
           return <div key={r.id} data-review-row={r.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: 10, borderRadius: 8, background: colors.inputBg, border: `1px solid ${colors.border}`, flexWrap: isMobile ? "wrap" : "nowrap" }}>
             <ReceiptPhoto id={r.id} height={84} />
@@ -231,7 +248,8 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
           {form.ncf && <div>NCF: <b>{form.ncf}</b>{form.itbis ? ` · ITBIS ${fmt(form.itbis)}` : ""}</div>}
           {(reviewing?.changes || []).map(c => <div key={c.field} style={{ color: colors.orange }}>El chofer cambió {RC_FIELD[c.field] || c.field}: {String(c.read)} → {String(c.sent ?? "—")}</div>)}
           {reviewing && receiptDuplicates(reviewing, { receipts, expenses }).map(d => <div key={d} style={{ color: colors.red, display: "flex", gap: 4, alignItems: "center" }}><AlertTriangle size={12} /> {d}</div>)}
-          <div style={{ color: colors.textMuted, marginTop: 4 }}>Pagado con dinero de la empresa (efectivo). Si fue a crédito en la bomba, cambia el método y el suplidor.</div>
+          {form.receiptCurrency && <div style={{ color: colors.red, fontWeight: 700 }}>⚠ Recibo en {form.receiptCurrency}: escribe el monto convertido a RD$ antes de guardar.</div>}
+          <div style={{ color: colors.textMuted, marginTop: 4 }}>Pagado con dinero de la empresa (efectivo). Si fue a crédito en la bomba, cambia el método (queda pendiente) y el suplidor.</div>
         </div>
       </div>}
       {form.category === "adelanto_ayudante" && (
@@ -254,7 +272,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
         </Sel>
         <Inp label={t.expenseAmount} type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
         {form.category === "fuel" && <Inp label="Galones (para km/gal)" type="number" value={form.gallons ?? ""} onChange={e => setForm({ ...form, gallons: e.target.value })} />}
-        <Sel label={t.paymentMethod} value={form.paymentMethod} onChange={e => setForm({ ...form, paymentMethod: e.target.value })}>
+        <Sel label={t.paymentMethod} value={form.paymentMethod} onChange={e => setForm({ ...form, paymentMethod: e.target.value, ...(form.receiptId && !INSTANT_METHODS.includes(e.target.value) ? { status: "pending" } : {}) })}>
           {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t[m] || m}</option>)}
         </Sel>
         {form.category === "adelanto_ayudante"

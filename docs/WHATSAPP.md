@@ -38,10 +38,10 @@ Para que llegue directo a cada persona, su **teléfono debe estar guardado** en 
 - **Cuerpo** (copiar tal cual):
 
 ```
-Hola {{1}}, {{2}} recibió hoy {{3}} documento(s) tuyos (entrega {{4}} de la quincena {{5}}). Acumulado de la quincena: {{6}}. Pendientes por entregar: {{7}}.
+Hola {{1}}, {{2}} recibió {{3}} documento(s) tuyos el {{4}} (entrega {{5}} de la quincena {{6}}). Acumulado de la quincena: {{7}}. Pendientes por entregar: {{8}}.
 ```
 
-- **Ejemplos para Meta:** {{1}} = Edwin · {{2}} = B-Logix · {{3}} = 2 · {{4}} = 3 · {{5}} = 16–31 de octubre 2026 · {{6}} = 7 · {{7}} = 1
+- **Ejemplos para Meta:** {{1}} = Edwin · {{2}} = B-Logix · {{3}} = 2 · {{4}} = 24/10/2026 · {{5}} = 3 · {{6}} = 16–31 de octubre 2026 · {{7}} = 7 · {{8}} = 1
 
 ### Recordatorio de documentos pendientes
 

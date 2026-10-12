@@ -163,11 +163,47 @@ test("rechazado: el chofer ve el motivo y no lo puede borrar (queda en el histor
   assert.equal((await call(DRIVER, "POST", "/api/receipts/delete", { id: s.body.id })).status, 409);
 });
 
-test("el chofer borra un recibo suyo por revisar: se van el registro y la foto", async () => {
+test("el chofer borra un recibo suyo por revisar: deja de verse, pero la foto se guarda (por si la oficina lo aprobaba a la vez)", async () => {
   const s = await scan();
   await call(DRIVER, "POST", "/api/receipts/submit", { id: s.body.id, fields: fieldsOk(s.body.read) });
   assert.equal((await call(DRIVER, "POST", "/api/receipts/delete", { id: s.body.id })).status, 200);
+  assert.equal(db.bl_receipts.get(s.body.id).status, "deleted"); assert.equal(files.size, 1);
+  assert.equal((await call(DRIVER, "GET", "/api/receipts")).body.receipts.length, 0);
+  assert.equal((await call(ADMIN, "GET", "/api/receipts")).body.receipts.length, 0);
+  assert.equal((await call(DRIVER, "GET", `/api/receipts/photo?id=${s.body.id}`)).status, 404);
+  assert.equal((await call(ADMIN, "GET", `/api/receipts/photo?id=${s.body.id}`)).status, 200, "la oficina conserva la foto");
+  assert.equal((await call(DRIVER, "POST", "/api/receipts/submit", { id: s.body.id, fields: fieldsOk(s.body.read) })).status, 409);
+});
+
+test("un borrador que nunca se envió sí se borra completo (registro y foto)", async () => {
+  const s = await scan();
+  assert.equal((await call(DRIVER, "POST", "/api/receipts/delete", { id: s.body.id })).status, 200);
   assert.equal(db.bl_receipts.size, 0); assert.equal(files.size, 0);
+});
+
+test("aprobar dos veces en gastos distintos → 409", async () => {
+  const s = await scan();
+  await call(DRIVER, "POST", "/api/receipts/submit", { id: s.body.id, fields: fieldsOk(s.body.read) });
+  db.bl_expenses.set(900, { id: 900, category: "fuel", amount: 7140, receiptId: s.body.id, date: today });
+  assert.equal((await call(ADMIN, "POST", "/api/receipts/approve", { id: s.body.id, expenseId: 900 })).status, 200);
+  assert.equal((await call(ADMIN, "POST", "/api/receipts/approve", { id: s.body.id, expenseId: 901 })).status, 409);
+});
+
+test("la cola de la oficina trae TODOS los por revisar aunque haya cientos de recibos resueltos más nuevos", async () => {
+  db.bl_receipts.set(1000, { id: 1000, status: "pending", driverId: 4, fields: { amount: 1, date: today } });
+  for (let i = 1; i <= 320; i++) db.bl_receipts.set(1000 + i, { id: 1000 + i, status: "rejected", driverId: 4, fields: {} });
+  const a = await call(ADMIN, "GET", "/api/receipts");
+  assert.ok(a.body.receipts.some(r => r.id === 1000 && r.status === "pending"));
+  assert.ok(a.body.receipts.length <= 201);
+});
+
+test("la moneda del recibo se conserva (dólares / gourdes) y un cambio de moneda se marca", async () => {
+  ai.mode = "good";
+  const s = await scan();
+  const r = await call(DRIVER, "POST", "/api/receipts/submit", { id: s.body.id, fields: fieldsOk(s.body.read, { currency: "HTG" }) });
+  assert.equal(r.status, 200);
+  assert.equal(db.bl_receipts.get(s.body.id).fields.currency, "HTG");
+  assert.deepEqual(db.bl_receipts.get(s.body.id).changes, [{ field: "currency", read: "DOP", sent: "HTG" }]);
 });
 
 test("sin clave de IA: se guarda la foto sin lectura y el chofer escribe los datos (obligatorios igual)", async () => {
@@ -204,4 +240,12 @@ test("la oficina también puede subir una foto (queda como recibo de la oficina,
   assert.ok([...files.keys()][0].startsWith("u-admin/"));
   const r = await call(ADMIN, "POST", "/api/receipts/submit", { id: s.body.id, fields: fieldsOk(s.body.read) });
   assert.equal(r.status, 200); assert.equal(db.bl_receipts.get(s.body.id).driverId, null);
+});
+
+test("un recibo que el chofer borró no se puede aprobar ni rechazar después (salvo que ya tenga su gasto)", async () => {
+  const s = await scan();
+  await call(DRIVER, "POST", "/api/receipts/submit", { id: s.body.id, fields: fieldsOk(s.body.read) });
+  await call(DRIVER, "POST", "/api/receipts/delete", { id: s.body.id });
+  assert.equal((await call(ADMIN, "POST", "/api/receipts/approve", { id: s.body.id, expenseId: 1 })).status, 409);
+  assert.equal((await call(ADMIN, "POST", "/api/receipts/reject", { id: s.body.id, reason: "x" })).status, 409);
 });
