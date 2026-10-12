@@ -3,6 +3,7 @@ import { Plus, X, Pencil, Trash2, Landmark, ChevronDown, ChevronRight, Receipt, 
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, expenseTruckId, getSupplierDueDate, today } from "../utils/helpers.js";
 import { normalizePartner, expenseChargedToPartner, PARTNER_MODELS } from "../utils/partnerModels.js";
+import { fuelNeedsTruck } from "../utils/costPerKm.js";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td, Chk } from "../components/ui/index.jsx";
 
@@ -80,6 +81,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   const save = () => {
     if (!form.amount || !form.date) return;
     if (form.category === "adelanto_conductor" && !form.driverId) { alert("Selecciona el conductor para el adelanto."); return; }
+    if (fuelNeedsTruck(form)) { alert("Selecciona el camión (o el viaje) de este combustible. Sin camión no cuenta en el costo por km."); return; }
     const instant = INSTANT_METHODS.includes(form.paymentMethod);
     const status = form.category === "adelanto_conductor" || instant ? "paid" : form.status;
     const supplierId = form.supplierId ? Number(form.supplierId) : null;
@@ -169,7 +171,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
           })}
         </Sel>
         {TRUCK_CATEGORIES.includes(form.category) && (
-          <Sel label="Camión (opcional)" value={form.truckId || ""} onChange={e => setForm({ ...form, truckId: Number(e.target.value) || null })}>
+          <Sel label={form.category === "fuel" ? "Camión *" : "Camión (opcional)"} value={form.truckId || ""} onChange={e => setForm({ ...form, truckId: Number(e.target.value) || null })}>
             <option value="">— Sin camión —</option>
             {(trucks||[]).map(tk => <option key={tk.id} value={tk.id}>{tk.plate} ({tk.type})</option>)}
           </Sel>

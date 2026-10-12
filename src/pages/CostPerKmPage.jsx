@@ -114,7 +114,7 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
           <Td align="right">{fmtPerKm(x.revenuePerKm)}</Td><Td align="right">{fmtPerKm(x.costPerKm)}</Td><Td align="right" bold color={x.marginPerKm == null ? colors.textMuted : x.marginPerKm >= target ? colors.green : colors.red}>{fmtPerKm(x.marginPerKm)}</Td>
         </tr>)}</tbody>
       </table></div>
-      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>Costo directo = gastos ligados a los viajes de ese destino (combustible, chofer, ayudantes, peajes…). Un destino con margen/km bajo está mal tarifado o consume de más.</div>
+      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>Costo directo = gastos ligados a los viajes de ese destino (combustible, chofer, ayudantes, peajes…) más el combustible registrado solo al camión, repartido entre los viajes de ese camión en el período según sus km. Un destino con margen/km bajo está mal tarifado o consume de más.</div>
     </Card>}
 
     {tab === "drivers" && <Card>
@@ -125,7 +125,7 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
           <Td align="right" bold color={d.kmPerGallon == null ? colors.textMuted : colors.cyan}>{d.kmPerGallon ? d.kmPerGallon.toFixed(1) : "—"}</Td><Td align="right">{fmt(d.pay)}</Td><Td align="right">{fmtPerKm(d.costPerKm)}</Td>
         </tr>)}</tbody>
       </table></div>
-      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>Un km/gal muy por debajo del resto en la misma ruta y camión suele ser consumo anormal o combustible que no llegó al tanque.</div>
+      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>Incluye el combustible registrado solo al camión, repartido entre sus viajes del período según los km. Un km/gal muy por debajo del resto en la misma ruta y camión suele ser consumo anormal o combustible que no llegó al tanque.</div>
     </Card>}
 
     {tab === "distances" && <Card>
