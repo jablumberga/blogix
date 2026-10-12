@@ -344,5 +344,5 @@ export default async (request) => {
 };
 
 export const config = {
-  path: ["/api/auth/login", "/api/auth/logout"],
+  path: ["/api/auth/login", "/api/auth/logout", "/api/auth/password"],
 };
