@@ -79,6 +79,16 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "320px 1fr", gap: 14 }}>
       {/* ── Lista de choferes y socios ── */}
       <div>
+        {/* Atender a quien llega a entregar, aunque no tenga viajes en este período (trae facturas viejas) */}
+        <Card style={{ marginBottom: 14 }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><ClipboardCheck size={14} color={colors.accent} /> Recibir entrega de…</h3>
+          <select value={sel ? `${sel.kind}:${sel.id}` : ""} onChange={e => { const [kind, id] = e.target.value.split(":"); setSel(kind ? { kind, id: Number(id) } : null); }} data-pick-person
+            style={{ width: "100%", padding: "9px 10px", borderRadius: 8, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 14 }}>
+            <option value="">— Elegir chofer o socio —</option>
+            <optgroup label="Choferes">{drivers.filter(d => d.status !== "inactive").slice().sort((a, b) => a.name.localeCompare(b.name)).map(d => <option key={`d${d.id}`} value={`driver:${d.id}`}>{d.name}</option>)}</optgroup>
+            <optgroup label="Socios">{activePartners.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => <option key={`p${p.id}`} value={`partner:${p.id}`}>{p.name}</option>)}</optgroup>
+          </select>
+        </Card>
         <Card style={{ marginBottom: 14 }}>
           <h3 style={{ margin: "0 0 8px", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><Users size={14} color={colors.green} /> Choferes</h3>
           {payroll.drivers.length === 0 && <div style={{ fontSize: 12, color: colors.textMuted }}>Sin viajes en este período.</div>}

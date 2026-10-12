@@ -11,6 +11,7 @@ import { receiptToExpenseForm, receiptDuplicates } from "../utils/receipts.js";
 import { listReceipts, rejectReceipt, approveReceipt, notifyReceiptsChanged } from "../utils/receiptsApi.js";
 import ReceiptPhoto from "../components/ReceiptPhoto.jsx";
 import ReceiptCapture from "../components/ReceiptCapture.jsx";
+import WhatsAppButton from "../components/WhatsAppButton.jsx";
 
 const RC_CAT = { fuel: "Combustible", toll: "Peaje", tire: "Gomas", repair: "Reparación", maintenance: "Mantenimiento", other: "Otro" };
 const RC_FIELD = { category: "tipo", amount: "monto", date: "fecha", vendor: "negocio", gallons: "galones", ncf: "NCF" };
@@ -41,6 +42,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   const [rejecting, setRejecting] = useState(null); // { id, reason }
   const [photoId, setPhotoId] = useState(null);     // foto de un gasto aprobado
   const [showCapture, setShowCapture] = useState(false);
+  const [lastRejected, setLastRejected] = useState(null); // { r, reason } para avisarle al chofer
   const loadReceipts = useCallback(() => { listReceipts().then(r => { setReceipts(r.receipts || []); setRcError(""); }).catch(e => setRcError(e.message)); }, []);
   useEffect(() => { loadReceipts(); window.addEventListener("blogix:receipts-changed", loadReceipts); return () => window.removeEventListener("blogix:receipts-changed", loadReceipts); }, [loadReceipts]);
   const approvedReceiptIds = useMemo(() => new Set((expenses || []).filter(e => e.receiptId).map(e => Number(e.receiptId))), [expenses]);
@@ -54,7 +56,11 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   };
   const doReject = async () => {
     if (!rejecting?.reason?.trim()) { window.alert("Escribe el motivo para que el chofer sepa qué corregir."); return; }
-    try { await rejectReceipt(rejecting.id, rejecting.reason.trim()); setRejecting(null); notifyReceiptsChanged(); } catch (e) { window.alert(e.message); }
+    try {
+      await rejectReceipt(rejecting.id, rejecting.reason.trim());
+      setLastRejected({ r: receipts.find(x => x.id === rejecting.id), reason: rejecting.reason.trim() });
+      setRejecting(null); notifyReceiptsChanged();
+    } catch (e) { window.alert(e.message); }
   };
 
   const tripMap = useMemo(() => new Map((trips||[]).map(tr => [tr.id, tr])), [trips]);
@@ -165,6 +171,13 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
     {photoId && <div onClick={() => setPhotoId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}><div onClick={e => e.stopPropagation()}><ReceiptPhoto id={photoId} height={Math.min(600, Math.round(window.innerHeight * 0.8))} /></div></div>}
 
     {/* Recibos por foto por revisar */}
+    {lastRejected?.r && (() => { const r = lastRejected.r, f = r.fields || {}, drv = (drivers || []).find(d => d.id === r.driverId);
+      return <Card style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12 }}>Recibo de <b>{driverNameOf(r)}</b> rechazado: {lastRejected.reason}</span>
+        {drv && <WhatsAppButton phone={drv.phone} name={drv.name} template="recibo_rechazado" label={`Avisarle a ${drv.name}`} testId="reject"
+          data={{ name: drv.name, category: (RC_CAT[f.category] || "gasto").toLowerCase(), amount: f.amount, date: f.date, reason: lastRejected.reason }} />}
+        <button onClick={() => setLastRejected(null)} aria-label="Cerrar" style={{ background: "none", border: "none", color: colors.textMuted, cursor: "pointer", marginLeft: "auto" }}><X size={14} /></button>
+      </Card>; })()}
     {(pendingReceipts.length > 0 || rcError) && <Card style={{ marginBottom: 16, border: `1px solid ${colors.orange}55` }}>
       <h3 style={{ margin: "0 0 10px", fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}><Camera size={15} color={colors.orange} /> Recibos por revisar <span style={{ fontSize: 11, color: colors.textMuted, fontWeight: 400 }}>({pendingReceipts.length}) · al aprobar se crea el gasto con su foto</span></h3>
       {rcError && <div style={{ fontSize: 12, color: colors.red, marginBottom: 6 }}>No se pudieron cargar los recibos: {rcError}</div>}

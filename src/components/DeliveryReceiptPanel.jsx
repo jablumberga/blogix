@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { ClipboardCheck, Printer, MessageCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { ClipboardCheck, Printer, ChevronLeft, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { today } from "../utils/helpers.js";
 import { deliveryReceipt, deliveryReceiptText, quincenaOf, fmtTime, personTrips } from "../utils/deliveryReceipt.js";
 import { docsComplete } from "../utils/payroll.js";
 import { deliveryReceiptHTML, openPrintWindow } from "../utils/printReport.js";
-import { openWhatsApp, waPhone } from "../utils/whatsapp.js";
+import WhatsAppButton from "./WhatsAppButton.jsx";
 import { COMPANY } from "../constants/company.js";
 import { Btn, Badge } from "./ui/index.jsx";
 
@@ -37,10 +37,9 @@ export default function DeliveryReceiptPanel({ kind, person, trips, trucks, clie
   const todayVisit = isCurrent && last && last.date === today() ? last : null;
 
   const print = () => openPrintWindow(`Constancia ${person.name} ${r.period.label} entrega ${r.visit.no}`, deliveryReceiptHTML({ r, kind, person, generatedBy: user?.name, fmtTime }));
-  const sendWa = () => {
-    const ok = openWhatsApp(person.phone, deliveryReceiptText(r, { name: person.name, company: COMPANY.brand || "B-Logix" }));
-    if (!ok) window.alert(`${person.name} no tiene un teléfono válido registrado: WhatsApp te pedirá elegir el contacto.`);
-  };
+  const company = COMPANY.brand || "B-Logix";
+  const waConstancia = r.visit ? { name: person.name, company, newCount: r.newCount, visitNo: r.visit.no, period: r.period.label, totalCount: r.totalCount, pendingCount: r.pending.length, fullText: deliveryReceiptText(r, { name: person.name, company }) } : null;
+  const dmyFull = (x) => { const [y, m, d] = String(x || "").split("-"); return y ? `${d}/${m}/${y}` : ""; };
 
   return <div data-delivery-panel style={{ marginBottom: 12, padding: 10, borderRadius: 8, border: `1px solid ${colors.accent}40`, background: colors.accent + "0a" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -67,13 +66,17 @@ export default function DeliveryReceiptPanel({ kind, person, trips, trucks, clie
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
           <Btn variant="ghost" onClick={print} style={{ fontSize: 11 }} data-delivery-print><Printer size={12} /> Constancia (PDF)</Btn>
-          <Btn variant="success" onClick={sendWa} style={{ fontSize: 11 }} data-delivery-wa><MessageCircle size={12} /> Enviar por WhatsApp{waPhone(person.phone) ? "" : " (sin teléfono)"}</Btn>
+          <WhatsAppButton phone={person.phone} name={person.name} template="constancia_entrega" data={waConstancia} label="Enviar por WhatsApp" testId="delivery" />
         </div>
       </>}
     {onMark && pendingNow.length > 0 && <div style={{ marginTop: 10, borderTop: `1px solid ${colors.border}55`, paddingTop: 8 }}>
       <button onClick={() => setShowPend(v => !v)} data-delivery-pending-toggle style={{ background: "none", border: "none", color: colors.orange, cursor: "pointer", fontSize: 12, padding: 0, fontWeight: 600 }}>
         {showPend ? "▾" : "▸"} Le faltan por entregar {pendingNow.length} (de cualquier quincena) — marca aquí lo que trae
       </button>
+      <WhatsAppButton phone={person.phone} name={person.name} template="documentos_pendientes" compact label="Recordarle por WhatsApp" style={{ marginLeft: 10 }} testId="pending"
+        data={{ name: person.name, company, count: pendingNow.length,
+          list: pendingNow.slice(0, 8).map(({ trip, client }) => `${dmyFull(trip.date)} ${client?.companyName || ""}${trip.invoiceRef ? ` ref ${trip.invoiceRef}` : ""}`).join("; ") + (pendingNow.length > 8 ? ` y ${pendingNow.length - 8} más` : ""),
+          lines: pendingNow.slice(0, 20).map(({ trip, client }) => `• ${dmyFull(trip.date)} · ${client?.companyName || "—"}${trip.invoiceRef ? ` · Ref ${trip.invoiceRef}` : ""} · ${trip.municipality || ""}`).concat(pendingNow.length > 20 ? [`… y ${pendingNow.length - 20} más`] : []) }} />
       {showPend && <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6, maxHeight: 260, overflowY: "auto" }} data-delivery-pending>
         {pendingNow.map(({ trip, client, truck }) => <label key={trip.id} data-pending-trip={trip.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "6px 8px", borderRadius: 6, background: colors.inputBg, cursor: "pointer", minHeight: 36 }}>
           <input type="checkbox" checked={false} onChange={() => mark(trip.id)} style={{ width: 16, height: 16 }} />

@@ -1,5 +1,8 @@
 import { useState, useMemo, Fragment } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, Clock, Users, FileText, Pencil, X, Check, Printer, FileSpreadsheet, PiggyBank, AlertTriangle, HardHat } from "lucide-react";
+import WhatsAppButton from "../components/WhatsAppButton.jsx";
+import { helperWaData } from "../utils/whatsappData.js";
+import { COMPANY } from "../constants/company.js";
 import { colors } from "../constants/theme.js";
 import { fmt, genPeriods, today, nxId } from "../utils/helpers.js";
 import { buildPayroll, payrollPayment, payrollKey, buildHelperPayroll, helperPayrollPayment } from "../utils/payroll.js";
@@ -46,6 +49,8 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <button onClick={onPrint} style={smallBtn(colors.green + "14", colors.green, `1px solid ${colors.green}40`)}><FileText size={12} /> Relación</button>
+        <WhatsAppButton phone={d.phone} name={d.name} template="pago_quincena" compact label="WhatsApp" testId={`pay-${d.id}`}
+          data={{ name: d.name, period: period?.label || "", company: COMPANY.brand || "B-Logix", trips: row.tripCount, advances: row.advances, net: pay.net, paid: pay.paid }} />
         <button onClick={() => setOpen(o => !o)} style={smallBtn("transparent", colors.accent)}>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{open ? "Ocultar" : "Detalle"}</button>
         <div style={{ textAlign: "right", minWidth: 120 }}>
           {pay.override && <div style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(pay.driverTotal)}</div>}
@@ -117,7 +122,7 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
   </Card>;
 }
 
-function HelperCard({ row, pay, onMarkPaid, onMarkUnpaid, onPrint }) {
+function HelperCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onPrint }) {
   const [open, setOpen] = useState(false);
   const a = row.ayudante;
   return <Card style={{ marginBottom: 10, borderLeft: `4px solid ${pay.paid ? colors.green : pay.partial ? colors.orange : colors.border}` }}>
@@ -134,6 +139,7 @@ function HelperCard({ row, pay, onMarkPaid, onMarkUnpaid, onPrint }) {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <button onClick={onPrint} style={smallBtn(colors.green + "14", colors.green, `1px solid ${colors.green}40`)}><FileText size={12} /> Su relación</button>
+        <WhatsAppButton phone={a.phone} name={a.name} template="pago_ayudante" compact label="WhatsApp" testId={`helper-${a.id}`} data={helperWaData(row, pay, period)} />
         <button onClick={() => setOpen(o => !o)} style={smallBtn("transparent", colors.accent)}>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{open ? "Ocultar" : "Detalle"}</button>
         <div style={{ textAlign: "right", minWidth: 120 }}>
           {row.advances > 0 && <div style={{ fontSize: 10, color: colors.textMuted }}>Bruto {fmt(row.gross)} · adelantos −{fmt(row.advances)}</div>}
@@ -338,7 +344,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
       onPrint={() => printDriver(row)} />)}
     {helperRows.length > 0 && <>
       <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "18px 0 8px" }}><HardHat size={15} color={colors.orange} /><b style={{ fontSize: 14 }}>Ayudantes (pago directo)</b><span style={{ fontSize: 11, color: colors.textMuted }}>· se les paga a ellos, no al chofer · misma regla: viaje con documentos recibidos en el corte</span></div>
-      {helperRows.map(({ row, pay }) => <HelperCard key={row.ayudante.id} row={row} pay={pay}
+      {helperRows.map(({ row, pay }) => <HelperCard key={row.ayudante.id} row={row} pay={pay} period={period}
         onMarkPaid={() => markHelperPaid({ row })} onMarkUnpaid={() => markHelperUnpaid({ pay })} onPrint={() => printHelper(row)} />)}
     </>}
   </div>;

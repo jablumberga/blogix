@@ -192,6 +192,7 @@ const FUNCTIONS = [
   ["push-token.mjs", ["/api/push/token"]],
   ["send-push.mjs",  ["/api/push/send"]],
   ["gps.mjs",        ["/api/gps/sync"]],
+  ["whatsapp.mjs",   ["/api/whatsapp/status", "/api/whatsapp/send"]],
   ["receipts.mjs",   ["/api/receipts", "/api/receipts/scan", "/api/receipts/submit", "/api/receipts/photo", "/api/receipts/reject", "/api/receipts/approve", "/api/receipts/delete"]],
 ];
 const routes = new Map();
