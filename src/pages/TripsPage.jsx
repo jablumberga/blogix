@@ -17,7 +17,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({});
   const [expModal, setExpModal] = useState(null);
-  const [expForm, setExpForm] = useState({ date: today(), category: "fuel", amount: "", paymentMethod: "cash", description: "" });
+  const [expForm, setExpForm] = useState({ date: today(), category: "fuel", amount: "", gallons: "", paymentMethod: "cash", description: "" });
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterExtra, setFilterExtra] = useState("all");   // all | nodocs | uninvoiced
@@ -284,8 +284,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const addExpense = () => {
     if (!expForm.amount || !expModal) return;
     const instant = ["cash", "credit_card"].includes(expForm.paymentMethod);
-    setExpenses(prev => [...prev, { id: nxId(prev), tripId: expModal, date: expForm.date, category: expForm.category, amount: Number(expForm.amount), paymentMethod: expForm.paymentMethod, description: expForm.description, supplierId: null, status: instant ? "paid" : "pending", ...(instant ? { paidDate: expForm.date } : {}) }]);
-    setExpForm({ date: today(), category: "fuel", amount: "", paymentMethod: "cash", description: "" });
+    setExpenses(prev => [...prev, { id: nxId(prev), tripId: expModal, date: expForm.date, category: expForm.category, amount: Number(expForm.amount), gallons: expForm.category === "fuel" ? (Number(expForm.gallons) || null) : null, paymentMethod: expForm.paymentMethod, description: expForm.description, supplierId: null, status: instant ? "paid" : "pending", ...(instant ? { paidDate: expForm.date } : {}) }]);
+    setExpForm({ date: today(), category: "fuel", amount: "", gallons: "", paymentMethod: "cash", description: "" });
   };
 
   const addDiscountRow = () => setForm({ ...form, discounts: [...(form.discounts || []), { desc: "", amount: 0 }] });
@@ -549,6 +549,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 10 }}>
           <Inp label={t.expenseAmount} type="number" value={expForm.amount} onChange={e => setExpForm({ ...expForm, amount: e.target.value })} />
+          {expForm.category === "fuel" && <Inp label="Galones (para km/gal)" type="number" value={expForm.gallons ?? ""} onChange={e => setExpForm({ ...expForm, gallons: e.target.value })} />}
           <Sel label={t.paymentMethod} value={expForm.paymentMethod} onChange={e => setExpForm({ ...expForm, paymentMethod: e.target.value })}>
             {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t[m] || m}</option>)}
           </Sel>

@@ -18,6 +18,14 @@ import { tripNetRevenue } from "./partnerModels.js";
 
 export const KM_SOURCE_LABEL = { gps: "GPS", odometer: "Odómetro", estimated: "Estimado", none: "Sin km" };
 
+/**
+ * Un gasto de combustible tiene que decir de qué camión es (directo o a través del viaje);
+ * si no, no entra en el costo por km. Lo usa el formulario de Gastos para no dejarlo guardar así.
+ */
+export function fuelNeedsTruck(e) {
+  return !!e && e.category === "fuel" && !e.truckId && !e.tripId;
+}
+
 /** Km de referencia (ida y vuelta) para un destino. */
 export function referenceKm(distances = [], province, municipality) {
   const d = (distances || []).find(x => x.province === province && x.municipality === municipality);
@@ -65,6 +73,7 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
   const perTruck = new Map(); // truckId → acumuladores
   const acc = (id) => { if (!perTruck.has(id)) perTruck.set(id, { truckId: id, km: 0, trips: 0, revenue: 0, companyRevenue: 0, fuel: 0, gallons: 0, driver: 0, helpers: 0, maintenance: 0, other: 0, fixed: 0, partnerRecovered: 0, kmBySource: { gps: 0, odometer: 0, estimated: 0, none: 0 } }); return perTruck.get(id); };
   const byRoute = new Map(), byDriver = new Map();
+  const fuelPool = new Map(); // truckId → combustible del período sin viaje { amt, company, gallons }
 
   for (const tr of pTrips) {
     const a = acc(tr.truckId);
@@ -98,7 +107,27 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
       const r = byRoute.get(`${linkedTrip.province}|${linkedTrip.municipality}`); if (r) r.cost += company;
       const d = byDriver.get(linkedTrip.driverId);
       if (d) { if (e.category === "fuel") { d.fuel += amt; d.gallons += Number(e.gallons) || 0; } if (e.category === "driverPay" || e.category === "helper") d.pay += amt; }
+    } else if (e.category === "fuel") {
+      // Combustible cargado solo al camión (sin viaje): se reparte más abajo entre sus viajes del período
+      if (!fuelPool.has(truckId)) fuelPool.set(truckId, { amt: 0, company: 0, gallons: 0 });
+      const p = fuelPool.get(truckId); p.amt += amt; p.company += company; p.gallons += Number(e.gallons) || 0;
     }
+  }
+
+  // Combustible del camión sin viaje → a destinos y choferes, según los km de cada viaje del camión en el período
+  // (sin km, en partes iguales). Solo afecta «Por destino» y «Por chofer»: el total por camión ya lo incluye.
+  let fuelAllocated = 0, fuelUnallocated = 0;
+  for (const [truckId, pool] of fuelPool) {
+    const tTrips = pTrips.filter(t => t.truckId === truckId);
+    if (tTrips.length === 0) { fuelUnallocated += pool.company; continue; }
+    const kms = tTrips.map(t => tripKm(t, distances).km);
+    const totalKm = kms.reduce((s, k) => s + k, 0);
+    tTrips.forEach((tr, i) => {
+      const w = totalKm > 0 ? kms[i] / totalKm : 1 / tTrips.length;
+      const r = byRoute.get(`${tr.province}|${tr.municipality}`); if (r) r.cost += pool.company * w;
+      const d = byDriver.get(tr.driverId); if (d) { d.fuel += pool.amt * w; d.gallons += pool.gallons * w; }
+    });
+    fuelAllocated += pool.company;
   }
 
   // Fijos por camión (plantillas mensuales prorrateadas por días)
@@ -135,6 +164,8 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
   totals.revenuePerKm = totals.km > 0 ? totals.revenue / totals.km : null;
   totals.marginPerKm = totals.km > 0 ? (totals.revenue - totals.cost) / totals.km : null;
   const quality = pTrips.reduce((q, tr) => { q[tripKm(tr, distances).source]++; return q; }, { gps: 0, odometer: 0, estimated: 0, none: 0 });
+  quality.fuelAllocated = fuelAllocated;     // combustible sin viaje repartido entre viajes del camión
+  quality.fuelUnallocated = fuelUnallocated; // combustible sin viaje de camiones sin viajes en el período (solo en «Por camión»)
   quality.fuelWithoutGallons = expenses.filter(e => e.category === "fuel" && !(Number(e.gallons) > 0) && ((e.tripId && pTripIds.has(e.tripId)) || (!e.tripId && inRange(e.date, dateFrom, dateTo)))).length;
   return { byTruck, byRoute: routes, byDriver: driversOut, totals, quality, days };
 }
