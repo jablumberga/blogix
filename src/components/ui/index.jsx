@@ -298,8 +298,12 @@ export function DateFilter({ t, onFilter }) {
 }
 
 // ─── DestinationSelect ────────────────────────────────────────────────────────
-export function DestinationSelect({ t, province, municipality, onProvinceChange, onMunicipalityChange }) {
+export function DestinationSelect({ t, province, municipality, onProvinceChange, onMunicipalityChange, extra = [] }) {
   const prov = DR_PROVINCES.find(p => p.province === province);
+  // Destinos libres (del tarifario del cliente) que no están en la lista oficial de municipios
+  const extras = [...new Set((extra || []).filter(x => x && x.province === province && x.municipality && !(prov?.municipalities || []).includes(x.municipality)).map(x => x.municipality))].sort();
+  const municipalities = [...(prov?.municipalities || []), ...extras];
+  if (municipality && province && !municipalities.includes(municipality)) municipalities.push(municipality); // valor histórico
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
       <Sel label={t.province} value={province} onChange={e => onProvinceChange(e.target.value)}>
@@ -308,7 +312,7 @@ export function DestinationSelect({ t, province, municipality, onProvinceChange,
       </Sel>
       <Sel label={t.municipality} value={municipality} onChange={e => onMunicipalityChange(e.target.value)}>
         <option value="">--</option>
-        {prov && prov.municipalities.map(m => <option key={m} value={m}>{m}</option>)}
+        {prov && municipalities.map(m => <option key={m} value={m}>{m}{extras.includes(m) ? " ·" : ""}</option>)}
       </Sel>
     </div>
   );

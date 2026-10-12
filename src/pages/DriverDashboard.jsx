@@ -203,7 +203,7 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
             {clients.filter(c => c.status === "active").map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
           </Sel>
         </div>
-        <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} />
+        <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} extra={(form.clientId ? clients.filter(c => c.id === Number(form.clientId)) : clients).flatMap(c => c.rates || [])} />
         <div style={{ marginTop: 10 }}>
           <Sel label={t.truck} value={form.truckId} onChange={e => setForm({ ...form, truckId: e.target.value })}>
             {trucks.length === 0 && <option value="">— Sin camión asignado (contacta al admin) —</option>}

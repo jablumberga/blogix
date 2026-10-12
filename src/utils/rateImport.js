@@ -36,6 +36,27 @@ const MUNICIPALITY_ALIASES = {
   "azua": "Azua de Compostela",
   "hato mayor": "Hato Mayor del Rey",
   "higuey": "Higüey",
+  "distrito nacional": "Santo Domingo de Guzmán",
+  "dn": "Santo Domingo de Guzmán",
+  "elias pina": "Comendador",
+  "montecristi": "Monte Cristi",
+  "san fernando de monte cristi": "Monte Cristi",
+  "ocoa": "San José de Ocoa",
+  "santiago rodriguez": "San Ignacio de Sabaneta",
+  "haina": "Bajos de Haina",
+  "san felipe de puerto plata": "Puerto Plata",
+  "sfpp": "Puerto Plata",
+  "la romana": "La Romana",
+  "bani": "Baní",
+  "cotui": "Cotuí",
+  "jimani": "Jimaní",
+  "dajabon": "Dajabón",
+  "mao": "Mao",
+  "bonao": "Bonao",
+  "nagua": "Nagua",
+  "la vega": "La Vega",
+  "constanza": "Constanza",
+  "jarabacoa": "Jarabacoa",
 };
 
 const provinceIndex = new Map();
@@ -132,9 +153,12 @@ export function parseRateRows(rows, kind = "client") {
 
     let municipality;
     let prov = province;
+    let custom = false;
     if (prov) {
       municipality = resolveMunicipality(rawMuni, prov);
-      if (!municipality) { errors.push({ row: rowNum, msg: `Municipio «${rawMuni}» no existe en ${prov}` }); return; }
+      // Destino libre: el cliente nombra el lugar a su manera (sector, paraje, localidad). Se acepta tal cual
+      // dentro de la provincia y queda disponible en el formulario de viajes de ese cliente.
+      if (!municipality) { const name = String(rawMuni ?? "").trim(); if (!name) { errors.push({ row: rowNum, msg: `Municipio vacío (${prov})` }); return; } municipality = name; custom = true; }
     } else {
       const hit = resolveMunicipality(rawMuni, null);
       if (!hit) { errors.push({ row: rowNum, msg: `Municipio «${rawMuni}» no reconocido o ambiguo; agrega la provincia` }); return; }
@@ -150,7 +174,7 @@ export function parseRateRows(rows, kind = "client") {
     const key = `${prov}|${municipality}`;
     if (seen.has(key)) { errors.push({ row: rowNum, msg: `${municipality} aparece dos veces; se usa la primera` }); return; }
     seen.add(key);
-    const rate = { province: prov, municipality, priceT1, priceT2 };
+    const rate = { province: prov, municipality, priceT1, priceT2, ...(custom ? { custom: true } : {}) };
     for (const k of extraKeys) {
       const v = col[k] >= 0 ? parseMoney(r[col[k]]) : 0;
       if (Number.isNaN(v) || v < 0) { errors.push({ row: rowNum, msg: `${municipality}: valor inválido en ${k}` }); return; }
