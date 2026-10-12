@@ -1,0 +1,7345 @@
+{
+ "bl_trips": [
+  {
+   "id": 12,
+   "rec": {
+    "id": 12,
+    "date": "2026-04-06",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 13400,
+    "truckId": 4,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 3,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1690100",
+    "numHelpers": 0,
+    "municipality": "Restauración",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 15,
+   "rec": {
+    "id": 15,
+    "date": "2026-04-01",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 5500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1679920",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 17,
+   "rec": {
+    "id": 17,
+    "date": "2026-04-13",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 8000,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 2,
+    "driverId": 2,
+    "province": "Valverde",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "",
+    "numHelpers": 0,
+    "municipality": "Mao",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": "custom"
+   }
+  },
+  {
+   "id": 18,
+   "rec": {
+    "id": 18,
+    "date": "2026-04-06",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 6500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "Espaillat",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1690757",
+    "numHelpers": 0,
+    "municipality": "Moca",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 19,
+   "rec": {
+    "id": 19,
+    "date": "2026-04-07",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 5500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1696473",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 20,
+   "rec": {
+    "id": 20,
+    "date": "2026-04-08",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9240,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "Valverde",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1699284",
+    "numHelpers": 0,
+    "municipality": "Mao",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 21,
+   "rec": {
+    "id": 21,
+    "date": "2026-04-11",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9000,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "La Vega",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1710253",
+    "numHelpers": 0,
+    "municipality": "Jarabacoa",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 22,
+   "rec": {
+    "id": 22,
+    "date": "2026-04-01",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 6500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Espaillat",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1679367",
+    "numHelpers": 0,
+    "municipality": "Moca",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 23,
+   "rec": {
+    "id": 23,
+    "date": "2026-04-11",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 6500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Espaillat",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1709909",
+    "numHelpers": 0,
+    "municipality": "Moca",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 25,
+   "rec": {
+    "id": 25,
+    "date": "2026-04-01",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Duarte",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1683775",
+    "numHelpers": 0,
+    "municipality": "San Francisco de Macorís",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 26,
+   "rec": {
+    "id": 26,
+    "date": "2026-04-11",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 5500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1722300",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 28,
+   "rec": {
+    "id": 28,
+    "date": "2026-04-11",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 13000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Valverde",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1711692",
+    "numHelpers": 0,
+    "municipality": "Mao",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 29,
+   "rec": {
+    "id": 29,
+    "date": "2026-04-01",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1579812",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 30,
+   "rec": {
+    "id": 30,
+    "date": "2026-04-17",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9500,
+    "truckId": 4,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 3,
+    "province": "Duarte",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1734630",
+    "numHelpers": 0,
+    "municipality": "Pimentel",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 31,
+   "rec": {
+    "id": 31,
+    "date": "2026-04-15",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9000,
+    "truckId": 4,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 3,
+    "province": "Monseñor Nouel",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1724245",
+    "numHelpers": 0,
+    "municipality": "Bonao",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 32,
+   "rec": {
+    "id": 32,
+    "date": "2026-04-15",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 20000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1725880",
+    "numHelpers": 0,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 33,
+   "rec": {
+    "id": 33,
+    "date": "2026-04-23",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 8500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "La Vega",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1755862",
+    "numHelpers": 0,
+    "municipality": "La Vega",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 34,
+   "rec": {
+    "id": 34,
+    "date": "2026-04-23",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 11000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "La Vega",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1755862",
+    "numHelpers": 0,
+    "municipality": "La Vega",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 35,
+   "rec": {
+    "id": 35,
+    "date": "2026-04-17",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 20000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1733483",
+    "numHelpers": 0,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 36,
+   "rec": {
+    "id": 36,
+    "date": "2026-04-21",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 20000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1744611",
+    "numHelpers": 0,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 37,
+   "rec": {
+    "id": 37,
+    "date": "2026-04-18",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1737371",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 38,
+   "rec": {
+    "id": 38,
+    "date": "2026-04-16",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 20000,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1729011",
+    "numHelpers": 0,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": "T2"
+   }
+  },
+  {
+   "id": 39,
+   "rec": {
+    "id": 39,
+    "date": "2026-04-15",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 12000,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "La Vega",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1725687",
+    "numHelpers": 0,
+    "municipality": "Constanza",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 40,
+   "rec": {
+    "id": 40,
+    "date": "2026-04-17",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 10000,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "María Trinidad Sánchez",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1734645",
+    "numHelpers": 0,
+    "municipality": "Nagua",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 41,
+   "rec": {
+    "id": 41,
+    "date": "2026-04-20",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 5500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1740951",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 42,
+   "rec": {
+    "id": 42,
+    "date": "2026-04-17",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 5500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1730104",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 43,
+   "rec": {
+    "id": 43,
+    "date": "2026-04-15",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 6500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "Espaillat",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1725900",
+    "numHelpers": 0,
+    "municipality": "Moca",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 44,
+   "rec": {
+    "id": 44,
+    "date": "2026-04-18",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 8500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "La Vega",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1736125",
+    "numHelpers": 0,
+    "municipality": "La Vega",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 45,
+   "rec": {
+    "id": 45,
+    "date": "2026-04-22",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 6500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "Espaillat",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1745325",
+    "numHelpers": 0,
+    "municipality": "Moca",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 47,
+   "rec": {
+    "id": 47,
+    "date": "2026-04-21",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 8500,
+    "truckId": 4,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 3,
+    "province": "La Vega",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1745421",
+    "numHelpers": 0,
+    "municipality": "La Vega",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 48,
+   "rec": {
+    "id": 48,
+    "date": "2026-04-01",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 5500,
+    "truckId": 4,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 3,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1680064",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 49,
+   "rec": {
+    "id": 49,
+    "date": "2026-04-11",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9500,
+    "truckId": 4,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 3,
+    "province": "Duarte",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1709336",
+    "numHelpers": 0,
+    "municipality": "San Francisco de Macorís",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 50,
+   "rec": {
+    "id": 50,
+    "date": "2026-04-16",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 6500,
+    "truckId": 4,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 3,
+    "province": "Espaillat",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1729911",
+    "numHelpers": 0,
+    "municipality": "Moca",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 51,
+   "rec": {
+    "id": 51,
+    "date": "2026-04-21",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 8500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "La Vega",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1745779",
+    "numHelpers": 0,
+    "municipality": "La Vega",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 52,
+   "rec": {
+    "id": 52,
+    "date": "2026-04-24",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 13400,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Dajabón",
+    "createdBy": "Fernando Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1758061",
+    "numHelpers": 1,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 53,
+   "rec": {
+    "id": 53,
+    "date": "2026-04-24",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 10000,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "María Trinidad Sánchez",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1757380",
+    "numHelpers": 0,
+    "municipality": "Nagua",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 54,
+   "rec": {
+    "id": 54,
+    "date": "2026-04-24",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 20000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1758075",
+    "numHelpers": 0,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 55,
+   "rec": {
+    "id": 55,
+    "date": "2026-04-27",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1764845",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 56,
+   "rec": {
+    "id": 56,
+    "date": "2026-04-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 40000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Independencia",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1772944",
+    "numHelpers": 0,
+    "municipality": "Jimaní",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 57,
+   "rec": {
+    "id": 57,
+    "date": "2026-04-24",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9500,
+    "truckId": 4,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 3,
+    "province": "Duarte",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1758847",
+    "numHelpers": 0,
+    "municipality": "San Francisco de Macorís",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 58,
+   "rec": {
+    "id": 58,
+    "date": "2026-04-29",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 4,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 3,
+    "province": "Santiago",
+    "createdBy": "Emil",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1772235",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 59,
+   "rec": {
+    "id": 59,
+    "date": "2026-04-30",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 4,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 3,
+    "province": "Santiago",
+    "createdBy": "Emil",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1777921",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 60,
+   "rec": {
+    "id": 60,
+    "date": "2026-04-29",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 5500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1776941",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 61,
+   "rec": {
+    "id": 61,
+    "date": "2026-04-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 6500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "Espaillat",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1772033",
+    "numHelpers": 0,
+    "municipality": "Moca",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 62,
+   "rec": {
+    "id": 62,
+    "date": "2026-04-25",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 5500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 2,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1760471",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 63,
+   "rec": {
+    "id": 63,
+    "date": "2026-04-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 20000,
+    "truckId": 5,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1772961",
+    "numHelpers": 0,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 64,
+   "rec": {
+    "id": 64,
+    "date": "2026-04-30",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 10000,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "María Trinidad Sánchez",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": " 1783709",
+    "numHelpers": 0,
+    "municipality": "Nagua",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 65,
+   "rec": {
+    "id": 65,
+    "date": "2026-05-05",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 8000,
+    "truckId": 1,
+    "brokerId": null,
+    "clientId": 2,
+    "driverId": 1,
+    "province": "Valverde",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "",
+    "numHelpers": 1,
+    "municipality": "Mao",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 66,
+   "rec": {
+    "id": 66,
+    "date": "2026-05-06",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 8500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "La Vega",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1797786",
+    "numHelpers": 1,
+    "municipality": "La Vega",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 67,
+   "rec": {
+    "id": 67,
+    "date": "2026-05-08",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 14210,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Samaná",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1797676",
+    "numHelpers": 1,
+    "municipality": "Santa Bárbara de Samaná",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 68,
+   "rec": {
+    "id": 68,
+    "date": "2026-05-10",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Santiago",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1815476",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 69,
+   "rec": {
+    "id": 69,
+    "date": "2026-05-13",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 13400,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Dajabón",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1823033",
+    "numHelpers": 1,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 70,
+   "rec": {
+    "id": 70,
+    "date": "2026-05-15",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Santiago",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1832945",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 71,
+   "rec": {
+    "id": 71,
+    "date": "2026-05-26",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 10360,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Puerto Plata",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1841543",
+    "numHelpers": 1,
+    "municipality": "Puerto Plata",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 72,
+   "rec": {
+    "id": 72,
+    "date": "2026-05-26",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 0,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Dajabón",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1846633",
+    "numHelpers": 1,
+    "municipality": "Restauración",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 73,
+   "rec": {
+    "id": 73,
+    "date": "2026-05-26",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 7500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Hermanas Mirabal",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1850263",
+    "numHelpers": 1,
+    "municipality": "Villa Tapia",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 74,
+   "rec": {
+    "id": 74,
+    "date": "2026-05-26",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Santiago",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1856140",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 75,
+   "rec": {
+    "id": 75,
+    "date": "2026-05-26",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Santiago",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1865670",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 76,
+   "rec": {
+    "id": 76,
+    "date": "2026-05-26",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9450,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Sánchez Ramírez",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1869358",
+    "numHelpers": 1,
+    "municipality": "Cotuí",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 77,
+   "rec": {
+    "id": 77,
+    "date": "2026-05-26",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     },
+     {
+      "pay": 0,
+      "name": "Ayudante 2"
+     }
+    ],
+    "revenue": 6500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Espaillat",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1880366",
+    "numHelpers": 2,
+    "municipality": "Moca",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 78,
+   "rec": {
+    "id": 78,
+    "date": "2026-05-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     },
+     {
+      "pay": 0,
+      "name": "Ayudante 2"
+     }
+    ],
+    "revenue": 6500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Espaillat",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1880366-2",
+    "numHelpers": 2,
+    "municipality": "Moca",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 79,
+   "rec": {
+    "id": 79,
+    "date": "2026-05-29",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Santiago",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1889129",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 80,
+   "rec": {
+    "id": 80,
+    "date": "2026-04-29",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 5500,
+    "truckId": 6,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 6,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1778138",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 81,
+   "rec": {
+    "id": 81,
+    "date": "2026-04-30",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9500,
+    "truckId": 6,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 6,
+    "province": "Duarte",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1783724",
+    "numHelpers": 0,
+    "municipality": "San Francisco de Macorís",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 83,
+   "rec": {
+    "id": 83,
+    "date": "2026-04-29",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1776986",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 84,
+   "rec": {
+    "id": 84,
+    "date": "2026-05-07",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 7210,
+    "truckId": 6,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 6,
+    "province": "Valverde",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1807057",
+    "numHelpers": 0,
+    "municipality": "Esperanza",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 85,
+   "rec": {
+    "id": 85,
+    "date": "2026-05-05",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 20000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1796555",
+    "numHelpers": 0,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 86,
+   "rec": {
+    "id": 86,
+    "date": "2026-05-08",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 20000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1811739",
+    "numHelpers": 0,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 87,
+   "rec": {
+    "id": 87,
+    "date": "2026-05-10",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 10300,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Valverde",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1815004",
+    "numHelpers": 0,
+    "municipality": "Esperanza",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 88,
+   "rec": {
+    "id": 88,
+    "date": "2026-05-12",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 20000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1823566",
+    "numHelpers": 0,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 90,
+   "rec": {
+    "id": 90,
+    "date": "2026-05-15",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 20000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1838428",
+    "numHelpers": 0,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 91,
+   "rec": {
+    "id": 91,
+    "date": "2026-05-14",
+    "cargo": "Restauracion",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 25000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Dajabón",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1833621",
+    "numHelpers": 0,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 93,
+   "rec": {
+    "id": 93,
+    "date": "2026-05-14",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 5500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 7,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1832950",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 94,
+   "rec": {
+    "id": 94,
+    "date": "2026-05-18",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9450,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 7,
+    "province": "Sánchez Ramírez",
+    "createdBy": "Quelbin",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1846650",
+    "numHelpers": 1,
+    "municipality": "Cotuí",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 95,
+   "rec": {
+    "id": 95,
+    "date": "2026-05-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9000,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 7,
+    "province": "Monseñor Nouel",
+    "createdBy": "Quelbin",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1856555",
+    "numHelpers": 1,
+    "municipality": "Bonao",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 96,
+   "rec": {
+    "id": 96,
+    "date": "2026-05-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 13400,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 7,
+    "province": "Dajabón",
+    "createdBy": "Quelbin",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1880655",
+    "numHelpers": 1,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 97,
+   "rec": {
+    "id": 97,
+    "date": "2026-05-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 7,
+    "province": "Santiago",
+    "createdBy": "Quelbin",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1841854",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 98,
+   "rec": {
+    "id": 98,
+    "date": "2026-05-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9450,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 7,
+    "province": "Sánchez Ramírez",
+    "createdBy": "Quelbin",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1885576",
+    "numHelpers": 1,
+    "municipality": "Cotuí",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 99,
+   "rec": {
+    "id": 99,
+    "date": "2026-05-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 7,
+    "province": "Santiago",
+    "createdBy": "Quelbin",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1851368",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 100,
+   "rec": {
+    "id": 100,
+    "date": "2026-05-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 13400,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 7,
+    "province": "Dajabón",
+    "createdBy": "Quelbin",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1861420",
+    "numHelpers": 1,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 101,
+   "rec": {
+    "id": 101,
+    "date": "2026-06-01",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 10360,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 7,
+    "province": "Puerto Plata",
+    "createdBy": "Quelbin",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1898567",
+    "numHelpers": 1,
+    "municipality": "Puerto Plata",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 102,
+   "rec": {
+    "id": 102,
+    "date": "2026-06-02",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 13400,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 7,
+    "province": "Dajabón",
+    "createdBy": "Quelbin",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1902739",
+    "numHelpers": 1,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 103,
+   "rec": {
+    "id": 103,
+    "date": "2026-06-03",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 5500,
+    "truckId": 3,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 7,
+    "province": "Santiago",
+    "createdBy": "Quelbin",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1890534",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 104,
+   "rec": {
+    "id": 104,
+    "date": "2026-05-30",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 0,
+    "truckId": 5,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 0,
+    "province": "La Vega",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1890482",
+    "numHelpers": 0,
+    "municipality": "Constanza",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 105,
+   "rec": {
+    "id": 105,
+    "date": "2026-05-27",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9000,
+    "truckId": 2,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 4,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1884952",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 106,
+   "rec": {
+    "id": 106,
+    "date": "2026-05-27",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 9000,
+    "truckId": 5,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 0,
+    "province": "Santiago",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1884952",
+    "numHelpers": 0,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 107,
+   "rec": {
+    "id": 107,
+    "date": "2026-05-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [],
+    "revenue": 6500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Espaillat",
+    "createdBy": "Alexander",
+    "discounts": [],
+    "docStatus": "delivered",
+    "invoiceRef": "1880366-2",
+    "numHelpers": 0,
+    "municipality": "Moca",
+    "podDelivered": false,
+    "helperPayEach": "",
+    "tarifaOverride": null
+   }
+  },
+  {
+   "id": 108,
+   "rec": {
+    "id": 108,
+    "date": "2026-06-09",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Duarte",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1897210",
+    "numHelpers": 1,
+    "municipality": "San Francisco de Macorís",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 109,
+   "rec": {
+    "id": 109,
+    "date": "2026-06-09",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 0,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Hermanas Mirabal",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1901794",
+    "numHelpers": 1,
+    "municipality": "Tenares",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 110,
+   "rec": {
+    "id": 110,
+    "date": "2026-06-09",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 13400,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Dajabón",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1906673",
+    "numHelpers": 1,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 111,
+   "rec": {
+    "id": 111,
+    "date": "2026-06-09",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9000,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "La Vega",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1910161",
+    "numHelpers": 1,
+    "municipality": "Jarabacoa",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 112,
+   "rec": {
+    "id": 112,
+    "date": "2026-06-09",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Duarte",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1916535",
+    "numHelpers": 1,
+    "municipality": "San Francisco de Macorís",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 113,
+   "rec": {
+    "id": 113,
+    "date": "2026-06-09",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Santiago",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1924188",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 114,
+   "rec": {
+    "id": 114,
+    "date": "2026-06-09",
+    "cargo": "",
+    "status": "pending",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Santiago",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1928092",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 115,
+   "rec": {
+    "id": 115,
+    "date": "2026-06-12",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9240,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Valverde",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1933510",
+    "numHelpers": 1,
+    "municipality": "Mao",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 116,
+   "rec": {
+    "id": 116,
+    "date": "2026-06-14",
+    "cargo": "",
+    "status": "in_transit",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 8500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "La Vega",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1948719",
+    "numHelpers": 1,
+    "municipality": "La Vega",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 117,
+   "rec": {
+    "id": 117,
+    "date": "2026-06-19",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 0,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Espaillat",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1968384",
+    "numHelpers": 1,
+    "municipality": "Gaspar Hernández",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 118,
+   "rec": {
+    "id": 118,
+    "date": "2026-06-19",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9240,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Valverde",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1953068",
+    "numHelpers": 1,
+    "municipality": "Mao",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 119,
+   "rec": {
+    "id": 119,
+    "date": "2026-06-23",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9450,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Sánchez Ramírez",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1971525",
+    "numHelpers": 1,
+    "municipality": "Cotuí",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 120,
+   "rec": {
+    "id": 120,
+    "date": "2026-06-24",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 5500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Santiago",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1990553",
+    "numHelpers": 1,
+    "municipality": "Santiago de los Caballeros",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 121,
+   "rec": {
+    "id": 121,
+    "date": "2026-06-24",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 13400,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Dajabón",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "03911",
+    "numHelpers": 1,
+    "municipality": "Dajabón",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 122,
+   "rec": {
+    "id": 122,
+    "date": "2026-06-25",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 0,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Monte Cristi",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1994158",
+    "numHelpers": 1,
+    "municipality": "Monte Cristi",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 123,
+   "rec": {
+    "id": 123,
+    "date": "2026-06-28",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 0,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Samaná",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "1999579",
+    "numHelpers": 1,
+    "municipality": "Las Terrenas",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 124,
+   "rec": {
+    "id": 124,
+    "date": "2026-06-30",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 0,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Santiago Rodríguez",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "2013152",
+    "numHelpers": 1,
+    "municipality": "Villa Los Almácigos",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 125,
+   "rec": {
+    "id": 125,
+    "date": "2026-07-04",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 0,
+    "truckId": 1,
+    "brokerId": null,
+    "clientId": 2,
+    "driverId": 1,
+    "province": "San Cristóbal",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "",
+    "numHelpers": 1,
+    "municipality": "Cambita Garabitos",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 126,
+   "rec": {
+    "id": 126,
+    "date": "2026-07-09",
+    "cargo": "",
+    "status": "in_transit",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Duarte",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "2046679",
+    "numHelpers": 1,
+    "municipality": "San Francisco de Macorís",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 127,
+   "rec": {
+    "id": 127,
+    "date": "2026-07-10",
+    "cargo": "",
+    "status": "pending",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 9500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Duarte",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "2051172",
+    "numHelpers": 1,
+    "municipality": "San Francisco de Macorís",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  },
+  {
+   "id": 128,
+   "rec": {
+    "id": 128,
+    "date": "2026-07-15",
+    "cargo": "",
+    "status": "delivered",
+    "weight": 0,
+    "helpers": [
+     {
+      "pay": 0,
+      "name": "Ayudante 1"
+     }
+    ],
+    "revenue": 6500,
+    "truckId": 1,
+    "brokerId": 1,
+    "clientId": 1,
+    "driverId": 1,
+    "province": "Espaillat",
+    "createdBy": "Rober",
+    "discounts": [],
+    "docStatus": "pending",
+    "invoiceRef": "2063948",
+    "numHelpers": 1,
+    "municipality": "Moca",
+    "podDelivered": false,
+    "helperPayEach": ""
+   }
+  }
+ ],
+ "bl_expenses": [
+  {
+   "id": 17,
+   "rec": {
+    "id": 17,
+    "date": "2026-04-01",
+    "amount": 1100,
+    "status": "paid",
+    "tripId": 15,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 21,
+   "rec": {
+    "id": 21,
+    "date": "2026-04-06",
+    "amount": 1300,
+    "status": "paid",
+    "tripId": 18,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 23,
+   "rec": {
+    "id": 23,
+    "date": "2026-04-07",
+    "amount": 1100,
+    "status": "paid",
+    "tripId": 19,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 25,
+   "rec": {
+    "id": 25,
+    "date": "2026-04-11",
+    "amount": 1800,
+    "status": "paid",
+    "tripId": 21,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 27,
+   "rec": {
+    "id": 27,
+    "date": "2026-04-01",
+    "amount": 1300,
+    "status": "paid",
+    "tripId": 22,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Fernando Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 29,
+   "rec": {
+    "id": 29,
+    "date": "2026-04-11",
+    "amount": 1300,
+    "status": "paid",
+    "tripId": 23,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Fernando Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 33,
+   "rec": {
+    "id": 33,
+    "date": "2026-04-01",
+    "amount": 1900,
+    "status": "paid",
+    "tripId": 25,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Fernando Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 35,
+   "rec": {
+    "id": 35,
+    "date": "2026-04-11",
+    "amount": 1100,
+    "status": "paid",
+    "tripId": 26,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Fernando Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 36,
+   "rec": {
+    "id": 36,
+    "date": "2026-04-06",
+    "amount": 2680,
+    "status": "paid",
+    "tripId": 12,
+    "category": "driverPay",
+    "driverId": 3,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 43,
+   "rec": {
+    "id": 43,
+    "date": "2026-04-11",
+    "amount": 2600,
+    "status": "paid",
+    "tripId": 28,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-04-26",
+    "supplierId": null,
+    "description": "Nómina 20%: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 45,
+   "rec": {
+    "id": 45,
+    "date": "2026-04-01",
+    "amount": 1800,
+    "status": "paid",
+    "tripId": 29,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-04-26",
+    "supplierId": null,
+    "description": "Nómina 20%: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 47,
+   "rec": {
+    "id": 47,
+    "date": "2026-04-13",
+    "amount": 1600,
+    "status": "paid",
+    "tripId": 17,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina (20%): Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 48,
+   "rec": {
+    "id": 48,
+    "date": "2026-04-13",
+    "amount": 800,
+    "status": "paid",
+    "tripId": 17,
+    "brokerId": 1,
+    "category": "broker_commission",
+    "paidDate": "2026-04-23",
+    "supplierId": null,
+    "description": "Comisión 10%: Rodtransp",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 50,
+   "rec": {
+    "id": 50,
+    "date": "2026-04-25",
+    "amount": 9471,
+    "status": "paid",
+    "tripId": null,
+    "truckId": 2,
+    "category": "maintenance",
+    "driverId": null,
+    "description": "",
+    "paymentMethod": "credit_card"
+   }
+  },
+  {
+   "id": 52,
+   "rec": {
+    "id": 52,
+    "date": "2026-04-17",
+    "amount": 1900,
+    "status": "paid",
+    "tripId": 30,
+    "category": "driverPay",
+    "driverId": 3,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 54,
+   "rec": {
+    "id": 54,
+    "date": "2026-04-15",
+    "amount": 1800,
+    "status": "paid",
+    "tripId": 31,
+    "category": "driverPay",
+    "driverId": 3,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 56,
+   "rec": {
+    "id": 56,
+    "date": "2026-04-15",
+    "amount": 4000,
+    "status": "paid",
+    "tripId": 32,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 58,
+   "rec": {
+    "id": 58,
+    "date": "2026-04-23",
+    "amount": 1700,
+    "status": "paid",
+    "tripId": 33,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Fernando Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 60,
+   "rec": {
+    "id": 60,
+    "date": "2026-04-23",
+    "amount": 1800,
+    "status": "paid",
+    "tripId": 34,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-05",
+    "calcAmount": 2200,
+    "supplierId": null,
+    "description": "Nómina 20%: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 63,
+   "rec": {
+    "id": 63,
+    "date": "2026-04-21",
+    "amount": 2000,
+    "status": "paid",
+    "tripId": 36,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-05",
+    "calcAmount": 4000,
+    "supplierId": null,
+    "description": "Nómina 20%: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 67,
+   "rec": {
+    "id": 67,
+    "date": "2026-04-16",
+    "amount": 4000,
+    "status": "paid",
+    "tripId": 38,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Fernando Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 69,
+   "rec": {
+    "id": 69,
+    "date": "2026-04-15",
+    "amount": 2400,
+    "status": "paid",
+    "tripId": 39,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Fernando Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 71,
+   "rec": {
+    "id": 71,
+    "date": "2026-04-17",
+    "amount": 2000,
+    "status": "paid",
+    "tripId": 40,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Fernando Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 73,
+   "rec": {
+    "id": 73,
+    "date": "2026-04-20",
+    "amount": 1100,
+    "status": "paid",
+    "tripId": 41,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Fernando Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 75,
+   "rec": {
+    "id": 75,
+    "date": "2026-04-17",
+    "amount": 1100,
+    "status": "paid",
+    "tripId": 42,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 77,
+   "rec": {
+    "id": 77,
+    "date": "2026-04-15",
+    "amount": 1300,
+    "status": "paid",
+    "tripId": 43,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 79,
+   "rec": {
+    "id": 79,
+    "date": "2026-04-18",
+    "amount": 1700,
+    "status": "paid",
+    "tripId": 44,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 81,
+   "rec": {
+    "id": 81,
+    "date": "2026-04-22",
+    "amount": 1300,
+    "status": "paid",
+    "tripId": 45,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 85,
+   "rec": {
+    "id": 85,
+    "date": "2026-04-21",
+    "amount": 1700,
+    "status": "paid",
+    "tripId": 47,
+    "category": "driverPay",
+    "driverId": 3,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 86,
+   "rec": {
+    "id": 86,
+    "date": "2026-04-08",
+    "amount": 1848,
+    "status": "paid",
+    "tripId": 20,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina (20%): Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 87,
+   "rec": {
+    "id": 87,
+    "date": "2026-04-17",
+    "amount": 2000,
+    "status": "paid",
+    "tripId": 35,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-05",
+    "calcAmount": 4000,
+    "supplierId": null,
+    "description": "Nómina (20%): Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 88,
+   "rec": {
+    "id": 88,
+    "date": "2026-04-18",
+    "amount": 1500,
+    "status": "paid",
+    "tripId": 37,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-05",
+    "calcAmount": 1800,
+    "supplierId": null,
+    "description": "Nómina (20%): Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 89,
+   "rec": {
+    "id": 89,
+    "date": "2026-04-01",
+    "amount": 1100,
+    "status": "paid",
+    "tripId": 48,
+    "category": "driverPay",
+    "driverId": 3,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 90,
+   "rec": {
+    "id": 90,
+    "date": "2026-04-11",
+    "amount": 1900,
+    "status": "paid",
+    "tripId": 49,
+    "category": "driverPay",
+    "driverId": 3,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 91,
+   "rec": {
+    "id": 91,
+    "date": "2026-04-16",
+    "amount": 1300,
+    "status": "paid",
+    "tripId": 50,
+    "category": "driverPay",
+    "driverId": 3,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 92,
+   "rec": {
+    "id": 92,
+    "date": "2026-04-21",
+    "amount": 1700,
+    "status": "paid",
+    "tripId": 51,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Fernando Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 93,
+   "rec": {
+    "id": 93,
+    "date": "2026-04-01",
+    "amount": 7900,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-04-30",
+    "truckId": 1,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 94,
+   "rec": {
+    "id": 94,
+    "date": "2026-04-01",
+    "amount": 4984,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-04-30",
+    "truckId": 3,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 95,
+   "rec": {
+    "id": 95,
+    "date": "2026-04-06",
+    "amount": 3556,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-04-30",
+    "truckId": 3,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 96,
+   "rec": {
+    "id": 96,
+    "date": "2026-04-06",
+    "amount": 3925,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-04-30",
+    "truckId": 4,
+    "category": "fuel",
+    "driverId": null,
+    "paidDate": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 97,
+   "rec": {
+    "id": 97,
+    "date": "2026-04-08",
+    "amount": 4300,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-04-30",
+    "truckId": 3,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 98,
+   "rec": {
+    "id": 98,
+    "date": "2026-04-12",
+    "amount": 11329.7,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-04-30",
+    "truckId": 1,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 99,
+   "rec": {
+    "id": 99,
+    "date": "2026-04-13",
+    "amount": 4350,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-04-30",
+    "truckId": 4,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 100,
+   "rec": {
+    "id": 100,
+    "date": "2026-04-25",
+    "amount": 3000,
+    "status": "paid",
+    "tripId": null,
+    "dueDate": "2026-04-25",
+    "truckId": null,
+    "category": "adelanto_conductor",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "prestamo",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 101,
+   "rec": {
+    "id": 101,
+    "date": "2026-04-24",
+    "amount": 2680,
+    "status": "paid",
+    "tripId": 52,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Fernando Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 102,
+   "rec": {
+    "id": 102,
+    "date": "2026-04-28",
+    "amount": 38985,
+    "status": "paid",
+    "tripId": null,
+    "dueDate": "2026-04-28",
+    "truckId": 1,
+    "category": "loan",
+    "driverId": null,
+    "supplierId": null,
+    "description": "",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 103,
+   "rec": {
+    "id": 103,
+    "date": "2026-04-24",
+    "amount": 2000,
+    "status": "paid",
+    "tripId": 53,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 104,
+   "rec": {
+    "id": 104,
+    "date": "2026-04-24",
+    "amount": 2000,
+    "status": "paid",
+    "tripId": 54,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-05",
+    "calcAmount": 4000,
+    "supplierId": null,
+    "description": "Nómina 20%: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 105,
+   "rec": {
+    "id": 105,
+    "date": "2026-04-27",
+    "amount": 1500,
+    "status": "paid",
+    "tripId": 55,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-05",
+    "calcAmount": 1800,
+    "supplierId": null,
+    "description": "Nómina 20%: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 106,
+   "rec": {
+    "id": 106,
+    "date": "2026-04-28",
+    "amount": 5000,
+    "status": "paid",
+    "tripId": 56,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-05",
+    "calcAmount": 8000,
+    "supplierId": null,
+    "description": "Nómina 20%: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 107,
+   "rec": {
+    "id": 107,
+    "date": "2026-04-24",
+    "amount": 1900,
+    "status": "paid",
+    "tripId": 57,
+    "category": "driverPay",
+    "driverId": 3,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 108,
+   "rec": {
+    "id": 108,
+    "date": "2026-04-18",
+    "amount": 1400,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 4,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 109,
+   "rec": {
+    "id": 109,
+    "date": "2026-04-24",
+    "amount": 4360,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 4,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 110,
+   "rec": {
+    "id": 110,
+    "date": "2026-04-28",
+    "amount": 3965,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 4,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 111,
+   "rec": {
+    "id": 111,
+    "date": "2026-04-23",
+    "amount": 500,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-04-23",
+    "truckId": 4,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": null,
+    "description": "",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 112,
+   "rec": {
+    "id": 112,
+    "date": "2026-04-29",
+    "amount": 4000,
+    "status": "paid",
+    "tripId": 58,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina (20%): Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 113,
+   "rec": {
+    "id": 113,
+    "date": "2026-04-29",
+    "amount": 1100,
+    "status": "paid",
+    "tripId": 60,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 114,
+   "rec": {
+    "id": 114,
+    "date": "2026-04-28",
+    "amount": 1300,
+    "status": "paid",
+    "tripId": 61,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 115,
+   "rec": {
+    "id": 115,
+    "date": "2026-04-25",
+    "amount": 1100,
+    "status": "paid",
+    "tripId": 62,
+    "category": "driverPay",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Joan",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 119,
+   "rec": {
+    "id": 119,
+    "date": "2026-04-29",
+    "amount": 1100,
+    "status": "paid",
+    "tripId": 58,
+    "category": "driverPay",
+    "driverId": 3,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 121,
+   "rec": {
+    "id": 121,
+    "date": "2026-04-28",
+    "amount": 4000,
+    "status": "paid",
+    "tripId": 63,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "supplierId": null,
+    "description": "Nómina 20%: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 125,
+   "rec": {
+    "id": 125,
+    "date": "2026-04-30",
+    "amount": 1600,
+    "status": "paid",
+    "tripId": 59,
+    "category": "driverPay",
+    "driverId": 3,
+    "paidDate": "2026-05-16",
+    "supplierId": null,
+    "description": "Nómina por viaje: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 126,
+   "rec": {
+    "id": 126,
+    "date": "2026-03-30",
+    "amount": 15500,
+    "status": "paid",
+    "tripId": null,
+    "category": "nominaTotalOverride",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "calcAmount": 9300,
+    "supplierId": null,
+    "description": "Override total nómina",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 127,
+   "rec": {
+    "id": 127,
+    "date": "2026-03-30",
+    "amount": 25700,
+    "status": "paid",
+    "tripId": null,
+    "category": "nominaTotalOverride",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "calcAmount": 12890,
+    "supplierId": null,
+    "description": "Override total nómina",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 128,
+   "rec": {
+    "id": 128,
+    "date": "2026-03-30",
+    "amount": 9000,
+    "status": "paid",
+    "tripId": null,
+    "category": "nominaTotalOverride",
+    "driverId": 4,
+    "paidDate": "2026-05-05",
+    "calcAmount": 4000,
+    "supplierId": null,
+    "description": "Override total nómina",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 129,
+   "rec": {
+    "id": 129,
+    "date": "2026-03-30",
+    "amount": 10600,
+    "status": "paid",
+    "tripId": null,
+    "category": "nominaTotalOverride",
+    "driverId": 3,
+    "paidDate": "2026-05-05",
+    "calcAmount": 7480,
+    "supplierId": null,
+    "description": "Override total nómina",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 130,
+   "rec": {
+    "id": 130,
+    "date": "2026-04-15",
+    "amount": 23030,
+    "status": "paid",
+    "tripId": null,
+    "category": "nominaTotalOverride",
+    "driverId": 1,
+    "paidDate": "2026-05-05",
+    "calcAmount": 23580,
+    "supplierId": null,
+    "description": "Override total nómina",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 131,
+   "rec": {
+    "id": 131,
+    "date": "2026-04-15",
+    "amount": 12050,
+    "status": "paid",
+    "tripId": null,
+    "category": "nominaTotalOverride",
+    "driverId": 2,
+    "paidDate": "2026-05-05",
+    "calcAmount": 10900,
+    "supplierId": null,
+    "description": "Override total nómina",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 132,
+   "rec": {
+    "id": 132,
+    "date": "2026-04-15",
+    "amount": 11500,
+    "status": "paid",
+    "tripId": null,
+    "category": "nominaTotalOverride",
+    "driverId": 3,
+    "paidDate": "2026-05-05",
+    "calcAmount": 9700,
+    "supplierId": null,
+    "description": "Override total nómina",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 133,
+   "rec": {
+    "id": 133,
+    "date": "2026-04-15",
+    "amount": 16280,
+    "status": "paid",
+    "tripId": null,
+    "category": "nominaTotalOverride",
+    "driverId": 4,
+    "paidDate": "2026-05-05",
+    "calcAmount": 19800,
+    "supplierId": null,
+    "description": "Override total nómina",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 134,
+   "rec": {
+    "id": 134,
+    "date": "2026-04-30",
+    "amount": 3100,
+    "status": "paid",
+    "tripId": 64,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-16",
+    "supplierId": null,
+    "description": "Nómina 20%: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 135,
+   "rec": {
+    "id": 135,
+    "date": "2026-05-05",
+    "amount": 2500,
+    "status": "paid",
+    "tripId": 65,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-16",
+    "supplierId": null,
+    "description": "Nómina 20%: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 136,
+   "rec": {
+    "id": 136,
+    "date": "2026-05-06",
+    "amount": 1700,
+    "status": "paid",
+    "tripId": 66,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-16",
+    "supplierId": null,
+    "description": "Nómina 20%: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 137,
+   "rec": {
+    "id": 137,
+    "date": "2026-05-10",
+    "amount": 1600,
+    "status": "paid",
+    "tripId": 68,
+    "category": "driverPay",
+    "driverId": 6,
+    "paidDate": "2026-05-19",
+    "supplierId": null,
+    "description": "Nómina 20%: Luis Alberto",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 140,
+   "rec": {
+    "id": 140,
+    "date": "2026-04-16",
+    "amount": 4600,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": null,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 141,
+   "rec": {
+    "id": 141,
+    "date": "2026-04-16",
+    "amount": 8636,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 1,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 142,
+   "rec": {
+    "id": 142,
+    "date": "2026-04-16",
+    "amount": 9006,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 2,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 143,
+   "rec": {
+    "id": 143,
+    "date": "2026-04-16",
+    "amount": 3000,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": null,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 144,
+   "rec": {
+    "id": 144,
+    "date": "2026-04-16",
+    "amount": 4435,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 3,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 145,
+   "rec": {
+    "id": 145,
+    "date": "2026-04-18",
+    "amount": 12900,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 1,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 146,
+   "rec": {
+    "id": 146,
+    "date": "2026-04-18",
+    "amount": 3200,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 4,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 147,
+   "rec": {
+    "id": 147,
+    "date": "2026-04-19",
+    "amount": 10939,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 1,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 148,
+   "rec": {
+    "id": 148,
+    "date": "2026-04-21",
+    "amount": 4814,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 3,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 149,
+   "rec": {
+    "id": 149,
+    "date": "2026-04-24",
+    "amount": 13675,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 1,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 150,
+   "rec": {
+    "id": 150,
+    "date": "2026-04-24",
+    "amount": 4405,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 3,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 151,
+   "rec": {
+    "id": 151,
+    "date": "2026-04-24",
+    "amount": 8100,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 2,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 152,
+   "rec": {
+    "id": 152,
+    "date": "2026-04-27",
+    "amount": 4855,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 3,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 153,
+   "rec": {
+    "id": 153,
+    "date": "2026-04-27",
+    "amount": 5000,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": null,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 154,
+   "rec": {
+    "id": 154,
+    "date": "2026-04-28",
+    "amount": 6518,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 2,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 155,
+   "rec": {
+    "id": 155,
+    "date": "2026-04-28",
+    "amount": 15500,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 5,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 156,
+   "rec": {
+    "id": 156,
+    "date": "2026-05-07",
+    "amount": 2500,
+    "status": "paid",
+    "tripId": null,
+    "dueDate": "2026-05-07",
+    "truckId": 3,
+    "category": "repair",
+    "driverId": null,
+    "supplierId": null,
+    "description": "Escáner ",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 159,
+   "rec": {
+    "id": 159,
+    "date": "2026-05-07",
+    "amount": 2500,
+    "status": "paid",
+    "tripId": null,
+    "dueDate": "2026-05-07",
+    "truckId": 2,
+    "category": "repair",
+    "driverId": null,
+    "supplierId": null,
+    "description": "fibra de vidrio",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 160,
+   "rec": {
+    "id": 160,
+    "date": "2026-05-07",
+    "amount": 2000,
+    "status": "paid",
+    "tripId": null,
+    "dueDate": "2026-05-07",
+    "truckId": null,
+    "category": "adelanto_conductor",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Prestamo ",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 161,
+   "rec": {
+    "id": 161,
+    "date": "2026-05-08",
+    "amount": 3700,
+    "status": "paid",
+    "tripId": 67,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-16",
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 162,
+   "rec": {
+    "id": 162,
+    "date": "2026-05-10",
+    "amount": 1600,
+    "status": "paid",
+    "tripId": 68,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-16",
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 163,
+   "rec": {
+    "id": 163,
+    "date": "2026-05-13",
+    "amount": 3500,
+    "status": "paid",
+    "tripId": 69,
+    "category": "driverPay",
+    "driverId": 1,
+    "paidDate": "2026-05-16",
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 164,
+   "rec": {
+    "id": 164,
+    "date": "2026-05-15",
+    "amount": 1600,
+    "status": "pending",
+    "tripId": 70,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 165,
+   "rec": {
+    "id": 165,
+    "date": "2026-05-26",
+    "amount": 3000,
+    "status": "pending",
+    "tripId": 71,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 166,
+   "rec": {
+    "id": 166,
+    "date": "2026-05-26",
+    "amount": 1600,
+    "status": "pending",
+    "tripId": 74,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 167,
+   "rec": {
+    "id": 167,
+    "date": "2026-05-26",
+    "amount": 1600,
+    "status": "pending",
+    "tripId": 75,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 168,
+   "rec": {
+    "id": 168,
+    "date": "2026-05-26",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 76,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 170,
+   "rec": {
+    "id": 170,
+    "date": "2026-05-07",
+    "amount": 700,
+    "status": "paid",
+    "tripId": 73,
+    "dueDate": "2026-05-07",
+    "truckId": 4,
+    "category": "adelanto_conductor",
+    "driverId": 3,
+    "supplierId": null,
+    "description": "",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 171,
+   "rec": {
+    "id": 171,
+    "date": "2026-05-26",
+    "amount": 1700,
+    "status": "pending",
+    "tripId": 77,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 172,
+   "rec": {
+    "id": 172,
+    "date": "2026-05-28",
+    "amount": 1700,
+    "status": "pending",
+    "tripId": 78,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 173,
+   "rec": {
+    "id": 173,
+    "date": "2026-05-29",
+    "amount": 1600,
+    "status": "pending",
+    "tripId": 79,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 174,
+   "rec": {
+    "id": 174,
+    "date": "2026-04-29",
+    "amount": 2700,
+    "status": "pending",
+    "tripId": 83,
+    "category": "driverPay",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 175,
+   "rec": {
+    "id": 175,
+    "date": "2026-05-07",
+    "amount": 2100,
+    "status": "paid",
+    "tripId": 84,
+    "category": "driverPay",
+    "driverId": 6,
+    "paidDate": "2026-05-19",
+    "supplierId": null,
+    "description": "Pago por viaje: Luis Alberto",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 176,
+   "rec": {
+    "id": 176,
+    "date": "2026-05-05",
+    "amount": 5500,
+    "status": "paid",
+    "tripId": 85,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-19",
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 177,
+   "rec": {
+    "id": 177,
+    "date": "2026-05-16",
+    "amount": 2900,
+    "status": "paid",
+    "tripId": 85,
+    "dueDate": "2026-05-16",
+    "truckId": 2,
+    "category": "adelanto_conductor",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 178,
+   "rec": {
+    "id": 178,
+    "date": "2026-05-08",
+    "amount": 5500,
+    "status": "paid",
+    "tripId": 86,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-19",
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 179,
+   "rec": {
+    "id": 179,
+    "date": "2026-05-16",
+    "amount": 2900,
+    "status": "paid",
+    "tripId": 86,
+    "dueDate": "2026-05-16",
+    "truckId": 2,
+    "category": "adelanto_conductor",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "",
+    "paymentMethod": "cash"
+   }
+  },
+  {
+   "id": 180,
+   "rec": {
+    "id": 180,
+    "date": "2026-05-10",
+    "amount": 2900,
+    "status": "paid",
+    "tripId": 87,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-19",
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 181,
+   "rec": {
+    "id": 181,
+    "date": "2026-05-12",
+    "amount": 5500,
+    "status": "paid",
+    "tripId": 88,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-19",
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 182,
+   "rec": {
+    "id": 182,
+    "date": "2026-05-16",
+    "amount": 2900,
+    "status": "paid",
+    "tripId": 88,
+    "dueDate": "2026-05-16",
+    "truckId": 2,
+    "category": "adelanto_conductor",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "",
+    "paymentMethod": "cash"
+   }
+  },
+  {
+   "id": 183,
+   "rec": {
+    "id": 183,
+    "date": "2026-05-15",
+    "amount": 5500,
+    "status": "pending",
+    "tripId": 90,
+    "category": "driverPay",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 184,
+   "rec": {
+    "id": 184,
+    "date": "2026-05-16",
+    "amount": 2900,
+    "status": "paid",
+    "tripId": 90,
+    "dueDate": "2026-05-16",
+    "truckId": 2,
+    "category": "adelanto_conductor",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "",
+    "paymentMethod": "cash"
+   }
+  },
+  {
+   "id": 187,
+   "rec": {
+    "id": 187,
+    "date": "2026-05-16",
+    "amount": 2000,
+    "status": "paid",
+    "tripId": 87,
+    "dueDate": "2026-05-16",
+    "truckId": 2,
+    "category": "adelanto_conductor",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 188,
+   "rec": {
+    "id": 188,
+    "date": "2026-05-14",
+    "amount": 5500,
+    "status": "paid",
+    "tripId": 91,
+    "category": "driverPay",
+    "driverId": 4,
+    "paidDate": "2026-05-19",
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 189,
+   "rec": {
+    "id": 189,
+    "date": "2026-05-16",
+    "amount": 2900,
+    "status": "paid",
+    "tripId": 91,
+    "dueDate": "2026-05-16",
+    "truckId": 2,
+    "category": "adelanto_conductor",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "",
+    "paymentMethod": "cash"
+   }
+  },
+  {
+   "id": 190,
+   "rec": {
+    "id": 190,
+    "date": "2026-04-30",
+    "amount": 10300,
+    "status": "paid",
+    "tripId": null,
+    "category": "nominaTotalOverride",
+    "driverId": 4,
+    "paidDate": "2026-05-19",
+    "calcAmount": 24900,
+    "supplierId": null,
+    "description": "Override total nómina",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 191,
+   "rec": {
+    "id": 191,
+    "date": "2026-04-30",
+    "amount": 6100,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 6,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 192,
+   "rec": {
+    "id": 192,
+    "date": "2026-04-30",
+    "amount": 5007.6,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-15",
+    "truckId": 3,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 193,
+   "rec": {
+    "id": 193,
+    "date": "2026-05-05",
+    "amount": 167003,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-30",
+    "truckId": 1,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 194,
+   "rec": {
+    "id": 194,
+    "date": "2026-05-05",
+    "amount": 7002.1,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-30",
+    "truckId": 2,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 195,
+   "rec": {
+    "id": 195,
+    "date": "2026-05-05",
+    "amount": 3950,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-30",
+    "truckId": 4,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 196,
+   "rec": {
+    "id": 196,
+    "date": "2026-05-07",
+    "amount": 8399,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-30",
+    "truckId": 1,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 197,
+   "rec": {
+    "id": 197,
+    "date": "2026-05-07",
+    "amount": 3740,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-30",
+    "truckId": 3,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 198,
+   "rec": {
+    "id": 198,
+    "date": "2026-05-08",
+    "amount": 5550,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-30",
+    "truckId": 6,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 199,
+   "rec": {
+    "id": 199,
+    "date": "2026-05-11",
+    "amount": 2340,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-30",
+    "truckId": 3,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 200,
+   "rec": {
+    "id": 200,
+    "date": "2026-05-12",
+    "amount": 10200,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-30",
+    "truckId": 2,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 201,
+   "rec": {
+    "id": 201,
+    "date": "2026-05-12",
+    "amount": 13830,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-30",
+    "truckId": 1,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 202,
+   "rec": {
+    "id": 202,
+    "date": "2026-05-14",
+    "amount": 6379.8,
+    "status": "pending",
+    "tripId": null,
+    "dueDate": "2026-05-30",
+    "truckId": 2,
+    "category": "fuel",
+    "driverId": null,
+    "supplierId": 1,
+    "description": "",
+    "paymentMethod": "credit"
+   }
+  },
+  {
+   "id": 203,
+   "rec": {
+    "id": 203,
+    "date": "2026-05-25",
+    "amount": 2700,
+    "status": "pending",
+    "tripId": 95,
+    "category": "driverPay",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 204,
+   "rec": {
+    "id": 204,
+    "date": "2026-05-28",
+    "amount": 2700,
+    "status": "pending",
+    "tripId": 96,
+    "category": "driverPay",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 205,
+   "rec": {
+    "id": 205,
+    "date": "2026-05-20",
+    "amount": 1200,
+    "status": "pending",
+    "tripId": 97,
+    "category": "driverPay",
+    "driverId": 4,
+    "calcAmount": 8000,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 206,
+   "rec": {
+    "id": 206,
+    "date": "2026-05-16",
+    "amount": 0,
+    "status": "pending",
+    "tripId": 98,
+    "category": "driverPay",
+    "driverId": 4,
+    "calcAmount": 2700,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 207,
+   "rec": {
+    "id": 207,
+    "date": "2026-05-16",
+    "amount": 1700,
+    "status": "pending",
+    "tripId": 102,
+    "category": "driverPay",
+    "driverId": 6,
+    "supplierId": null,
+    "description": "Pago por viaje: Luis Alberto",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 208,
+   "rec": {
+    "id": 208,
+    "date": "2026-05-27",
+    "amount": 2700,
+    "status": "pending",
+    "tripId": 105,
+    "category": "driverPay",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 209,
+   "rec": {
+    "id": 209,
+    "date": "2026-05-28",
+    "amount": 1700,
+    "status": "pending",
+    "tripId": 107,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 210,
+   "rec": {
+    "id": 210,
+    "date": "2026-05-16",
+    "amount": 2700,
+    "status": "pending",
+    "tripId": 108,
+    "category": "driverPay",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 211,
+   "rec": {
+    "id": 211,
+    "date": "2026-05-19",
+    "amount": 2700,
+    "status": "pending",
+    "tripId": 109,
+    "category": "driverPay",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 212,
+   "rec": {
+    "id": 212,
+    "date": "2026-05-30",
+    "amount": 2700,
+    "status": "pending",
+    "tripId": 110,
+    "category": "driverPay",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 213,
+   "rec": {
+    "id": 213,
+    "date": "2026-05-30",
+    "amount": 5500,
+    "status": "pending",
+    "tripId": 112,
+    "category": "driverPay",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 214,
+   "rec": {
+    "id": 214,
+    "date": "2026-05-20",
+    "amount": 8000,
+    "status": "pending",
+    "tripId": 113,
+    "category": "driverPay",
+    "driverId": 4,
+    "supplierId": null,
+    "description": "Pago por viaje: Edwin",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 215,
+   "rec": {
+    "id": 215,
+    "date": "2026-05-20",
+    "amount": 1600,
+    "status": "pending",
+    "tripId": 114,
+    "category": "driverPay",
+    "driverId": 3,
+    "supplierId": null,
+    "description": "Pago por viaje: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 216,
+   "rec": {
+    "id": 216,
+    "date": "2026-05-18",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 115,
+    "category": "driverPay",
+    "driverId": 3,
+    "supplierId": null,
+    "description": "Pago por viaje: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 217,
+   "rec": {
+    "id": 217,
+    "date": "2026-05-27",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 116,
+    "category": "driverPay",
+    "driverId": 3,
+    "supplierId": null,
+    "description": "Pago por viaje: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 218,
+   "rec": {
+    "id": 218,
+    "date": "2026-05-15",
+    "amount": 3500,
+    "status": "pending",
+    "tripId": 118,
+    "category": "driverPay",
+    "driverId": 3,
+    "supplierId": null,
+    "description": "Pago por viaje: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 219,
+   "rec": {
+    "id": 219,
+    "date": "2026-05-19",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 119,
+    "category": "driverPay",
+    "driverId": 3,
+    "supplierId": null,
+    "description": "Pago por viaje: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 220,
+   "rec": {
+    "id": 220,
+    "date": "2026-05-22",
+    "amount": 3100,
+    "status": "pending",
+    "tripId": 120,
+    "category": "driverPay",
+    "driverId": 3,
+    "supplierId": null,
+    "description": "Pago por viaje: Emil",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 221,
+   "rec": {
+    "id": 221,
+    "date": "2026-05-15",
+    "amount": 19100,
+    "status": "pending",
+    "tripId": null,
+    "category": "nominaTotalOverride",
+    "driverId": 1,
+    "calcAmount": 17000,
+    "supplierId": null,
+    "description": "Override total nómina",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 222,
+   "rec": {
+    "id": 222,
+    "date": "2026-06-09",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 108,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 223,
+   "rec": {
+    "id": 223,
+    "date": "2026-06-09",
+    "amount": 3500,
+    "status": "pending",
+    "tripId": 110,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 224,
+   "rec": {
+    "id": 224,
+    "date": "2026-06-09",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 111,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 225,
+   "rec": {
+    "id": 225,
+    "date": "2026-06-09",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 112,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 226,
+   "rec": {
+    "id": 226,
+    "date": "2026-06-09",
+    "amount": 1600,
+    "status": "pending",
+    "tripId": 113,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 227,
+   "rec": {
+    "id": 227,
+    "date": "2026-06-09",
+    "amount": 1600,
+    "status": "pending",
+    "tripId": 114,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 228,
+   "rec": {
+    "id": 228,
+    "date": "2026-06-12",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 115,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 229,
+   "rec": {
+    "id": 229,
+    "date": "2026-06-14",
+    "amount": 1700,
+    "status": "pending",
+    "tripId": 116,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 230,
+   "rec": {
+    "id": 230,
+    "date": "2026-06-19",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 118,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 231,
+   "rec": {
+    "id": 231,
+    "date": "2026-06-23",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 119,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 232,
+   "rec": {
+    "id": 232,
+    "date": "2026-06-24",
+    "amount": 1600,
+    "status": "pending",
+    "tripId": 120,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 233,
+   "rec": {
+    "id": 233,
+    "date": "2026-06-24",
+    "amount": 3500,
+    "status": "pending",
+    "tripId": 121,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 234,
+   "rec": {
+    "id": 234,
+    "date": "2026-07-09",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 126,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 235,
+   "rec": {
+    "id": 235,
+    "date": "2026-07-10",
+    "amount": 2500,
+    "status": "pending",
+    "tripId": 127,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  },
+  {
+   "id": 236,
+   "rec": {
+    "id": 236,
+    "date": "2026-07-15",
+    "amount": 1700,
+    "status": "pending",
+    "tripId": 128,
+    "category": "driverPay",
+    "driverId": 1,
+    "supplierId": null,
+    "description": "Pago por viaje: Rober",
+    "paymentMethod": "transfer"
+   }
+  }
+ ],
+ "bl_trucks": [
+  {
+   "id": 1,
+   "rec": {
+    "id": 1,
+    "size": "T1",
+    "type": "Flatbed",
+    "owner": "own",
+    "plate": "International ",
+    "partnerId": null
+   }
+  },
+  {
+   "id": 2,
+   "rec": {
+    "id": 2,
+    "size": "T2",
+    "type": "Flatbed",
+    "owner": "own",
+    "plate": "Ford",
+    "partnerId": null
+   }
+  },
+  {
+   "id": 3,
+   "rec": {
+    "id": 3,
+    "size": "T1",
+    "type": "Flatbed",
+    "owner": "partner",
+    "plate": "Hino",
+    "driverId": 7,
+    "partnerId": 2
+   }
+  },
+  {
+   "id": 4,
+   "rec": {
+    "id": 4,
+    "size": "T1",
+    "type": "Flatbed",
+    "owner": "partner",
+    "plate": "Hyundai",
+    "partnerId": 1
+   }
+  },
+  {
+   "id": 5,
+   "rec": {
+    "id": 5,
+    "size": "T2",
+    "type": "Flatbed",
+    "owner": "partner",
+    "plate": "Mack",
+    "driverId": 5,
+    "partnerId": 2
+   }
+  },
+  {
+   "id": 6,
+   "rec": {
+    "id": 6,
+    "size": "T1",
+    "type": "Flatbed",
+    "owner": "partner",
+    "plate": "Jac",
+    "driverId": 6,
+    "partnerId": 3
+   }
+  },
+  {
+   "id": 7,
+   "rec": {
+    "id": 7,
+    "size": "T2",
+    "type": "Flatbed",
+    "owner": "own",
+    "plate": "Freightliner",
+    "partnerId": null
+   }
+  }
+ ],
+ "bl_drivers": [
+  {
+   "id": 1,
+   "rec": {
+    "id": 1,
+    "name": "Rober",
+    "phone": "",
+    "rates": [
+     {
+      "id": 1,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 900,
+      "priceT2": 1200,
+      "helperT1": 700,
+      "helperT2": 750,
+      "province": "Santiago",
+      "municipality": "Santiago de los Caballeros"
+     },
+     {
+      "id": 2,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Espaillat",
+      "municipality": "Moca"
+     },
+     {
+      "id": 3,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Santiago",
+      "municipality": "Navarrete"
+     },
+     {
+      "id": 4,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "La Vega"
+     },
+     {
+      "id": 5,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1100,
+      "priceT2": 1300,
+      "helperT1": 700,
+      "helperT2": 800,
+      "province": "Valverde",
+      "municipality": "Esperanza"
+     },
+     {
+      "id": 6,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1100,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Hermanas Mirabal",
+      "municipality": "Salcedo"
+     },
+     {
+      "id": 7,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1300,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "Monseñor Nouel",
+      "municipality": "Bonao"
+     },
+     {
+      "id": 8,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1400,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "Jarabacoa"
+     },
+     {
+      "id": 9,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1400,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "Sánchez Ramírez",
+      "municipality": "Cotuí"
+     },
+     {
+      "id": 10,
+      "dietaT1": 300,
+      "dietaT2": 300,
+      "priceT1": 1400,
+      "priceT2": 1700,
+      "helperT1": 800,
+      "helperT2": 900,
+      "province": "Duarte",
+      "municipality": "San Francisco de Macorís"
+     },
+     {
+      "id": 11,
+      "dietaT1": 300,
+      "dietaT2": 300,
+      "priceT1": 1400,
+      "priceT2": 1600,
+      "helperT1": 800,
+      "helperT2": 900,
+      "province": "Valverde",
+      "municipality": "Mao"
+     },
+     {
+      "id": 12,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1700,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "Puerto Plata",
+      "municipality": "Puerto Plata"
+     },
+     {
+      "id": 13,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1800,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "Puerto Plata",
+      "municipality": "Cabarete"
+     },
+     {
+      "id": 14,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1800,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "María Trinidad Sánchez",
+      "municipality": "Nagua"
+     },
+     {
+      "id": 15,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1900,
+      "priceT2": 0,
+      "helperT1": 1000,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "Constanza"
+     },
+     {
+      "id": 16,
+      "dietaT1": 500,
+      "dietaT2": 600,
+      "priceT1": 2000,
+      "priceT2": 2500,
+      "helperT1": 1000,
+      "helperT2": 1200,
+      "province": "Dajabón",
+      "municipality": "Dajabón"
+     },
+     {
+      "id": 17,
+      "dietaT1": 500,
+      "dietaT2": 0,
+      "priceT1": 2200,
+      "priceT2": 0,
+      "helperT1": 1000,
+      "helperT2": 0,
+      "province": "Samaná",
+      "municipality": "Santa Bárbara de Samaná"
+     },
+     {
+      "id": 18,
+      "dietaT1": 0,
+      "dietaT2": 1000,
+      "priceT1": 0,
+      "priceT2": 4000,
+      "helperT1": 0,
+      "helperT2": 1500,
+      "province": "Independencia",
+      "municipality": "Jimaní"
+     }
+    ],
+    "license": "",
+    "truckId": 1,
+    "username": "Rober",
+    "salaryType": "perTrip",
+    "fixedAmount": 0,
+    "percentageAmount": 20,
+    "password": "$2b$10$BYdAeNc1XK6nRrBzx08U1.qPY6f5j1MDeMO4JSGb6HBNaMQIjXrFO"
+   }
+  },
+  {
+   "id": 2,
+   "rec": {
+    "id": 2,
+    "name": "Joan",
+    "phone": "",
+    "rates": [
+     {
+      "id": 1,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 900,
+      "priceT2": 1200,
+      "helperT1": 700,
+      "helperT2": 750,
+      "province": "Santiago",
+      "municipality": "Santiago de los Caballeros"
+     },
+     {
+      "id": 2,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Espaillat",
+      "municipality": "Moca"
+     },
+     {
+      "id": 3,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Santiago",
+      "municipality": "Navarrete"
+     },
+     {
+      "id": 4,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "La Vega"
+     },
+     {
+      "id": 5,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1100,
+      "priceT2": 1300,
+      "helperT1": 700,
+      "helperT2": 800,
+      "province": "Valverde",
+      "municipality": "Esperanza"
+     },
+     {
+      "id": 6,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1100,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Hermanas Mirabal",
+      "municipality": "Salcedo"
+     },
+     {
+      "id": 7,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1300,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "Monseñor Nouel",
+      "municipality": "Bonao"
+     },
+     {
+      "id": 8,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1400,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "Jarabacoa"
+     },
+     {
+      "id": 9,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1400,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "Sánchez Ramírez",
+      "municipality": "Cotuí"
+     },
+     {
+      "id": 10,
+      "dietaT1": 300,
+      "dietaT2": 300,
+      "priceT1": 1400,
+      "priceT2": 1700,
+      "helperT1": 800,
+      "helperT2": 900,
+      "province": "Duarte",
+      "municipality": "San Francisco de Macorís"
+     },
+     {
+      "id": 11,
+      "dietaT1": 300,
+      "dietaT2": 300,
+      "priceT1": 1400,
+      "priceT2": 1600,
+      "helperT1": 800,
+      "helperT2": 900,
+      "province": "Valverde",
+      "municipality": "Mao"
+     },
+     {
+      "id": 12,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1700,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "Puerto Plata",
+      "municipality": "Puerto Plata"
+     },
+     {
+      "id": 13,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1800,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "Puerto Plata",
+      "municipality": "Cabarete"
+     },
+     {
+      "id": 14,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1800,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "María Trinidad Sánchez",
+      "municipality": "Nagua"
+     },
+     {
+      "id": 15,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1900,
+      "priceT2": 0,
+      "helperT1": 1000,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "Constanza"
+     },
+     {
+      "id": 16,
+      "dietaT1": 500,
+      "dietaT2": 600,
+      "priceT1": 2000,
+      "priceT2": 2500,
+      "helperT1": 1000,
+      "helperT2": 1200,
+      "province": "Dajabón",
+      "municipality": "Dajabón"
+     },
+     {
+      "id": 17,
+      "dietaT1": 500,
+      "dietaT2": 0,
+      "priceT1": 2200,
+      "priceT2": 0,
+      "helperT1": 1000,
+      "helperT2": 0,
+      "province": "Samaná",
+      "municipality": "Santa Bárbara de Samaná"
+     },
+     {
+      "id": 18,
+      "dietaT1": 0,
+      "dietaT2": 1000,
+      "priceT1": 0,
+      "priceT2": 4000,
+      "helperT1": 0,
+      "helperT2": 1500,
+      "province": "Independencia",
+      "municipality": "Jimaní"
+     }
+    ],
+    "license": "",
+    "truckId": 3,
+    "username": "Joan",
+    "salaryType": "perTrip",
+    "fixedAmount": 0,
+    "percentageAmount": 20,
+    "password": "$2b$10$BYdAeNc1XK6nRrBzx08U1.qPY6f5j1MDeMO4JSGb6HBNaMQIjXrFO"
+   }
+  },
+  {
+   "id": 3,
+   "rec": {
+    "id": 3,
+    "name": "Emil",
+    "phone": "",
+    "rates": [
+     {
+      "id": 1,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 900,
+      "priceT2": 1200,
+      "helperT1": 700,
+      "helperT2": 750,
+      "province": "Santiago",
+      "municipality": "Santiago de los Caballeros"
+     },
+     {
+      "id": 2,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Espaillat",
+      "municipality": "Moca"
+     },
+     {
+      "id": 3,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Santiago",
+      "municipality": "Navarrete"
+     },
+     {
+      "id": 4,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "La Vega"
+     },
+     {
+      "id": 5,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1100,
+      "priceT2": 1300,
+      "helperT1": 700,
+      "helperT2": 800,
+      "province": "Valverde",
+      "municipality": "Esperanza"
+     },
+     {
+      "id": 6,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1100,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Hermanas Mirabal",
+      "municipality": "Salcedo"
+     },
+     {
+      "id": 7,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1300,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "Monseñor Nouel",
+      "municipality": "Bonao"
+     },
+     {
+      "id": 8,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1400,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "Jarabacoa"
+     },
+     {
+      "id": 9,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1400,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "Sánchez Ramírez",
+      "municipality": "Cotuí"
+     },
+     {
+      "id": 10,
+      "dietaT1": 300,
+      "dietaT2": 300,
+      "priceT1": 1400,
+      "priceT2": 1700,
+      "helperT1": 800,
+      "helperT2": 900,
+      "province": "Duarte",
+      "municipality": "San Francisco de Macorís"
+     },
+     {
+      "id": 11,
+      "dietaT1": 300,
+      "dietaT2": 300,
+      "priceT1": 1400,
+      "priceT2": 1600,
+      "helperT1": 800,
+      "helperT2": 900,
+      "province": "Valverde",
+      "municipality": "Mao"
+     },
+     {
+      "id": 12,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1700,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "Puerto Plata",
+      "municipality": "Puerto Plata"
+     },
+     {
+      "id": 13,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1800,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "Puerto Plata",
+      "municipality": "Cabarete"
+     },
+     {
+      "id": 14,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1800,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "María Trinidad Sánchez",
+      "municipality": "Nagua"
+     },
+     {
+      "id": 15,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1900,
+      "priceT2": 0,
+      "helperT1": 1000,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "Constanza"
+     },
+     {
+      "id": 16,
+      "dietaT1": 500,
+      "dietaT2": 600,
+      "priceT1": 2000,
+      "priceT2": 2500,
+      "helperT1": 1000,
+      "helperT2": 1200,
+      "province": "Dajabón",
+      "municipality": "Dajabón"
+     },
+     {
+      "id": 17,
+      "dietaT1": 500,
+      "dietaT2": 0,
+      "priceT1": 2200,
+      "priceT2": 0,
+      "helperT1": 1000,
+      "helperT2": 0,
+      "province": "Samaná",
+      "municipality": "Santa Bárbara de Samaná"
+     },
+     {
+      "id": 18,
+      "dietaT1": 0,
+      "dietaT2": 1000,
+      "priceT1": 0,
+      "priceT2": 4000,
+      "helperT1": 0,
+      "helperT2": 1500,
+      "province": "Independencia",
+      "municipality": "Jimaní"
+     }
+    ],
+    "license": "",
+    "truckId": 4,
+    "username": "Emil",
+    "salaryType": "perTrip",
+    "fixedAmount": 0,
+    "percentageAmount": 20,
+    "password": "$2b$10$BYdAeNc1XK6nRrBzx08U1.qPY6f5j1MDeMO4JSGb6HBNaMQIjXrFO"
+   }
+  },
+  {
+   "id": 4,
+   "rec": {
+    "id": 4,
+    "name": "Edwin",
+    "phone": "",
+    "rates": [
+     {
+      "id": 1,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 900,
+      "priceT2": 1200,
+      "helperT1": 700,
+      "helperT2": 750,
+      "province": "Santiago",
+      "municipality": "Santiago de los Caballeros"
+     },
+     {
+      "id": 2,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Espaillat",
+      "municipality": "Moca"
+     },
+     {
+      "id": 3,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Santiago",
+      "municipality": "Navarrete"
+     },
+     {
+      "id": 4,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "La Vega"
+     },
+     {
+      "id": 5,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1100,
+      "priceT2": 1300,
+      "helperT1": 700,
+      "helperT2": 800,
+      "province": "Valverde",
+      "municipality": "Esperanza"
+     },
+     {
+      "id": 6,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1100,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Hermanas Mirabal",
+      "municipality": "Salcedo"
+     },
+     {
+      "id": 7,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1300,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "Monseñor Nouel",
+      "municipality": "Bonao"
+     },
+     {
+      "id": 8,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1400,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "Jarabacoa"
+     },
+     {
+      "id": 9,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1400,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "Sánchez Ramírez",
+      "municipality": "Cotuí"
+     },
+     {
+      "id": 10,
+      "dietaT1": 300,
+      "dietaT2": 300,
+      "priceT1": 1400,
+      "priceT2": 1700,
+      "helperT1": 800,
+      "helperT2": 900,
+      "province": "Duarte",
+      "municipality": "San Francisco de Macorís"
+     },
+     {
+      "id": 11,
+      "dietaT1": 300,
+      "dietaT2": 300,
+      "priceT1": 1400,
+      "priceT2": 1600,
+      "helperT1": 800,
+      "helperT2": 900,
+      "province": "Valverde",
+      "municipality": "Mao"
+     },
+     {
+      "id": 12,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1700,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "Puerto Plata",
+      "municipality": "Puerto Plata"
+     },
+     {
+      "id": 13,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1800,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "Puerto Plata",
+      "municipality": "Cabarete"
+     },
+     {
+      "id": 14,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1800,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "María Trinidad Sánchez",
+      "municipality": "Nagua"
+     },
+     {
+      "id": 15,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1900,
+      "priceT2": 0,
+      "helperT1": 1000,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "Constanza"
+     },
+     {
+      "id": 16,
+      "dietaT1": 500,
+      "dietaT2": 600,
+      "priceT1": 2000,
+      "priceT2": 2500,
+      "helperT1": 1000,
+      "helperT2": 1200,
+      "province": "Dajabón",
+      "municipality": "Dajabón"
+     },
+     {
+      "id": 17,
+      "dietaT1": 500,
+      "dietaT2": 0,
+      "priceT1": 2200,
+      "priceT2": 0,
+      "helperT1": 1000,
+      "helperT2": 0,
+      "province": "Samaná",
+      "municipality": "Santa Bárbara de Samaná"
+     },
+     {
+      "id": 18,
+      "dietaT1": 0,
+      "dietaT2": 1000,
+      "priceT1": 0,
+      "priceT2": 4000,
+      "helperT1": 0,
+      "helperT2": 1500,
+      "province": "Independencia",
+      "municipality": "Jimaní"
+     }
+    ],
+    "license": "",
+    "truckId": 2,
+    "username": "Edwin",
+    "salaryType": "perTrip",
+    "fixedAmount": 0,
+    "percentageAmount": 20,
+    "password": "$2b$10$BYdAeNc1XK6nRrBzx08U1.qPY6f5j1MDeMO4JSGb6HBNaMQIjXrFO"
+   }
+  },
+  {
+   "id": 6,
+   "rec": {
+    "id": 6,
+    "name": "Luis Alberto",
+    "phone": "",
+    "rates": [
+     {
+      "id": 1,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 900,
+      "priceT2": 1200,
+      "helperT1": 700,
+      "helperT2": 750,
+      "province": "Santiago",
+      "municipality": "Santiago de los Caballeros"
+     },
+     {
+      "id": 2,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Espaillat",
+      "municipality": "Moca"
+     },
+     {
+      "id": 3,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Santiago",
+      "municipality": "Navarrete"
+     },
+     {
+      "id": 4,
+      "dietaT1": 0,
+      "dietaT2": 0,
+      "priceT1": 1000,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "La Vega"
+     },
+     {
+      "id": 5,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1100,
+      "priceT2": 1300,
+      "helperT1": 700,
+      "helperT2": 800,
+      "province": "Valverde",
+      "municipality": "Esperanza"
+     },
+     {
+      "id": 6,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1100,
+      "priceT2": 0,
+      "helperT1": 700,
+      "helperT2": 0,
+      "province": "Hermanas Mirabal",
+      "municipality": "Salcedo"
+     },
+     {
+      "id": 7,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1300,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "Monseñor Nouel",
+      "municipality": "Bonao"
+     },
+     {
+      "id": 8,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1400,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "Jarabacoa"
+     },
+     {
+      "id": 9,
+      "dietaT1": 300,
+      "dietaT2": 0,
+      "priceT1": 1400,
+      "priceT2": 0,
+      "helperT1": 800,
+      "helperT2": 0,
+      "province": "Sánchez Ramírez",
+      "municipality": "Cotuí"
+     },
+     {
+      "id": 10,
+      "dietaT1": 300,
+      "dietaT2": 300,
+      "priceT1": 1400,
+      "priceT2": 1700,
+      "helperT1": 800,
+      "helperT2": 900,
+      "province": "Duarte",
+      "municipality": "San Francisco de Macorís"
+     },
+     {
+      "id": 11,
+      "dietaT1": 300,
+      "dietaT2": 300,
+      "priceT1": 1400,
+      "priceT2": 1600,
+      "helperT1": 800,
+      "helperT2": 900,
+      "province": "Valverde",
+      "municipality": "Mao"
+     },
+     {
+      "id": 12,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1700,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "Puerto Plata",
+      "municipality": "Puerto Plata"
+     },
+     {
+      "id": 13,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1800,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "Puerto Plata",
+      "municipality": "Cabarete"
+     },
+     {
+      "id": 14,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1800,
+      "priceT2": 0,
+      "helperT1": 900,
+      "helperT2": 0,
+      "province": "María Trinidad Sánchez",
+      "municipality": "Nagua"
+     },
+     {
+      "id": 15,
+      "dietaT1": 400,
+      "dietaT2": 0,
+      "priceT1": 1900,
+      "priceT2": 0,
+      "helperT1": 1000,
+      "helperT2": 0,
+      "province": "La Vega",
+      "municipality": "Constanza"
+     },
+     {
+      "id": 16,
+      "dietaT1": 500,
+      "dietaT2": 600,
+      "priceT1": 2000,
+      "priceT2": 2500,
+      "helperT1": 1000,
+      "helperT2": 1200,
+      "province": "Dajabón",
+      "municipality": "Dajabón"
+     },
+     {
+      "id": 17,
+      "dietaT1": 500,
+      "dietaT2": 0,
+      "priceT1": 2200,
+      "priceT2": 0,
+      "helperT1": 1000,
+      "helperT2": 0,
+      "province": "Samaná",
+      "municipality": "Santa Bárbara de Samaná"
+     },
+     {
+      "id": 18,
+      "dietaT1": 0,
+      "dietaT2": 1000,
+      "priceT1": 0,
+      "priceT2": 4000,
+      "helperT1": 0,
+      "helperT2": 1500,
+      "province": "Independencia",
+      "municipality": "Jimaní"
+     }
+    ],
+    "license": "03104108034",
+    "truckId": 6,
+    "username": "Luis",
+    "salaryType": "perTrip",
+    "fixedAmount": 0,
+    "percentageAmount": 0,
+    "password": "$2b$10$BYdAeNc1XK6nRrBzx08U1.qPY6f5j1MDeMO4JSGb6HBNaMQIjXrFO"
+   }
+  },
+  {
+   "id": 7,
+   "rec": {
+    "id": 7,
+    "name": "Quelbin",
+    "phone": "",
+    "rates": [],
+    "license": "",
+    "truckId": 3,
+    "username": "Quelbin",
+    "salaryType": "perTrip",
+    "fixedAmount": 0,
+    "percentageAmount": 0,
+    "password": "$2b$10$BYdAeNc1XK6nRrBzx08U1.qPY6f5j1MDeMO4JSGb6HBNaMQIjXrFO"
+   }
+  },
+  {
+   "id": 8,
+   "rec": {
+    "id": 8,
+    "name": "Richard",
+    "phone": "",
+    "rates": [],
+    "license": "",
+    "truckId": null,
+    "username": "richard",
+    "salaryType": "perTrip",
+    "fixedAmount": 0,
+    "percentageAmount": 0,
+    "password": "$2b$10$BYdAeNc1XK6nRrBzx08U1.qPY6f5j1MDeMO4JSGb6HBNaMQIjXrFO"
+   }
+  },
+  {
+   "id": 9,
+   "rec": {
+    "id": 9,
+    "name": "Leury",
+    "phone": "",
+    "rates": [],
+    "license": "",
+    "truckId": null,
+    "username": "Leury",
+    "salaryType": "perTrip",
+    "fixedAmount": 0,
+    "percentageAmount": 0,
+    "password": "$2b$10$BYdAeNc1XK6nRrBzx08U1.qPY6f5j1MDeMO4JSGb6HBNaMQIjXrFO"
+   }
+  }
+ ],
+ "bl_clients": [
+  {
+   "id": 1,
+   "rec": {
+    "id": 1,
+    "email": "",
+    "notes": "Tarifas Brutas",
+    "phone": "",
+    "rates": [
+     {
+      "id": 1,
+      "priceT1": 5500,
+      "priceT2": 9000,
+      "province": "Santiago",
+      "municipality": "Santiago de los Caballeros"
+     },
+     {
+      "id": 2,
+      "priceT1": 6500,
+      "priceT2": 0,
+      "province": "Espaillat",
+      "municipality": "Moca"
+     },
+     {
+      "id": 3,
+      "priceT1": 6500,
+      "priceT2": 0,
+      "province": "Santiago",
+      "municipality": "Villa González"
+     },
+     {
+      "id": 4,
+      "priceT1": 7300,
+      "priceT2": 9000,
+      "province": "Santiago",
+      "municipality": "Navarrete"
+     },
+     {
+      "id": 5,
+      "priceT1": 7500,
+      "priceT2": 0,
+      "province": "Hermanas Mirabal",
+      "municipality": "Salcedo"
+     },
+     {
+      "id": 6,
+      "priceT1": 8500,
+      "priceT2": 11000,
+      "province": "La Vega",
+      "municipality": "La Vega"
+     },
+     {
+      "id": 7,
+      "priceT1": 9000,
+      "priceT2": 0,
+      "province": "Monseñor Nouel",
+      "municipality": "Bonao"
+     },
+     {
+      "id": 8,
+      "priceT1": 9000,
+      "priceT2": 0,
+      "province": "La Vega",
+      "municipality": "Jarabacoa"
+     },
+     {
+      "id": 9,
+      "priceT1": 9450,
+      "priceT2": 0,
+      "province": "Sánchez Ramírez",
+      "municipality": "Cotuí"
+     },
+     {
+      "id": 10,
+      "priceT1": 9500,
+      "priceT2": 13000,
+      "province": "Duarte",
+      "municipality": "San Francisco de Macorís"
+     },
+     {
+      "id": 11,
+      "priceT1": 10000,
+      "priceT2": 0,
+      "province": "María Trinidad Sánchez",
+      "municipality": "Nagua"
+     },
+     {
+      "id": 12,
+      "priceT1": 10360,
+      "priceT2": 0,
+      "province": "Puerto Plata",
+      "municipality": "Puerto Plata"
+     },
+     {
+      "id": 13,
+      "priceT1": 12000,
+      "priceT2": 0,
+      "province": "La Vega",
+      "municipality": "Constanza"
+     },
+     {
+      "id": 14,
+      "priceT1": 13400,
+      "priceT2": 20000,
+      "province": "Dajabón",
+      "municipality": "Dajabón"
+     },
+     {
+      "id": 15,
+      "priceT1": 14210,
+      "priceT2": 0,
+      "province": "Samaná",
+      "municipality": "Santa Bárbara de Samaná"
+     },
+     {
+      "id": 16,
+      "priceT1": 7210,
+      "priceT2": 10300,
+      "province": "Valverde",
+      "municipality": "Esperanza"
+     },
+     {
+      "id": 17,
+      "priceT1": 9240,
+      "priceT2": 13000,
+      "province": "Valverde",
+      "municipality": "Mao"
+     },
+     {
+      "id": 18,
+      "priceT1": 0,
+      "priceT2": 0,
+      "province": "Santo Domingo / Distrito Nacional",
+      "municipality": "Santo Domingo de Guzmán"
+     },
+     {
+      "id": 19,
+      "priceT1": 0,
+      "priceT2": 35000,
+      "province": "San Juan",
+      "municipality": "San Juan de la Maguana"
+     },
+     {
+      "id": 20,
+      "priceT1": 0,
+      "priceT2": 38000,
+      "province": "Elías Piña",
+      "municipality": "Comendador"
+     },
+     {
+      "id": 21,
+      "priceT1": 0,
+      "priceT2": 40000,
+      "province": "Independencia",
+      "municipality": "Jimaní"
+     }
+    ],
+    "rules": {
+     "requiresPOD": true,
+     "billingCycle": "bimonthly_delayed",
+     "paymentTerms": 30,
+     "period1PayDay": 15,
+     "period2PayDay": 31,
+     "defaultBrokerId": 1,
+     "brokerPassThrough": true,
+     "requiresDocuments": true,
+     "requiresInvoiceRef": true
+    },
+    "status": "active",
+    "companyName": "Bocel",
+    "contactPerson": ""
+   }
+  },
+  {
+   "id": 2,
+   "rec": {
+    "id": 2,
+    "email": "",
+    "notes": "",
+    "phone": "",
+    "rates": [],
+    "rules": {
+     "requiresPOD": false,
+     "billingCycle": "net",
+     "paymentTerms": 30,
+     "period1PayDay": 30,
+     "period2PayDay": 15,
+     "defaultBrokerId": null,
+     "requiresDocuments": false,
+     "requiresInvoiceRef": false
+    },
+    "status": "active",
+    "companyName": "Paul Neuman",
+    "contactPerson": ""
+   }
+  }
+ ],
+ "bl_partners": [
+  {
+   "id": 1,
+   "rec": {
+    "id": 1,
+    "name": "Robinson Alvarez",
+    "email": "",
+    "notes": "",
+    "phone": "",
+    "username": "Robinson",
+    "commissionPct": 40,
+    "negotiationType": "Net Profit %",
+    "password": "$2b$10$BYdAeNc1XK6nRrBzx08U1.qPY6f5j1MDeMO4JSGb6HBNaMQIjXrFO"
+   }
+  },
+  {
+   "id": 2,
+   "rec": {
+    "id": 2,
+    "name": "Eudy F Castro",
+    "email": "",
+    "notes": "",
+    "phone": "",
+    "username": "Eudy",
+    "commissionPct": 50,
+    "negotiationType": "Net Profit %",
+    "password": "$2b$10$BYdAeNc1XK6nRrBzx08U1.qPY6f5j1MDeMO4JSGb6HBNaMQIjXrFO"
+   }
+  },
+  {
+   "id": 3,
+   "rec": {
+    "id": 3,
+    "name": "Johnny Artiles",
+    "email": "",
+    "notes": "",
+    "phone": "",
+    "username": "Johnny",
+    "commissionPct": 50,
+    "negotiationType": "Net Profit %",
+    "password": "$2b$10$BYdAeNc1XK6nRrBzx08U1.qPY6f5j1MDeMO4JSGb6HBNaMQIjXrFO"
+   }
+  }
+ ],
+ "bl_brokers": [
+  {
+   "id": 1,
+   "rec": {
+    "id": 1,
+    "name": "Rodtransp",
+    "email": "luis@brokercorp.do",
+    "notes": "Principal intermediario",
+    "phone": "",
+    "commissionPct": 10,
+    "contactPerson": ""
+   }
+  }
+ ],
+ "bl_suppliers": [
+  {
+   "id": 1,
+   "rec": {
+    "id": 1,
+    "name": "Shell Los Alamos",
+    "email": "",
+    "notes": "",
+    "phone": "",
+    "creditDays": 15,
+    "billingCycle": "cutoff_period",
+    "contactPerson": "",
+    "period1CutDay": 15,
+    "paymentCondition": "credit"
+   }
+  }
+ ],
+ "bl_invoices": [
+  {
+   "id": 1,
+   "rec": {
+    "id": 1,
+    "date": "2026-04-20",
+    "notes": "",
+    "status": "paid",
+    "dueDate": "2026-05-20",
+    "tripIds": [
+     17
+    ],
+    "clientId": 2,
+    "invoiceNumber": "FAC-2026-0001"
+   }
+  },
+  {
+   "id": 2,
+   "rec": {
+    "id": 2,
+    "date": "2026-04-17",
+    "notes": "",
+    "amount": 66366,
+    "status": "paid",
+    "dueDate": "2026-05-17",
+    "tripIds": [
+     15,
+     18,
+     19,
+     20,
+     21,
+     29,
+     28,
+     22,
+     25
+    ],
+    "clientId": 1,
+    "invoiceNumber": "FAC-2026-0002",
+    "brokerDeduction": 7374
+   }
+  }
+ ],
+ "bl_cobros": [
+  {
+   "id": 1,
+   "rec": {
+    "id": 1,
+    "amount": 8000,
+    "status": "collected",
+    "clientId": 2,
+    "periodKey": "2026-04",
+    "collectedDate": "2026-04-20",
+    "collectedTripIds": [
+     17
+    ]
+   }
+  },
+  {
+   "id": 2,
+   "rec": {
+    "id": 2,
+    "amount": 141610,
+    "status": "collected",
+    "clientId": 1,
+    "periodKey": "2026-04-h1",
+    "collectedDate": "2026-04-30",
+    "collectedTripIds": [
+     15,
+     18,
+     19,
+     20,
+     21,
+     29,
+     28,
+     22,
+     25,
+     31,
+     32,
+     39,
+     43,
+     23,
+     26,
+     49,
+     12,
+     48
+    ]
+   }
+  },
+  {
+   "id": 3,
+   "rec": {
+    "id": 3,
+    "amount": 323010,
+    "status": "collected",
+    "clientId": 1,
+    "periodKey": "2026-04-h2",
+    "collectedDate": "2026-04-30",
+    "collectedTripIds": [
+     59,
+     64,
+     65,
+     67,
+     69,
+     58,
+     60,
+     66,
+     68,
+     56,
+     61,
+     63,
+     55,
+     62,
+     52,
+     53,
+     54,
+     57,
+     33,
+     34,
+     45,
+     36,
+     47,
+     51,
+     41,
+     37,
+     44,
+     30,
+     35,
+     40,
+     42,
+     38,
+     50,
+     79,
+     81,
+     80,
+     83
+    ]
+   }
+  }
+ ],
+ "bl_fixed_templates": [],
+ "bl_settlement_status": [
+  {
+   "id": 1,
+   "data": {
+    "_version": 1791214423623,
+    "__bankAccount": {
+     "bank": "",
+     "name": "Cuenta Principal",
+     "openingDate": "2026-05-25",
+     "openingBalance": 0
+    },
+    "__bankReconciliation": {}
+   }
+  }
+ ],
+ "push_tokens": [],
+ "bl_rate_limits": [],
+ "bl_staff": [
+  {
+   "id": 1,
+   "rec": {
+    "id": 1,
+    "name": "Ana Oficina",
+    "username": "ana",
+    "password": "$2b$10$deaJPUj33leyNNUYRswtD.CJ1mKoLPzP0Eb1e4l1VTnjduU.sEGP.",
+    "role": "assistant",
+    "status": "active",
+    "phone": ""
+   }
+  }
+ ]
+}

@@ -1,561 +1,262 @@
-import { useState, Fragment } from "react";
-
-import { Clock, ChevronDown, ChevronRight, CheckCircle2, Users, FileText, Pencil, X, Check } from "lucide-react";
+import { useState, useMemo, Fragment } from "react";
+import { ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, Clock, Users, FileText, Pencil, X, Check, Printer, FileSpreadsheet, PiggyBank, AlertTriangle } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, genPeriods } from "../utils/helpers.js";
-import { Card, PageHeader, Badge, Th, Td } from "../components/ui/index.jsx";
+import { fmt, genPeriods, today, nxId } from "../utils/helpers.js";
+import { buildPayroll, payrollPayment, payrollKey } from "../utils/payroll.js";
+import { accountBalances, DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
+import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow } from "../utils/printReport.js";
+import { Card, PageHeader, Badge, Btn, Th, Td } from "../components/ui/index.jsx";
 
-function OverrideInline({ exp, onSave, onCancel }) {
-  const [amount, setAmount] = useState(exp.amount);
-  const [note, setNote] = useState(exp.overrideNote || "");
+const PURPLE = "#9b7fe8";
+const inp = { background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 5, color: colors.text, padding: "4px 8px", fontSize: 12 };
+const smallBtn = (bg, color, border) => ({ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, border: border || "none", background: bg, color, cursor: "pointer", fontSize: 11, fontWeight: 600 });
 
-  const inputStyle = {
-    background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 5,
-    color: colors.text, padding: "3px 6px", fontSize: 12,
-  };
-
-  return (
-    <tr style={{ background: colors.accent + "0a" }}>
-      <td colSpan={7} style={{ padding: "8px 10px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, color: colors.textMuted }}>Override pago:</span>
-          <input
-            type="number"
-            value={amount}
-            onChange={e => setAmount(Number(e.target.value))}
-            style={{ ...inputStyle, width: 90 }}
-          />
-          <input
-            placeholder="Nota (ej: ajuste por daño, bono, etc.)"
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            style={{ ...inputStyle, width: 220 }}
-          />
-          <button onClick={() => onSave(amount, note)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 5, border: "none", background: colors.green, color: "white", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
-            <Check size={11} /> Guardar
-          </button>
-          <button onClick={onCancel} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 5, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 11 }}>
-            <X size={11} /> Cancelar
-          </button>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-function TotalOverrideInline({ current, note, onSave, onCancel }) {
+function OverrideBox({ label, current, note, onSave, onCancel, color = PURPLE }) {
   const [amount, setAmount] = useState(current);
   const [n, setN] = useState(note || "");
-  const inp = { background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 5, color: colors.text, padding: "4px 8px", fontSize: 12 };
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8, padding: "8px 10px", background: "#7c3aed18", borderRadius: 7, border: `1px solid #7c3aed40` }}>
-      <span style={{ fontSize: 11, color: "#9b7fe8", fontWeight: 600 }}>✏️ Override total:</span>
-      <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} style={{ ...inp, width: 100 }} />
-      <input placeholder="Nota (ej: acuerdo especial, descuento...)" value={n} onChange={e => setN(e.target.value)} style={{ ...inp, width: 230 }} />
-      <button onClick={() => onSave(amount, n)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, border: "none", background: colors.green, color: "white", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
-        <Check size={11} /> Guardar
-      </button>
-      <button onClick={onCancel} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 11 }}>
-        <X size={11} /> Cancelar
-      </button>
-    </div>
-  );
+  return <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", background: color + "18", borderRadius: 7, border: `1px solid ${color}40` }}>
+    <span style={{ fontSize: 11, color, fontWeight: 600 }}>✏️ {label}:</span>
+    <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} style={{ ...inp, width: 100 }} />
+    <input placeholder="Nota (acuerdo especial, bono, daño…)" value={n} onChange={e => setN(e.target.value)} style={{ ...inp, width: 230 }} />
+    <button onClick={() => onSave(amount, n)} style={smallBtn(colors.green, "white")}><Check size={11} /> Guardar</button>
+    <button onClick={onCancel} style={smallBtn("transparent", colors.textMuted, `1px solid ${colors.border}`)}><X size={11} /> Cancelar</button>
+  </div>;
 }
 
-function NominaDriverCard({ driver, exps, pending, paid, pendingTotal, paidTotal, trips, allExpenses, periodDateFrom, periodDateTo, periodLabel, onMarkPaid, onMarkUnpaid, setExpenses, trucks }) {
-  const [showDetail, setShowDetail] = useState(false);
-  const [editingId, setEditingId] = useState(null);
+function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride, onTotalOverride, onClearTotalOverride, onPrint, isMobile }) {
+  const [open, setOpen] = useState(false);
+  const [editingLine, setEditingLine] = useState(null);
   const [editingTotal, setEditingTotal] = useState(false);
+  const d = row.driver;
+  const payLabel = row.payType === "fixed" ? `Fijo ${fmt(row.fixedAmount)}` : row.payType === "percentage" ? `${d.percentageAmount || 0}% del flete` : "Por viaje (tarifario)";
+  const totalOut = pay.net + row.helpers;
 
-  const periodTripIds = new Set(exps.filter(e => e.tripId).map(e => e.tripId));
-  const adelantoExps = (allExpenses||[]).filter(e => {
-    if (e.category !== "adelanto_conductor") return false;
-    if (!(e.driverId === driver.id || (!e.driverId && e.description && e.description.includes(driver.name)))) return false;
-    if (e.tripId) return periodTripIds.has(e.tripId);
-    return e.date >= periodDateFrom && e.date <= periodDateTo;
-  });
-  const adelantos = adelantoExps.reduce((s, e) => s + e.amount, 0);
-
-  // Total override: a special expense entry that replaces the sum of all individual entries
-  const totalOverrideExp = (allExpenses||[]).find(e =>
-    e.category === "nominaTotalOverride" &&
-    e.driverId === driver.id &&
-    e.date >= periodDateFrom && e.date <= periodDateTo
-  );
-  const effectivePendingTotal = totalOverrideExp ? totalOverrideExp.amount : pendingTotal;
-  const effectivePaidTotal    = (totalOverrideExp && totalOverrideExp.status === "paid") ? totalOverrideExp.amount : paidTotal;
-  const netoAPagar = Math.max(0, effectivePendingTotal - adelantos);
-
-  const saveTotalOverride = (amount, note) => {
-    setExpenses(prev => {
-      const existing = prev.find(e =>
-        e.category === "nominaTotalOverride" && e.driverId === driver.id &&
-        e.date >= periodDateFrom && e.date <= periodDateTo
-      );
-      if (existing) {
-        return prev.map(e => e.id === existing.id
-          ? { ...e, amount, overrideNote: note || undefined, calcAmount: pendingTotal }
-          : e);
-      }
-      const newId = Math.max(0, ...prev.map(e => e.id)) + 1;
-      return [...prev, {
-        id: newId, category: "nominaTotalOverride", driverId: driver.id,
-        amount, overrideNote: note || undefined, calcAmount: pendingTotal,
-        date: periodDateFrom, description: note || "Override total nómina",
-        paymentMethod: "transfer", status: "pending", supplierId: null, tripId: null,
-      }];
-    });
-    setEditingTotal(false);
-  };
-
-  const clearTotalOverride = () => {
-    setExpenses(prev => prev.filter(e =>
-      !(e.category === "nominaTotalOverride" && e.driverId === driver.id &&
-        e.date >= periodDateFrom && e.date <= periodDateTo)
-    ));
-  };
-
-  const handleOverrideSave = (exp, newAmount, note) => {
-    setExpenses(prev => prev.map(e => {
-      if (e.id !== exp.id) return e;
-      return {
-        ...e,
-        amount: newAmount,
-        overrideNote: note || undefined,
-        calcAmount: e.calcAmount ?? e.amount, // preserve original calculated amount
-      };
-    }));
-    setEditingId(null);
-  };
-
-  const generateReport = () => {
-    const tripRowsHTML = exps.map(exp => {
-      const trip = trips.find(tr => tr.id === exp.tripId);
-      const route = trip ? `${trip.municipality || trip.destination || "—"}, ${trip.province || ""}` : "—";
-      const tripDiscounts = trip ? (trip.discounts || []).filter(d => d.amount > 0) : [];
-      const linkedAdel = adelantoExps.find(a => a.tripId === exp.tripId);
-      const isOverridden = exp.calcAmount !== undefined && exp.calcAmount !== exp.amount;
-      let dietaAmt = 0, ayudanteAmt = 0, baseChofer = exp.amount;
-      if (driver.salaryType === "perTrip" && trip) {
-        const tk = (trucks || []).find(t => t.id === trip.truckId);
-        const effectiveSize = (trip.tarifaOverride && trip.tarifaOverride !== "custom") ? trip.tarifaOverride : (tk?.size || "T1");
-        const rate = (driver.rates || []).find(r => r.province === trip.province && r.municipality === trip.municipality);
-        if (rate) {
-          dietaAmt = effectiveSize === "T2" ? (rate.dietaT2 || 0) : (rate.dietaT1 || 0);
-          ayudanteAmt = effectiveSize === "T2" ? (rate.helperT2 || 0) * 2 : (rate.helperT1 || 0);
-          baseChofer = Math.max(0, exp.amount - dietaAmt - ayudanteAmt);
-        }
-      }
-      const deductionsHTML = [
-        ...tripDiscounts.map(d => `<div style="font-size:11px;color:#c0392b;padding-left:8px">↳ Desc: ${d.desc || "—"} − ${fmt(d.amount)}</div>`),
-        ...(linkedAdel ? [`<div style="font-size:11px;color:#e67e22;padding-left:8px">↳ Adelanto: − ${fmt(linkedAdel.amount)}</div>`] : []),
-        ...(isOverridden ? [`<div style="font-size:11px;color:#7c5cbf;padding-left:8px">✏️ Override (calc: ${fmt(exp.calcAmount)})${exp.overrideNote ? ` — ${exp.overrideNote}` : ""}</div>`] : []),
-      ].join("");
-      const isPaid = exp.status === "paid";
-      return `<tr>
-        <td>${exp.date}</td>
-        <td style="color:#666">${exp.tripId ? `#${exp.tripId}` : "—"}</td>
-        <td>${route}</td>
-        <td style="text-align:right;font-weight:600;color:${isPaid ? "#27ae60" : "#e67e22"}">${fmt(baseChofer)}</td>
-        <td class="right">${dietaAmt > 0 ? fmt(dietaAmt) : "—"}</td>
-        <td class="right">${ayudanteAmt > 0 ? fmt(ayudanteAmt) : "—"}</td>
-        <td style="font-size:12px">${deductionsHTML || "—"}</td>
-      </tr>`;
-    }).join("");
-    const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Reporte Nómina — ${driver.name}</title>
-<style>
-  body{font-family:Arial,sans-serif;max-width:720px;margin:0 auto;padding:24px;color:#1a1a2e;background:#fff}
-  .header{display:flex;justify-content:space-between;border-bottom:3px solid #1a3d7c;padding-bottom:15px;margin-bottom:20px}
-  .logo{font-size:24px;font-weight:bold;color:#1a3d7c}
-  .subtitle{color:#888;font-size:12px}
-  h2{font-size:16px;margin:0 0 4px;color:#1a3d7c}
-  .sub{color:#888;font-size:13px;margin-bottom:20px}
-  table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px}
-  th{background:#f0f4ff;padding:9px 10px;text-align:left;font-size:12px;border-bottom:2px solid #c8d6f8;color:#555}
-  td{padding:8px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top}
-  .right{text-align:right}
-  .sep{border-top:2px solid #dde4f5}
-  .total-lbl{text-align:right;font-weight:700;font-size:13px;color:#555;padding-top:10px}
-  .total-val{text-align:right;font-weight:700;font-size:13px;padding-top:10px}
-  .neto-lbl{text-align:right;font-weight:800;font-size:15px;color:#e67e22;padding-top:6px}
-  .neto-val{text-align:right;font-weight:800;font-size:18px;color:#e67e22;padding-top:6px}
-  .green{color:#27ae60}
-  .red{color:#c0392b}
-  .footer{font-size:11px;color:#bbb;text-align:center;margin-top:28px;border-top:1px solid #eee;padding-top:12px}
-  @media print{body{padding:10px}}
-</style>
-</head>
-<body>
-<div class="header">
-  <div>
-    <div class="logo">B-Logix</div>
-    <div class="subtitle">Logística y Distribución</div>
-  </div>
-  <div style="text-align:right">
-    <h2>Reporte de Nómina</h2>
-    <div class="subtitle"><strong>${driver.name}</strong></div>
-    <div class="subtitle">Corte: ${periodLabel || ""}</div>
-  </div>
-</div>
-<table>
-  <thead>
-    <tr>
-      <th>Fecha</th><th>Viaje</th><th>Ruta</th><th class="right">Chofer</th><th class="right">Dieta</th><th class="right">Ayudante*</th><th>Descuentos / Notas</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${tripRowsHTML}
-    <tr class="sep">
-      <td colspan="6" class="total-lbl">Bruto calculado:</td>
-      <td class="total-val" style="color:#e67e22">${fmt(pendingTotal)}</td>
-    </tr>
-    ${totalOverrideExp ? `<tr>
-      <td colspan="6" class="total-lbl" style="color:#7c3aed">✏️ Override total${totalOverrideExp.overrideNote ? ` (${totalOverrideExp.overrideNote})` : ""}:</td>
-      <td class="total-val" style="color:#7c3aed">${fmt(totalOverrideExp.amount)}</td>
-    </tr>` : ""}
-    ${adelantos > 0 ? `<tr>
-      <td colspan="6" class="total-lbl red">Adelantos a descontar:</td>
-      <td class="total-val red">− ${fmt(adelantos)}</td>
-    </tr>` : ""}
-    <tr>
-      <td colspan="6" class="neto-lbl">💰 NETO A TRANSFERIR:</td>
-      <td class="neto-val">${fmt(netoAPagar)}</td>
-    </tr>
-    ${paidTotal > 0 ? `<tr>
-      <td colspan="6" class="total-lbl green">Ya pagado este corte:</td>
-      <td class="total-val green">${fmt(paidTotal)}</td>
-    </tr>` : ""}
-  </tbody>
-</table>
-<div class="footer">Generado por B-Logix &nbsp;·&nbsp; ${new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })}</div>
-</body></html>`;
-    const w = window.open("", "_blank", "width=820,height=700");
-    if (!w) return;
-    w.document.write(html);
-    w.document.close();
-    setTimeout(() => w.print(), 500);
-  };
-
-  return <Card style={{ marginBottom: 10 }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+  return <Card style={{ marginBottom: 10, borderLeft: `4px solid ${pay.paid ? colors.green : pay.partial ? colors.orange : colors.border}` }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 36, height: 36, borderRadius: "50%", background: colors.accent+"22", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Users size={16} color={colors.accent} />
-        </div>
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: colors.accent + "22", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Users size={16} color={colors.accent} /></div>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 14 }}>{driver.name}</div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{d.name}</div>
           <div style={{ fontSize: 11, color: colors.textMuted }}>
-            {exps.length} viaje{exps.length !== 1 ? "s" : ""} • {driver.salaryType === "fixed" ? `Fijo: ${fmt(driver.fixedAmount||0)}` : driver.salaryType === "porcentaje" ? `${driver.percentageAmount||20}%` : "20% por viaje"}
+            {row.tripCount} viaje{row.tripCount !== 1 ? "s" : ""} recibido{row.tripCount !== 1 ? "s" : ""} · {payLabel}
+            {row.pendingCount > 0 && <span style={{ color: colors.orange, marginLeft: 6 }}>· {row.pendingCount} sin documentos (no se paga aún)</span>}
+            {row.missingRates > 0 && <span style={{ color: colors.red, marginLeft: 6 }}>· {row.missingRates} sin tarifa</span>}
           </div>
         </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <button onClick={generateReport} style={{ fontSize: 11, color: colors.green, background: colors.green+"14", border: `1px solid ${colors.green}40`, borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, padding: "4px 9px" }}>
-          <FileText size={12} /> Reporte
-        </button>
-        <button onClick={() => setShowDetail(d => !d)} style={{ fontSize: 11, color: colors.accent, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, padding: "4px 8px" }}>
-          {showDetail ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-          {showDetail ? "Ocultar" : "Ver detalle"}
-        </button>
-        {pending.length > 0
-          ? <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {effectivePaidTotal > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 11, color: colors.green }}>Pagado: {fmt(effectivePaidTotal)}</span>
-                  <button onClick={onMarkUnpaid} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 10 }}>
-                    Desmarcar
-                  </button>
-                </div>
-              )}
-              <div style={{ textAlign: "right" }}>
-                {totalOverrideExp
-                  ? <>
-                      <div style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(pendingTotal)}</div>
-                      <div style={{ fontSize: 10, color: "#9b7fe8", fontWeight: 600 }}>✏️ OVERRIDE</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: "#9b7fe8" }}>{fmt(netoAPagar)}</div>
-                      {totalOverrideExp.overrideNote && <div style={{ fontSize: 10, color: "#9b7fe8" }}>{totalOverrideExp.overrideNote}</div>}
-                    </>
-                  : adelantos > 0
-                    ? <>
-                        <div style={{ fontSize: 10, color: colors.textMuted }}>Bruto: {fmt(pendingTotal)}</div>
-                        <div style={{ fontSize: 10, color: colors.orange }}>Adelanto: –{fmt(adelantos)}</div>
-                        <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>A TRANSFERIR</div>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: colors.orange }}>{fmt(netoAPagar)}</div>
-                      </>
-                    : <>
-                        <div style={{ fontSize: 10, color: colors.textMuted }}>A PAGAR</div>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: colors.orange }}>{fmt(effectivePendingTotal)}</div>
-                      </>
-                }
-              </div>
-              <button
-                onClick={() => setEditingTotal(t => !t)}
-                title="Override total"
-                style={{ background: totalOverrideExp ? "#7c3aed22" : "transparent", border: `1px solid ${totalOverrideExp ? "#7c3aed60" : colors.border}`, color: totalOverrideExp ? "#9b7fe8" : colors.textMuted, borderRadius: 6, padding: "5px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11 }}
-              >
-                <Pencil size={11} /> Total
-              </button>
-              {totalOverrideExp && (
-                <button onClick={clearTotalOverride} title="Quitar override" style={{ background: "transparent", border: "none", color: colors.textMuted, cursor: "pointer", padding: 4 }}>
-                  <X size={12} />
-                </button>
-              )}
-              <button onClick={() => onMarkPaid(effectivePendingTotal)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 8, border: "none", background: colors.green, color: "white", cursor: "pointer", fontWeight: 600, fontSize: 12 }}>
-                <CheckCircle2 size={13} /> Marcar Pagado
-              </button>
-            </div>
-          : <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, color: colors.green, background: colors.green+"18", padding: "6px 12px", borderRadius: 20 }}>
-                <CheckCircle2 size={13} /><span style={{ fontSize: 12, fontWeight: 600 }}>Pagado · {fmt(effectivePaidTotal)}</span>
-              </div>
-              <button onClick={onMarkUnpaid} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 11 }}>
-                Desmarcar
-              </button>
-            </div>
-        }
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <button onClick={onPrint} style={smallBtn(colors.green + "14", colors.green, `1px solid ${colors.green}40`)}><FileText size={12} /> Relación</button>
+        <button onClick={() => setOpen(o => !o)} style={smallBtn("transparent", colors.accent)}>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{open ? "Ocultar" : "Detalle"}</button>
+        <div style={{ textAlign: "right", minWidth: 120 }}>
+          {pay.override && <div style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(pay.driverTotal)}</div>}
+          {pay.override && <div style={{ fontSize: 10, color: PURPLE, fontWeight: 600 }}>✏️ OVERRIDE {pay.override.overrideNote ? `· ${pay.override.overrideNote}` : ""}</div>}
+          {!pay.override && row.advances > 0 && <div style={{ fontSize: 10, color: colors.textMuted }}>Bruto {fmt(pay.driverTotal)} · adelantos −{fmt(row.advances)}</div>}
+          <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>{pay.paid ? "PAGADO" : "A TRANSFERIR"}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: pay.paid ? colors.green : pay.override ? PURPLE : colors.orange }}>{fmt(pay.net)}</div>
+          {row.helpers > 0 && <div style={{ fontSize: 10, color: colors.cyan }}>+ ayudantes {fmt(row.helpers)} ({row.helperCount})</div>}
+        </div>
+        {!pay.paid && <>
+          <button onClick={() => setEditingTotal(t => !t)} title="Override del total" style={smallBtn(pay.override ? PURPLE + "22" : "transparent", pay.override ? PURPLE : colors.textMuted, `1px solid ${pay.override ? PURPLE + "60" : colors.border}`)}><Pencil size={11} /> Total</button>
+          {pay.override && <button onClick={onClearTotalOverride} title="Quitar override" style={{ background: "transparent", border: "none", color: colors.textMuted, cursor: "pointer", padding: 4 }}><X size={12} /></button>}
+          {(totalOut > 0 || row.payType === "fixed") && <button onClick={onMarkPaid} style={{ ...smallBtn(colors.green, "white"), padding: "7px 12px", fontSize: 12 }}><CheckCircle2 size={13} /> Marcar pagado {fmt(totalOut)}</button>}
+        </>}
+        {pay.paid && <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Badge label={`✓ Pagado ${fmt(totalOut)}`} color={colors.green} />
+          <button onClick={onMarkUnpaid} style={smallBtn("transparent", colors.textMuted, `1px solid ${colors.border}`)}>Desmarcar</button>
+        </div>}
       </div>
     </div>
-    {editingTotal && (
-      <TotalOverrideInline
-        current={totalOverrideExp ? totalOverrideExp.amount : pendingTotal}
-        note={totalOverrideExp?.overrideNote || ""}
-        onSave={saveTotalOverride}
-        onCancel={() => setEditingTotal(false)}
-      />
-    )}
-    {showDetail && <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${colors.border}` }}>
-      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+    {editingTotal && <div style={{ marginTop: 8 }}><OverrideBox label="Override total" current={pay.override ? pay.override.amount : pay.driverTotal} note={pay.override?.overrideNote} onSave={(a, n) => { onTotalOverride(a, n); setEditingTotal(false); }} onCancel={() => setEditingTotal(false)} /></div>}
+    {open && <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${colors.border}`, overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-          <Th>Fecha</Th><Th>Viaje #</Th><Th>Ruta</Th><Th align="right">Chofer</Th><Th align="right">Dieta</Th><Th align="right">Ayudante*</Th><Th align="right">Estado</Th>
+          <Th>Viaje</Th><Th>Recibido</Th><Th>Cliente</Th><Th>Destino</Th><Th align="center">Tarifa</Th><Th align="right">Chofer</Th><Th align="right">Dieta</Th><Th align="right">Desc.</Th><Th align="right">Neto chofer</Th><Th align="right">Ayudantes</Th><Th align="right">Estado</Th>
         </tr></thead>
-        <tbody>{exps.map(exp => {
-          const trip = trips.find(tr => tr.id === exp.tripId);
-          const isPaid = exp.status === "paid";
-          const linkedAdel = adelantoExps.find(a => a.tripId === exp.tripId);
-          const tripDiscounts = trip ? (trip.discounts || []).filter(d => d.amount > 0) : [];
-          const isOverridden = exp.calcAmount !== undefined && exp.calcAmount !== exp.amount;
-          const isEditing = editingId === exp.id;
-          let expDieta = 0, expAyudante = 0, expBaseChofer = exp.amount;
-          if (driver.salaryType === "perTrip" && trip) {
-            const tk = (trucks || []).find(t => t.id === trip.truckId);
-            const effectiveSize = (trip.tarifaOverride && trip.tarifaOverride !== "custom") ? trip.tarifaOverride : (tk?.size || "T1");
-            const rate = (driver.rates || []).find(r => r.province === trip.province && r.municipality === trip.municipality);
-            if (rate) {
-              expDieta = effectiveSize === "T2" ? (rate.dietaT2 || 0) : (rate.dietaT1 || 0);
-              expAyudante = effectiveSize === "T2" ? (rate.helperT2 || 0) * 2 : (rate.helperT1 || 0);
-              expBaseChofer = Math.max(0, exp.amount - expDieta - expAyudante);
-            }
-          }
-          return <Fragment key={exp.id}>
-            <tr style={{ borderBottom: `1px solid ${colors.border}11` }}>
-              <Td>{exp.date}</Td>
-              <Td>{exp.tripId ? `#${exp.tripId}` : "—"}</Td>
-              <Td>{trip ? `${trip.municipality || trip.destination || "—"}, ${trip.province || ""}` : exp.description}</Td>
-              <Td align="right">
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
-                  {isOverridden && (
-                    <span style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(exp.calcAmount)}</span>
-                  )}
-                  <span style={{ fontWeight: 700, color: isOverridden ? "#9b7fe8" : (isPaid ? colors.green : colors.orange) }}>{fmt(expBaseChofer)}</span>
-                  {!isPaid && (
-                    <button
-                      onClick={() => setEditingId(isEditing ? null : exp.id)}
-                      title="Override pago"
-                      style={{ background: "none", border: "none", cursor: "pointer", color: isOverridden ? "#9b7fe8" : colors.textMuted, padding: 2, lineHeight: 1, display: "flex" }}
-                    >
-                      <Pencil size={11} />
-                    </button>
-                  )}
-                </div>
-                {isOverridden && exp.overrideNote && (
-                  <div style={{ fontSize: 10, color: "#9b7fe8", marginTop: 2 }}>✏️ {exp.overrideNote}</div>
-                )}
-              </Td>
-              <Td align="right" color={expDieta > 0 ? colors.accent : colors.textMuted}>{expDieta > 0 ? fmt(expDieta) : "—"}</Td>
-              <Td align="right" color={expAyudante > 0 ? colors.cyan : colors.textMuted}>{expAyudante > 0 ? fmt(expAyudante) : "—"}</Td>
-              <Td align="right"><Badge label={isPaid ? "✓ Pagado" : "Pendiente"} color={isPaid ? colors.green : colors.orange} /></Td>
-            </tr>
-            {isEditing && (
-              <OverrideInline
-                key={`edit-${exp.id}`}
-                exp={exp}
-                onSave={(amt, note) => handleOverrideSave(exp, amt, note)}
-                onCancel={() => setEditingId(null)}
-              />
-            )}
-            {tripDiscounts.map((d, i) => (
-              <tr key={`d-${exp.id}-${i}`} style={{ background: "#c0392b08" }}>
-                <Td></Td><Td colSpan={4} style={{ fontSize: 11, color: "#c0392b", paddingLeft: 20 }}>↳ Desc: {d.desc || "—"}</Td>
-                <Td align="right" style={{ fontSize: 11, color: "#c0392b" }}>− {fmt(d.amount)}</Td><Td></Td>
+        <tbody>
+          {pay.lines.map(l => {
+            const { trip, calc, client } = l;
+            const editing = editingLine === trip.id;
+            return <Fragment key={trip.id}>
+              <tr style={{ borderBottom: `1px solid ${colors.border}11` }}>
+                <Td>{trip.date} <span style={{ color: colors.textMuted }}>#{trip.id}</span></Td>
+                <Td>{trip.docsReceivedAt || "—"}</Td>
+                <Td>{client?.companyName || "—"}{calc.sheetName && calc.sheetName !== "General" ? <div style={{ fontSize: 10, color: colors.textMuted }}>tarifario {calc.sheetName}</div> : null}</Td>
+                <Td>{trip.municipality}, {trip.province}</Td>
+                <Td align="center">{calc.size}{!calc.rateFound && row.payType === "perTrip" && <div style={{ fontSize: 10, color: colors.red }}>sin tarifa</div>}</Td>
+                <Td align="right">{fmt(calc.base)}</Td>
+                <Td align="right" color={calc.dieta ? colors.accent : colors.textMuted}>{calc.dieta ? fmt(calc.dieta) : "—"}</Td>
+                <Td align="right" color={calc.discounts ? colors.red : colors.textMuted}>{calc.discounts ? "−" + fmt(calc.discounts) : "—"}</Td>
+                <Td align="right">
+                  <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
+                    {l.overridden && <span style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(calc.driverNet)}</span>}
+                    <b style={{ color: l.overridden ? PURPLE : colors.text }}>{fmt(l.amount)}</b>
+                    {!l.paid && row.payType !== "fixed" && <button onClick={() => setEditingLine(editing ? null : trip.id)} title="Override de este viaje" style={{ background: "none", border: "none", cursor: "pointer", color: l.overridden ? PURPLE : colors.textMuted, padding: 2, display: "flex" }}><Pencil size={11} /></button>}
+                  </div>
+                  {l.overridden && l.exp?.overrideNote && <div style={{ fontSize: 10, color: PURPLE }}>✏️ {l.exp.overrideNote}</div>}
+                </Td>
+                <Td align="right" color={calc.helpersTotal ? colors.cyan : colors.textMuted}>{calc.helpersTotal ? `${fmt(calc.helpersTotal)} (${calc.numHelpers})` : "—"}</Td>
+                <Td align="right"><Badge label={l.paid ? "✓ Pagado" : "Pendiente"} color={l.paid ? colors.green : colors.orange} /></Td>
               </tr>
-            ))}
-            {linkedAdel && (
-              <tr key={`a-${exp.id}`} style={{ background: "#e67e2208" }}>
-                <Td></Td><Td colSpan={4} style={{ fontSize: 11, color: "#e67e22", paddingLeft: 20 }}>↳ Adelanto vinculado</Td>
-                <Td align="right" style={{ fontSize: 11, color: "#e67e22" }}>− {fmt(linkedAdel.amount)}</Td><Td></Td>
-              </tr>
-            )}
-          </Fragment>;
-        })}</tbody>
+              {editing && <tr><td colSpan={11} style={{ padding: "6px 10px" }}><OverrideBox label="Override de este viaje" current={l.amount} note={l.exp?.overrideNote} onSave={(a, n) => { onLineOverride(l, a, n); setEditingLine(null); }} onCancel={() => setEditingLine(null)} /></td></tr>}
+              {(trip.discounts || []).filter(x => x.amount > 0).map((x, i) => <tr key={`d${i}`} style={{ background: colors.red + "08" }}><Td></Td><Td colSpan={7} style={{ fontSize: 11, color: colors.red, paddingLeft: 20 }}>↳ Descuento: {x.desc || "—"}</Td><Td align="right" color={colors.red}>−{fmt(x.amount)}</Td><Td></Td><Td></Td></tr>)}
+            </Fragment>;
+          })}
+          {row.pendingTrips.map(({ trip, client }) => <tr key={`p${trip.id}`} style={{ opacity: 0.55 }}>
+            <Td>{trip.date} <span style={{ color: colors.textMuted }}>#{trip.id}</span></Td><Td color={colors.orange}>Pendiente</Td><Td>{client?.companyName || "—"}</Td><Td>{trip.municipality}, {trip.province}</Td>
+            <Td colSpan={7} style={{ fontSize: 11, color: colors.orange }}>Sin documentos: se paga en la quincena en que la oficina los reciba.</Td>
+          </tr>)}
+        </tbody>
+        <tfoot><tr style={{ borderTop: `2px solid ${colors.border}` }}>
+          <Td colSpan={5} bold>Totales</Td><Td align="right">{fmt(row.base)}</Td><Td align="right">{fmt(row.dieta)}</Td><Td align="right" color={colors.red}>{row.discounts ? "−" + fmt(row.discounts) : "—"}</Td><Td align="right" bold>{fmt(pay.driverTotal)}</Td><Td align="right" bold color={colors.cyan}>{fmt(row.helpers)}</Td><Td></Td>
+        </tr></tfoot>
       </table>
-      </div>
+      {row.advances > 0 && <div style={{ fontSize: 11, color: colors.orange, marginTop: 6 }}>Adelantos del período: −{fmt(row.advances)} (ya pagados en efectivo; se descuentan del neto).</div>}
+      {row.helperNames.length > 0 && <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>Ayudantes: {row.helperNames.join(", ")}</div>}
     </div>}
   </Card>;
 }
 
-function NominaPeriodGroup({ pd, driverCards, periodPending, periodPaid, trips, allExpenses, markPaid, markUnpaid, defaultOpen, setExpenses, trucks }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const allPaid = periodPending === 0;
+/**
+ * Nómina (admin). Fuente única: buildPayroll → un viaje se paga en la quincena en que
+ * la oficina recibió sus documentos. Profit First: la nómina sale de OpEx.
+ */
+export default function NominaPage({ t, expenses, setExpenses, trips, drivers, trucks, clients = [], cobros = [], pfSettings = DEFAULT_PF_SETTINGS, user, isMobile }) {
+  const periods = useMemo(() => genPeriods([...trips.map(x => x.date), ...trips.map(x => x.docsReceivedAt).filter(Boolean), ...expenses.filter(e => e.category === "driverPay").map(e => e.date), today()]), [trips, expenses]);
+  const [pIdx, setPIdx] = useState(0);
+  const [method, setMethod] = useState("transfer");
+  const period = periods[pIdx] || periods[0];
+  const payroll = useMemo(() => buildPayroll({ period, drivers, trips, trucks, clients, expenses }), [period, drivers, trips, trucks, clients, expenses]);
+  const rows = useMemo(() => payroll.drivers.map(row => ({ row, pay: payrollPayment({ row, period, expenses }) })), [payroll, period, expenses]);
+  const key = payrollKey(period);
 
-  return <div style={{ marginBottom: 20 }}>
-    <button onClick={() => setOpen(o => !o)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 6px", marginBottom: open ? 10 : 0, borderBottom: `2px solid ${colors.border}`, background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {open ? <ChevronDown size={15} color={colors.textMuted} /> : <ChevronRight size={15} color={colors.textMuted} />}
-        <span style={{ fontWeight: 700, fontSize: 14 }}>{pd.label}</span>
-        <span style={{ fontSize: 11, color: colors.textMuted }}>{driverCards.length} conductor{driverCards.length !== 1 ? "es" : ""}</span>
-        {allPaid
-          ? <span style={{ fontSize: 11, color: colors.green, background: colors.green+"18", padding: "2px 8px", borderRadius: 10 }}>✓ Pagado</span>
-          : <span style={{ fontSize: 11, color: colors.orange, background: colors.orange+"18", padding: "2px 8px", borderRadius: 10 }}>Pendiente</span>
-        }
-      </div>
-      <div style={{ textAlign: "right" }}>
-        {periodPending > 0 && <div style={{ fontSize: 17, fontWeight: 800, color: colors.orange }}>{fmt(periodPending)}</div>}
-        {allPaid && <div style={{ fontSize: 15, fontWeight: 700, color: colors.green }}>✓ {fmt(periodPaid)}</div>}
-        {periodPaid > 0 && periodPending > 0 && <div style={{ fontSize: 11, color: colors.green }}>Ya pagado: {fmt(periodPaid)}</div>}
-      </div>
-    </button>
-    {open && driverCards.map(g => (
-      <NominaDriverCard key={g.driver.id} {...g} trips={trips} allExpenses={allExpenses}
-        periodDateFrom={pd.dateFrom} periodDateTo={pd.dateTo} periodLabel={pd.label}
-        onMarkPaid={(effectiveTotal) => markPaid(g.driver, pd, effectiveTotal)}
-        onMarkUnpaid={() => markUnpaid(g.driver, pd)}
-        setExpenses={setExpenses}
-        trucks={trucks} />
-    ))}
-  </div>;
-}
+  const pendingTotal = rows.filter(r => !r.pay.paid).reduce((s, r) => s + r.pay.net + r.row.helpers, 0);
+  const paidTotal = rows.filter(r => r.pay.paid).reduce((s, r) => s + r.pay.net + r.row.helpers, 0);
+  const pf = useMemo(() => accountBalances({ cobros, expenses, settings: pfSettings }), [cobros, expenses, pfSettings]);
+  const afterPay = pf.opexAvailable - pendingTotal;
 
-export default function NominaPage({ t, expenses, setExpenses, trips, drivers, trucks }) {
-  const isPayEntry = (e, driver, pd) => {
-    const inPeriod = e.date >= pd.dateFrom && e.date <= pd.dateTo;
-    const isThisDriver = e.driverId === driver.id;
-    return (e.category === "driverPay" || e.category === "nominaTotalOverride") && inPeriod && isThisDriver;
+  // ── Gastos que respaldan la nómina ───────────────────────────────────────
+  const upsert = (list, match, make, patch) => {
+    const ex = list.find(match);
+    if (ex) return list.map(e => e === ex ? { ...e, ...patch(e) } : e);
+    return [...list, { id: nxId(list), ...make(), ...patch({}) }];
   };
 
-  const markPaid = (driver, pd, effectiveTotal) => {
+  const markPaid = ({ row, pay }) => {
+    const date = today();
     setExpenses(prev => {
-      const hasOverride = prev.some(e =>
-        e.category === "nominaTotalOverride" && isPayEntry(e, driver, pd)
-      );
-      const hasAnyRealEntry = prev.some(e => isPayEntry(e, driver, pd));
-      // Fixed-salary driver with no real expense for this period: create a paid nominaTotalOverride
-      if (driver.salaryType === "fixed" && !hasAnyRealEntry) {
-        const fixedAmt = effectiveTotal != null ? effectiveTotal : (driver.fixedAmount || 0);
-        const periodDate = pd.half === 1 ? `${pd.mStr}-01` : `${pd.mStr}-16`;
-        const newId = Math.max(0, ...prev.map(e => e.id)) + 1;
-        return [...prev, {
-          id: newId,
-          category: "nominaTotalOverride",
-          driverId: driver.id,
-          amount: fixedAmt,
-          date: periodDate,
-          status: "paid",
-          paidDate: new Date().toISOString().slice(0, 10),
-          description: `Nómina fija — ${driver.name || driver.driverName} ${pd.mStr} H${pd.half}`,
-          paymentMethod: "transfer",
-          supplierId: null,
-          tripId: null,
-        }];
+      let next = prev;
+      const d = row.driver;
+      if (row.payType === "fixed") {
+        next = upsert(next, e => e.category === "driverPay" && !e.tripId && e.driverId === d.id && e.payrollKey === key,
+          () => ({ category: "driverPay", driverId: d.id, tripId: null, supplierId: null, date: period.dateTo, description: `Nómina fija ${d.name} · ${period.label}` }),
+          () => ({ amount: pay.grossEff, status: "paid", paidDate: date, paymentMethod: method, payrollKey: key }));
+      } else {
+        // Con override total: se reparte proporcionalmente entre los viajes para que los gastos sumen lo pagado
+        const factor = pay.override && pay.driverTotal > 0 ? pay.grossEff / pay.driverTotal : 1;
+        let acc = 0;
+        pay.lines.forEach((l, i) => {
+          const last = i === pay.lines.length - 1;
+          const amount = pay.override ? (last ? Math.round((pay.grossEff - acc) * 100) / 100 : Math.round(l.amount * factor * 100) / 100) : l.amount;
+          acc += amount;
+          if (amount <= 0 && !l.exp) return;
+          next = upsert(next, e => e.category === "driverPay" && e.tripId === l.trip.id,
+            () => ({ category: "driverPay", tripId: l.trip.id, driverId: d.id, supplierId: null, date: l.trip.date, description: `Pago chofer ${d.name} · ${l.trip.municipality}` }),
+            e => ({ amount, calcAmount: e.calcAmount ?? l.calc.driverNet, status: "paid", paidDate: date, paymentMethod: method, payrollKey: key, driverId: d.id }));
+        });
+        if (pay.override && pay.lines.length === 0 && pay.grossEff > 0) {
+          next = upsert(next, e => e.category === "driverPay" && !e.tripId && e.driverId === d.id && e.payrollKey === key,
+            () => ({ category: "driverPay", driverId: d.id, tripId: null, supplierId: null, date: period.dateTo, description: `Nómina ${d.name} · ${period.label}` }),
+            () => ({ amount: pay.grossEff, status: "paid", paidDate: date, paymentMethod: method, payrollKey: key }));
+        }
+        if (pay.override) next = next.map(e => e === pay.override || e.id === pay.override.id ? { ...e, status: "paid", paidDate: date } : e);
       }
-      return prev.map(e => {
-        if (!isPayEntry(e, driver, pd)) return e;
-        // Mark both the override AND the original driverPay entries as paid, so CxP stays clean
-        if (!e.status || e.status === "pending")
-          return { ...e, status: "paid", paidDate: new Date().toISOString().slice(0, 10) };
-        return e;
+      // Ayudantes
+      row.trips.forEach(x => {
+        if (x.calc.helpersTotal <= 0) return;
+        next = upsert(next, e => e.category === "helper" && e.tripId === x.trip.id,
+          () => ({ category: "helper", tripId: x.trip.id, driverId: d.id, supplierId: null, date: x.trip.date, description: `Ayudantes (${x.calc.numHelpers}) · ${x.trip.municipality}` }),
+          e => (e.status === "paid" ? {} : { amount: x.calc.helpersTotal, status: "paid", paidDate: date, paymentMethod: method, payrollKey: key }));
       });
+      return next;
     });
   };
 
-  const markUnpaid = (driver, pd) => {
-    setExpenses(prev => prev.map(e => {
-      if (isPayEntry(e, driver, pd) && e.status === "paid")
-        return { ...e, status: "pending", paidDate: null };
-      return e;
-    }));
+  const markUnpaid = ({ pay }) => {
+    const ids = new Set([...pay.payExps, ...pay.helperExps, ...(pay.override ? [pay.override] : [])].filter(e => e.payrollKey === key || e.tripId).map(e => e.id));
+    setExpenses(prev => prev.map(e => ids.has(e.id) && e.status === "paid" ? { ...e, status: "pending", paidDate: null } : e));
   };
 
-  const fixedDrivers = drivers.filter(d => d.salaryType === "fixed");
-  const periods = genPeriods([
-    ...expenses.filter(e => e.category === "driverPay").map(e => e.date),
-    ...expenses.filter(e => e.category === "nominaTotalOverride" && fixedDrivers.some(d => d.id === e.driverId)).map(e => e.date),
-    ...expenses.filter(e => e.category === "adelanto_conductor").map(e => e.date),
-  ]);
-  const periodGroups = periods.map(pd => {
-    const pdExps = expenses.filter(e => e.category === "driverPay" && e.date >= pd.dateFrom && e.date <= pd.dateTo);
-    const driverCards = drivers.map(driver => {
-      if (driver.salaryType === "fixed") {
-        // Fixed-salary driver: check for a nominaTotalOverride or show fixed amount card
-        const overrideExp = expenses.find(e =>
-          e.category === "nominaTotalOverride" && e.driverId === driver.id &&
-          e.date >= pd.dateFrom && e.date <= pd.dateTo
-        );
-        const fixedAmt = overrideExp ? overrideExp.amount : (driver.fixedAmount || 0);
-        if (fixedAmt === 0 && !overrideExp) return null;
-        const isPaid = overrideExp ? overrideExp.status === "paid" : false;
-        const syntheticExps = overrideExp ? [overrideExp] : [];
-        const pending = isPaid ? [] : syntheticExps.length > 0 ? syntheticExps : [{ id: `fixed-${driver.id}-${pd.mStr}-${pd.half}`, category: "driverPay", driverId: driver.id, amount: fixedAmt, date: pd.dateFrom, status: "pending", description: `Salario fijo: ${driver.name}` }];
-        const paid    = isPaid ? syntheticExps : [];
-        return { driver, exps: syntheticExps, pending, paid,
-          pendingTotal: isPaid ? 0 : fixedAmt,
-          paidTotal:    isPaid ? fixedAmt : 0 };
-      }
-      const exps = pdExps.filter(e => e.driverId === driver.id);
-      const driverPeriodTripIds = new Set(exps.filter(e => e.tripId).map(e => e.tripId));
-      const hasAdelantos = expenses.some(e => {
-        if (e.category !== "adelanto_conductor" || e.driverId !== driver.id) return false;
-        if (e.tripId) return driverPeriodTripIds.has(e.tripId);
-        return e.date >= pd.dateFrom && e.date <= pd.dateTo;
-      });
-      if (exps.length === 0 && !hasAdelantos) return null;
-      const pending = exps.filter(e => !e.status || e.status === "pending");
-      const paid    = exps.filter(e => e.status === "paid");
-      return { driver, exps, pending, paid,
-        pendingTotal: pending.reduce((s,e) => s+e.amount,0),
-        paidTotal:    paid.reduce((s,e) => s+e.amount,0) };
-    }).filter(Boolean);
-    if (driverCards.length === 0) return null;
-    return { pd, driverCards,
-      periodPending: driverCards.reduce((s,g) => s+g.pendingTotal, 0),
-      periodPaid:    driverCards.reduce((s,g) => s+g.paidTotal, 0) };
-  }).filter(Boolean);
+  const lineOverride = (row, l, amount, note) => setExpenses(prev => upsert(prev, e => e.category === "driverPay" && e.tripId === l.trip.id,
+    () => ({ category: "driverPay", tripId: l.trip.id, driverId: row.driver.id, supplierId: null, date: l.trip.date, status: "pending", paymentMethod: "transfer", description: `Pago chofer ${row.driver.name} · ${l.trip.municipality}` }),
+    e => ({ amount: Number(amount) || 0, calcAmount: e.calcAmount ?? l.calc.driverNet, overrideNote: note || undefined, driverId: row.driver.id })));
 
-  const grandPending = periodGroups.reduce((s,g) => s+g.periodPending, 0);
+  const totalOverride = (row, pay, amount, note) => setExpenses(prev => upsert(prev, e => e.category === "nominaTotalOverride" && e.driverId === row.driver.id && e.payrollKey === key,
+    () => ({ category: "nominaTotalOverride", driverId: row.driver.id, tripId: null, supplierId: null, date: period.dateFrom, status: "pending", paymentMethod: "transfer", description: note || "Override total nómina" }),
+    () => ({ amount: Number(amount) || 0, overrideNote: note || undefined, calcAmount: pay.driverTotal, payrollKey: key })));
+  const clearTotalOverride = (row) => setExpenses(prev => prev.filter(e => !(e.category === "nominaTotalOverride" && e.driverId === row.driver.id && e.payrollKey === key)));
+
+  // ── Reportes ──────────────────────────────────────────────────────────────
+  const printDriver = (row) => openPrintWindow(`Viajes ${row.driver.name} ${period.label}`, driverPeriodReportHTML({ row, period, generatedBy: user?.name }));
+  const printPayroll = () => openPrintWindow(`Nómina ${period.label}`, payrollReportHTML({ payroll, generatedBy: user?.name }));
+  const exportXlsx = async () => {
+    const XLSX = await import("xlsx");
+    const { resumen, detalle } = payrollSheets(payroll);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), "Detalle viajes");
+    XLSX.writeFile(wb, `nomina-${period.dateFrom}-a-${period.dateTo}.xlsx`);
+  };
+
+  const navBtn = { background: "transparent", border: `1px solid ${colors.border}`, borderRadius: 6, color: colors.text, cursor: "pointer", padding: "6px 10px", display: "flex", alignItems: "center" };
 
   return <div>
-    <PageHeader title="Nómina" />
-    {grandPending > 0 && (
-      <div style={{ background: colors.orange + "15", border: `1px solid ${colors.orange}40`, borderRadius: 10, padding: "10px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}>
-        <Clock size={18} color={colors.orange} />
-        <div>
-          <div style={{ fontSize: 11, color: colors.orange, fontWeight: 600 }}>TOTAL PENDIENTE DE PAGO</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: colors.orange }}>{fmt(grandPending)}</div>
+    <PageHeader title="Nómina" action={<div style={{ display: "flex", gap: 8 }}>
+      <Btn variant="ghost" onClick={printPayroll}><Printer size={14} /> PDF del período</Btn>
+      <Btn variant="ghost" onClick={exportXlsx}><FileSpreadsheet size={14} /> Excel contabilidad</Btn>
+    </div>} />
+
+    {/* ── Período ── */}
+    <Card style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={() => setPIdx(i => Math.min(periods.length - 1, i + 1))} style={navBtn}><ChevronLeft size={14} /></button>
+          <select value={pIdx} onChange={e => setPIdx(Number(e.target.value))} style={{ ...inp, fontSize: 14, fontWeight: 700, padding: "6px 10px" }}>
+            {periods.map((p, i) => <option key={`${p.mStr}-${p.half}`} value={i}>{p.label}{i === 0 ? " (en curso)" : ""}</option>)}
+          </select>
+          <button onClick={() => setPIdx(i => Math.max(0, i - 1))} disabled={pIdx === 0} style={{ ...navBtn, opacity: pIdx === 0 ? 0.4 : 1 }}><ChevronRight size={14} /></button>
+          <span style={{ fontSize: 11, color: colors.textMuted }}>{period.dateFrom} → {period.dateTo}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+          <span style={{ color: colors.textMuted }}>Pagar por</span>
+          <select value={method} onChange={e => setMethod(e.target.value)} style={inp}><option value="transfer">Transferencia</option><option value="cash">Efectivo</option><option value="check">Cheque</option></select>
         </div>
       </div>
-    )}
-    {periodGroups.length === 0 && <Card><div style={{ textAlign: "center", padding: 40, color: colors.textMuted, fontSize: 13 }}>No hay nómina registrada aún.</div></Card>}
-    {periodGroups.map(({ pd, driverCards, periodPending, periodPaid }, idx) => (
-      <NominaPeriodGroup key={`${pd.mStr}-${pd.half}`} pd={pd} driverCards={driverCards}
-        periodPending={periodPending} periodPaid={periodPaid} trips={trips}
-        allExpenses={expenses} markPaid={markPaid} markUnpaid={markUnpaid} defaultOpen={idx === 0}
-        setExpenses={setExpenses}
-        trucks={trucks} />
-    ))}
+    </Card>
+
+    {/* ── Profit First: la nómina sale de OpEx ── */}
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
+      <Card><div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>OPEX DISPONIBLE</div><div style={{ fontSize: 20, fontWeight: 800, color: pf.opexAvailable >= 0 ? colors.cyan : colors.red }}>{fmt(pf.opexAvailable)}</div><div style={{ fontSize: 10, color: colors.textMuted }}>80 % de ingresos reales − pagado</div></Card>
+      <Card><div style={{ fontSize: 10, color: colors.orange, fontWeight: 700 }}>NÓMINA PENDIENTE · ESTE CORTE</div><div style={{ fontSize: 20, fontWeight: 800, color: colors.orange }}>{fmt(pendingTotal)}</div><div style={{ fontSize: 10, color: colors.textMuted }}>choferes + ayudantes</div></Card>
+      <Card><div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>OPEX DESPUÉS DE PAGAR</div><div style={{ fontSize: 20, fontWeight: 800, color: afterPay >= 0 ? colors.green : colors.red }}>{fmt(afterPay)}</div><div style={{ fontSize: 10, color: colors.textMuted }}>{pf.opexCommitted > 0 ? `otros compromisos: ${fmt(pf.opexCommitted - rows.filter(r => !r.pay.paid).reduce((s, r) => s + r.pay.payExps.filter(e => e.status !== "paid").reduce((a, e) => a + e.amount, 0), 0))}` : "sin otros compromisos"}</div></Card>
+      <Card><div style={{ fontSize: 10, color: PURPLE, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}><PiggyBank size={11} /> RESERVA ({pf.reserve >= 0 ? pfSettings.reservePct : 0} %)</div><div style={{ fontSize: 20, fontWeight: 800, color: PURPLE }}>{fmt(pf.reserve)}</div><div style={{ fontSize: 10, color: colors.textMuted }}>no se toca para nómina</div></Card>
+    </div>
+    {afterPay < 0 && pendingTotal > 0 && <div style={{ background: colors.red + "15", border: `1px solid ${colors.red}40`, borderRadius: 10, padding: "10px 14px", marginBottom: 14, display: "flex", gap: 10, alignItems: "center", fontSize: 12 }}>
+      <AlertTriangle size={16} color={colors.red} /><div><b style={{ color: colors.red }}>OpEx no alcanza para esta nómina.</b> Faltan {fmt(-afterPay)}. Profit First: no se toca la Reserva; primero cobra lo pendiente en CxC o reduce gastos de operación.</div>
+    </div>}
+
+    {/* ── Resumen del período ── */}
+    <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 12, fontSize: 12, color: colors.textMuted, flexWrap: "wrap" }}>
+      <span><Clock size={12} style={{ verticalAlign: "middle" }} /> {payroll.totals.trips} viajes recibidos en el corte</span>
+      <span>Bruto choferes {fmt(payroll.totals.gross)}</span>
+      <span>Ayudantes {fmt(payroll.totals.helpers)}</span>
+      {paidTotal > 0 && <span style={{ color: colors.green }}>✓ Ya pagado {fmt(paidTotal)}</span>}
+      {payroll.drivers.reduce((s, r) => s + r.pendingCount, 0) > 0 && <span style={{ color: colors.orange }}>{payroll.drivers.reduce((s, r) => s + r.pendingCount, 0)} viaje(s) con documentos pendientes (no se pagan hasta recibirlos)</span>}
+    </div>
+
+    {rows.length === 0 && <Card><div style={{ textAlign: "center", padding: 40, color: colors.textMuted, fontSize: 13 }}>No hay viajes recibidos ni salarios fijos en este corte.</div></Card>}
+    {rows.map(({ row, pay }) => <DriverCard key={row.driver.id} row={row} pay={pay} period={period} isMobile={isMobile}
+      onMarkPaid={() => markPaid({ row, pay })} onMarkUnpaid={() => markUnpaid({ pay })}
+      onLineOverride={(l, a, n) => lineOverride(row, l, a, n)} onTotalOverride={(a, n) => totalOverride(row, pay, a, n)} onClearTotalOverride={() => clearTotalOverride(row)}
+      onPrint={() => printDriver(row)} />)}
   </div>;
 }

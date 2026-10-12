@@ -3,14 +3,17 @@ import { loadData, saveData, saveToken, clearToken, resetApiCache } from "../api
 import { translations } from "../constants/translations.js";
 import { USERS, initSettlementStatus } from "../constants/users.js";
 import { computeAlerts, today } from "../utils/helpers.js";
+import { calcDriverPay } from "../utils/driverPay.js";
+import { DEFAULT_PF_SETTINGS, allocateCobro, COLLECTED } from "../utils/profitFirst.js";
+import { autoLinkJointPairs } from "../utils/tripRef.js";
 
 const AppContext = createContext(null);
 
 function applyData(data, setters) {
   const { setClients, setPartners, setTrucks, setDrivers, setTrips,
           setExpenses, setBrokers, setSuppliers, setFixedTemplates,
-          setSettlementStatus, setCobros, setInvoices,
-          setBankAccount, setBankReconciliation } = setters;
+          setSettlementStatus, setCobros, setInvoices, setPfSettings,
+          setBankAccount, setBankReconciliation, setStaff } = setters;
   if (!data || Object.keys(data).length === 0) return;
   const hasAnyData = Object.values(data).some(v =>
     Array.isArray(v) ? v.length > 0 : (v && typeof v === "object" ? Object.keys(v).length > 0 : Boolean(v))
@@ -28,8 +31,48 @@ function applyData(data, setters) {
   if (data.settlementStatus)              setSettlementStatus(data.settlementStatus);
   if (Array.isArray(data.cobros))         setCobros(data.cobros);
   if (Array.isArray(data.invoices))       setInvoices(data.invoices);
+  if (Array.isArray(data.staff))          setStaff(data.staff);
   if (data.bankAccount != null)           setBankAccount(data.bankAccount);
   if (data.bankReconciliation != null)    setBankReconciliation(data.bankReconciliation);
+  if (data.pfSettings != null)            setPfSettings({ ...DEFAULT_PF_SETTINGS, ...data.pfSettings });
+}
+
+// ── Guardado por registro: se envía solo lo que cambió respecto a lo último conocido del servidor ──
+const TABLE_KEYS = ["clients", "partners", "trucks", "drivers", "trips", "expenses", "brokers", "suppliers", "fixedTemplates", "cobros", "invoices", "staff"];
+const SCALAR_KEYS = ["settlementStatus", "bankAccount", "bankReconciliation", "pfSettings"];
+const stripPw = (r) => { if (r && r.password) { const { password: _p, ...rest } = r; return rest; } return r; };
+export function snapshotOf(data) {
+  const tables = Object.fromEntries(TABLE_KEYS.map(k => [k, new Map((data?.[k] || []).filter(r => r && r.id != null).map(r => [r.id, JSON.stringify(stripPw(r))]))]));
+  const scalars = Object.fromEntries(SCALAR_KEYS.map(k => [k, JSON.stringify(data?.[k] ?? null)]));
+  return { tables, scalars };
+}
+export function diffAgainst(base, data) {
+  const tables = {}; let n = 0;
+  for (const k of TABLE_KEYS) {
+    const cur = (data[k] || []).filter(r => r && r.id != null);
+    const b = base?.tables?.[k] || new Map();
+    const upserts = cur.filter(r => b.get(r.id) !== JSON.stringify(stripPw(r)));
+    const ids = new Set(cur.map(r => r.id));
+    const deletes = [...b.keys()].filter(id => !ids.has(id));
+    if (upserts.length || deletes.length) { tables[k] = { upserts, deletes }; n += upserts.length + deletes.length; }
+  }
+  const patch = { patch: true, tables };
+  for (const k of SCALAR_KEYS) if (JSON.stringify(data[k] ?? null) !== base?.scalars?.[k]) { patch[k] = data[k]; n++; }
+  return { patch, changes: n };
+}
+/** Combina lo del servidor con mis cambios pendientes (mis registros editados/borrados mandan). */
+export function mergeOnConflict(serverData, base, mine) {
+  const { patch } = diffAgainst(base, mine);
+  const out = { ...serverData };
+  for (const k of TABLE_KEYS) {
+    const t = patch.tables[k]; if (!t) { out[k] = serverData[k] || []; continue; }
+    const dels = new Set(t.deletes); const ups = new Map(t.upserts.map(r => [r.id, r]));
+    const merged = (serverData[k] || []).filter(r => !dels.has(r.id)).map(r => ups.has(r.id) ? ups.get(r.id) : r);
+    for (const r of t.upserts) if (!merged.some(x => x.id === r.id)) merged.push(r);
+    out[k] = merged;
+  }
+  for (const k of SCALAR_KEYS) if (k in patch) out[k] = patch[k];
+  return out;
 }
 
 export function AppProvider({ children }) {
@@ -69,9 +112,12 @@ export function AppProvider({ children }) {
   const [settlementStatus, setSettlementStatus] = useState(initSettlementStatus);
   const [cobros, setCobros] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [staff, setStaff] = useState([]); // usuarios de oficina (asistente administrativa)
   const [bankAccount, setBankAccount] = useState({ name: "Cuenta Principal", bank: "", openingBalance: 0, openingDate: today() });
   const [bankReconciliation, setBankReconciliation] = useState({});
+  const [pfSettings, setPfSettings] = useState(DEFAULT_PF_SETTINGS); // Profit First: % a Reserva y fecha de arranque
   const [syncStatus, setSyncStatus] = useState("idle");
+  const [syncError, setSyncError] = useState(null); // mensaje del servidor cuando rechaza un dato (p. ej. referencia repetida)
 
   const saveTimerRef   = useRef(null);
   const dataLoadedRef  = useRef(false);
@@ -79,12 +125,15 @@ export function AppProvider({ children }) {
   const versionRef     = useRef(0);     // optimistic lock — 0 means "unknown / loaded from cache"
   const currentDataRef = useRef(null);  // latest state snapshot for pagehide flush
   const userRef        = useRef(user);  // tracks current user role for pagehide (avoids stale closure)
+  const baseRef        = useRef(null);  // último estado conocido del servidor (para guardar solo lo que cambió)
+  const conflictsRef   = useRef(0);     // conflictos seguidos (aviso tras el tercero)
+  const [syncNotice, setSyncNotice] = useState(null); // aviso informativo (p. ej. cambios de otro usuario combinados)
 
   const setters = {
     setClients, setPartners, setTrucks, setDrivers, setTrips,
     setExpenses, setBrokers, setSuppliers, setFixedTemplates,
     setSettlementStatus, setCobros, setInvoices,
-    setBankAccount, setBankReconciliation,
+    setBankAccount, setBankReconciliation, setStaff, setPfSettings,
   };
 
   // ── Load on mount ─────────────────────────────────────────────────────────
@@ -96,6 +145,7 @@ export function AppProvider({ children }) {
         return;
       }
       applyData(data, setters);
+      baseRef.current = source === "api" ? snapshotOf(data) : null;
       versionRef.current = version; // 0 if from localStorage (offline) — skips server check
       dataLoadedRef.current = true;
       setSyncStatus(source === "api" ? "saved" : "offline");
@@ -109,9 +159,10 @@ export function AppProvider({ children }) {
     if (!dataLoadedRef.current) return;
     currentDataRef.current = {
       clients, partners, trucks, drivers, trips, expenses,
-      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
+      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff,
+      bankAccount, bankReconciliation, pfSettings,
     };
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, bankAccount, bankReconciliation, pfSettings]);
 
   // ── Flush to localStorage on tab close / Android OS kill (admin only) ────
   useEffect(() => {
@@ -128,46 +179,76 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (!dataLoadedRef.current) return;
     if (isReloadingRef.current) return;
-    if (user?.role !== "admin" && user?.role !== "driver") return; // partners read-only; drivers can save own trips
+    if (user?.role !== "admin" && user?.role !== "driver" && user?.role !== "assistant") return; // partners read-only
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSyncStatus("saving");
       const payload = user?.role === "driver"
         ? { trips, expenses }
+        : user?.role === "assistant"
+        ? { trips }
         : { clients, partners, trucks, drivers, trips, expenses,
-            brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
-            bankAccount, bankReconciliation };
-      const result = await saveData(payload, versionRef.current);
+            brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff,
+            bankAccount, bankReconciliation, pfSettings };
+      let patch = null;
+      if (user?.role === "admin" && baseRef.current && versionRef.current) {
+        const d = diffAgainst(baseRef.current, payload);
+        if (d.changes === 0) { setSyncStatus("saved"); return; }   // nada cambió: no se envía nada
+        patch = d.patch;
+      }
+      const result = await saveData(payload, versionRef.current, patch);
       if (result.saved === "unauthorized") { setUser(null); return; }
+      if (result.saved === "rejected") {
+        // El servidor no aceptó un dato: se avisa y se recarga lo que sí está guardado
+        setSyncError(result.error); setSyncStatus("rejected");
+        isReloadingRef.current = true;
+        loadData().then(({ source, data, version = 0 }) => { applyData(data, setters); baseRef.current = source === "api" ? snapshotOf(data) : null; versionRef.current = version; isReloadingRef.current = false; setSyncStatus(source === "api" ? "saved" : "offline"); });
+        return;
+      }
       if (result.saved === "conflict") {
+        // Otro usuario guardó primero: se recarga lo suyo y se vuelven a aplicar mis cambios encima (reintento automático)
         setSyncStatus("conflict");
-        // Reload from server to get the winning version; user's unsaved changes are lost
+        conflictsRef.current += 1;
         isReloadingRef.current = true;
         loadData().then(({ source, data, version = 0 }) => {
-          applyData(data, setters);
-          versionRef.current = version;
+          if (source === "api" && data) {
+            const merged = patch && baseRef.current ? mergeOnConflict(data, baseRef.current, payload) : data;
+            applyData(merged, setters);
+            baseRef.current = snapshotOf(data);      // base = servidor; mis cambios quedan pendientes y se reenvían
+            versionRef.current = version;
+            if (conflictsRef.current >= 3) { setSyncError("Varios conflictos seguidos al guardar: otro usuario está cambiando los mismos datos. Revisa y pulsa «Sincronizar todo»."); conflictsRef.current = 0; }
+            else setSyncNotice("Otro usuario guardó cambios al mismo tiempo: se combinaron con los tuyos y se volvió a guardar.");
+          } else { applyData(data, setters); versionRef.current = version; }
           isReloadingRef.current = false;
           setSyncStatus(source === "api" ? "saved" : "offline");
         });
         return;
       }
-      if (result.saved === "api") versionRef.current = result.version || 0;
+      if (result.saved === "api") { versionRef.current = result.version || 0; conflictsRef.current = 0; if (user?.role === "admin") baseRef.current = snapshotOf(payload); }
+      if (result.saved === "api" && user?.role === "admin") {
+        // La contraseña de un registro nuevo viaja UNA sola vez (el servidor la guarda hasheada); después se quita del estado
+        const strip = (arr, set) => { if (arr.some(r => r && r.password)) set(arr.map(({ password: _pw, ...r }) => r)); };
+        strip(drivers, setDrivers); strip(partners, setPartners); strip(staff, setStaff);
+      }
+      if (result.remap) applyRemap(result.remap);
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, bankAccount, bankReconciliation]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, bankAccount, bankReconciliation, pfSettings]);
 
   // ── Dynamic user list ─────────────────────────────────────────────────────
   const allUsers = useMemo(() => [
     ...USERS.filter(u => u.role === "admin"),
     ...partners.map(p => ({ id: `p-${p.id}`, username: p.username, role: "partner", name: p.name, refId: p.id })),
     ...drivers.map(d => ({ id: `d-${d.id}`, username: d.username, role: "driver", name: d.name, refId: d.id })),
-  ], [partners, drivers]);
+    ...staff.map(s => ({ id: `s-${s.id}`, username: s.username, role: s.role || "assistant", name: s.name, refId: s.id })),
+  ], [partners, drivers, staff]);
 
   // ── Computed helpers ──────────────────────────────────────────────────────
   const isAdmin = user?.role === "admin";
   const isPartner = user?.role === "partner";
   const isDriver = user?.role === "driver";
+  const isAssistant = user?.role === "assistant";
 
   const partner = isPartner ? partners.find(p => p.id === user?.refId) : null;
   const partnerTruckIds = useMemo(
@@ -200,6 +281,7 @@ export function AppProvider({ children }) {
         return;
       }
       applyData(data, setters);
+      baseRef.current = source === "api" ? snapshotOf(data) : null;
       versionRef.current = version;
       dataLoadedRef.current = true;
       isReloadingRef.current = false;
@@ -207,12 +289,20 @@ export function AppProvider({ children }) {
     });
   };
 
+  // El servidor reasignó ids (un chofer numeró un viaje/gasto con un id que ya usaba otro): la app adopta los nuevos
+  const applyRemap = (remap) => {
+    const rt = remap.trips || {}, re = remap.expenses || {};
+    if (Object.keys(rt).length) setTrips(prev => prev.map(t => rt[t.id] ? { ...t, id: rt[t.id] } : t));
+    if (Object.keys(rt).length || Object.keys(re).length) setExpenses(prev => prev.map(e => ({ ...e, ...(re[e.id] ? { id: re[e.id] } : {}), ...(rt[e.tripId] ? { tripId: rt[e.tripId] } : {}) })));
+  };
+
   const logout = () => {
     try { localStorage.removeItem("blogix_session"); } catch {}
     clearToken();
     setClients([]); setPartners([]); setTrucks([]); setDrivers([]);
     setTrips([]); setExpenses([]); setBrokers([]); setSuppliers([]);
-    setFixedTemplates([]); setSettlementStatus({}); setCobros([]); setInvoices([]);
+    setFixedTemplates([]); setSettlementStatus({}); setCobros([]); setInvoices([]); setStaff([]);
+    setBankAccount({ name: "Cuenta Principal", bank: "", openingBalance: 0, openingDate: today() }); setBankReconciliation({}); setPfSettings(DEFAULT_PF_SETTINGS);
     versionRef.current = 0;
     dataLoadedRef.current = false;
     setUser(null);
@@ -248,35 +338,28 @@ export function AppProvider({ children }) {
     // against the live `expenses` array minus the stale ones we're removing.
     const toAdd = [];
     trips.forEach(tr => {
-      // ── Driver pay ────────────────────────────────────────────────────────
-      if (tr.driverId) {
+      // ── Driver pay + ayudantes (misma función que Viajes y Nómina) ─────────
+      if (tr.driverId && tr.status !== "cancelled") {
         const driver = driverMap.get(tr.driverId);
         const existingPay = expenses.find(e => e.category === "driverPay" && e.tripId === tr.id);
         // If the trip date changed after driverPay was created, patch the date in place
-        if (existingPay && existingPay.date !== tr.date) {
+        if (existingPay && existingPay.date !== tr.date && existingPay.status !== "paid") {
           setExpenses(prev => prev.map(e => e.id === existingPay.id ? { ...e, date: tr.date } : e));
         }
-        const hasDriverPay = !!existingPay;
-        if (driver && driver.salaryType !== "fixed" && !hasDriverPay) {
-          let pay = 0;
-          if (driver.salaryType === "porcentaje") {
-            pay = Math.round((tr.revenue || 0) * (driver.percentageAmount ?? 20) / 100);
-          } else if (driver.salaryType === "perTrip") {
-            const rate = (driver.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality);
-            if (rate) {
-              const tk = truckMap.get(tr.truckId);
-              const size = tr.tarifaOverride || tk?.size || "T1";
-              pay = size === "T2" ? (rate.priceT2 ?? rate.priceT1 ?? 0) : (rate.priceT1 ?? 0);
-            }
-            // No rate configured → leave pay=0 so admin knows to set up the rate table
-          }
-          const tripDiscounts = (tr.discounts || []).reduce((s, d) => s + (d.amount || 0), 0);
-          pay = Math.max(0, pay - tripDiscounts);
-          if (pay > 0) {
-            const label = driver.salaryType === "porcentaje" ? `${driver.percentageAmount ?? 20}%` : "por viaje";
+        if (driver) {
+          const calc = calcDriverPay({ driver, trip: tr, truck: truckMap.get(tr.truckId), clientId: tr.clientId });
+          if (!existingPay && calc.payType !== "fixed" && calc.driverNet > 0) {
             toAdd.push({
-              tripId: tr.id, date: tr.date, category: "driverPay", amount: pay,
-              description: `Nómina (${label}): ${driver.name}`,
+              tripId: tr.id, date: tr.date, category: "driverPay", amount: calc.driverNet,
+              description: `Pago chofer ${driver.name} · ${tr.municipality || ""}`,
+              paymentMethod: "transfer", driverId: driver.id, status: "pending", supplierId: null,
+            });
+          }
+          const hasHelper = expenses.some(e => e.category === "helper" && e.tripId === tr.id);
+          if (!hasHelper && calc.helpersTotal > 0) {
+            toAdd.push({
+              tripId: tr.id, date: tr.date, category: "helper", amount: calc.helpersTotal,
+              description: `Ayudantes (${calc.numHelpers}) · ${tr.municipality || ""}`,
               paymentMethod: "transfer", driverId: driver.id, status: "pending", supplierId: null,
             });
           }
@@ -310,6 +393,19 @@ export function AppProvider({ children }) {
       });
     }
 
+    // ── Step 2a: viajes conjuntos históricos (misma referencia, camiones distintos) ──
+    const jointFix = autoLinkJointPairs(trips);
+    if (jointFix.changed > 0) setTrips(jointFix.trips);
+
+    // ── Step 2b: Profit First — cobros viejos sin asignación ────────────────
+    const cobrosToFix = cobros.filter(c => COLLECTED.includes(c.status) && Number(c.amount) > 0 && !(c.pf && typeof c.pf.opex === "number"));
+    if (cobrosToFix.length > 0) {
+      const fixIds = new Set(cobrosToFix.map(c => c.id));
+      setCobros(prev => prev.map(c => fixIds.has(c.id)
+        ? { ...c, pf: { ...allocateCobro({ amount: c.amount, tripIds: c.collectedTripIds || [], trips, trucks, partners, clients, brokers, settings: pfSettings }), at: c.collectedDate || c.pf?.at || today() } }
+        : c));
+    }
+
     // ── Step 3: Backfill invoice amounts for pass-through clients ──────────────
     // Old invoices lack a stored `amount`. For pass-through clients, recompute
     // the net amount (gross − broker deduction) and store it so the CFO pipeline
@@ -337,18 +433,20 @@ export function AppProvider({ children }) {
       }));
     }
 
-    return { added: toAdd.length, removed: staleExpIds.size, invoicesPatched: invoicesToPatch.length };
+    return { added: toAdd.length, removed: staleExpIds.size, invoicesPatched: invoicesToPatch.length, cobrosAllocated: cobrosToFix.length, jointLinked: jointFix.changed };
   };
 
   const forceSync = async () => {
     setSyncStatus("saving");
     const result = await saveData({
       clients, partners, trucks, drivers, trips, expenses,
-      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices,
+      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff,
+      bankAccount, bankReconciliation, pfSettings,
     }, versionRef.current);
     if (result.saved === "unauthorized") { setUser(null); return; }
+    if (result.saved === "rejected") { setSyncError(result.error); setSyncStatus("rejected"); return result; }
     if (result.saved === "conflict") { setSyncStatus("conflict"); return result; }
-    if (result.saved === "api") versionRef.current = result.version || 0;
+    if (result.saved === "api") { versionRef.current = result.version || 0; baseRef.current = snapshotOf({ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, bankAccount, bankReconciliation, pfSettings }); conflictsRef.current = 0; }
     setSyncStatus(result.saved === "api" ? "saved" : "offline");
     return result;
   };
@@ -356,9 +454,9 @@ export function AppProvider({ children }) {
   const value = {
     // UI
     lang, setLang, t, user, login, logout, forceSync, syncAll,
-    sidebarOpen, setSidebarOpen, isMobile, syncStatus,
+    sidebarOpen, setSidebarOpen, isMobile, syncStatus, syncError, setSyncError, syncNotice, setSyncNotice,
     // Auth
-    isAdmin, isPartner, isDriver, allUsers,
+    isAdmin, isPartner, isDriver, isAssistant, allUsers,
     // Data
     clients, setClients,
     partners, setPartners,
@@ -372,8 +470,10 @@ export function AppProvider({ children }) {
     settlementStatus, setSettlementStatus,
     cobros, setCobros,
     invoices, setInvoices,
+    staff, setStaff,
     bankAccount, setBankAccount,
     bankReconciliation, setBankReconciliation,
+    pfSettings, setPfSettings,
     // Computed
     partner, partnerTruckIds, driverObj, alerts,
   };

@@ -9,9 +9,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ── Load .env manually (no dotenv dependency) ─────────────────────────────────
-const envPath = resolve(new URL(".", import.meta.url).pathname, "../.env");
+const envPath = resolve(fileURLToPath(new URL(".", import.meta.url)), "../.env"); // fileURLToPath: funciona con espacios en la ruta
 try {
   for (const line of readFileSync(envPath, "utf8").split("\n")) {
     const trimmed = line.trim();

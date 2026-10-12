@@ -1,8 +1,11 @@
 import { useState, useMemo } from "react";
 import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote, FileText, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, monthStr, getPeriodInfo, expenseTruckId } from "../utils/helpers.js";
+import { fmt, monthStr, expenseTruckId, today } from "../utils/helpers.js";
+import { invoiceBalance } from "../utils/cobros.js";
+import { tripNetRevenue } from "../utils/partnerModels.js";
 import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
+import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
 
 // ── Mini stat block ─────────────────────────────────────────────────────────
 function Stat({ label, value, color, sub, onClick }) {
@@ -39,10 +42,10 @@ function SectionTitle({ label, color }) {
   );
 }
 
-export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, isMobile }) {
+export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, pfSettings, isMobile }) {
   // brokers is used in the revenue useMemo for pass-through deduction
   const cm = monthStr();
-  const today = new Date().toISOString().slice(0, 10);
+  const todayStr = today();
   const [dateFrom, setDateFrom] = useState(`${cm}-01`);
   const [dateTo,   setDateTo]   = useState(() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(new Date(n.getFullYear(),n.getMonth()+1,0).getDate()).padStart(2,"0")}`; });
 
@@ -62,7 +65,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       else { setDateFrom(`${y}-${mo}-16`); setDateTo(`${y}-${mo}-${lastDay(y, mn)}`); }
     } else if (preset === "last30") {
       const from = new Date(now); from.setDate(from.getDate() - 30);
-      setDateFrom(from.toISOString().slice(0, 10)); setDateTo(`${y}-${mo}-${d}`);
+      setDateFrom(`${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}-${String(from.getDate()).padStart(2, "0")}`); setDateTo(`${y}-${mo}-${d}`);
     } else if (preset === "year") { setDateFrom(`${y}-01-01`); setDateTo(`${y}-12-31`); }
   };
 
@@ -110,7 +113,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       return false;
     }).reduce((s,e) => s + e.amount, 0);
     const brokerFees = periodExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s + e.amount, 0);
-    const operExp    = periodExpenses.filter(e => !["driverPay","nominaTotalOverride","broker_commission","adelanto_conductor"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
+    const operExp    = periodExpenses.filter(e => !["driverPay","nominaTotalOverride","broker_commission","adelanto_conductor","partner_settlement","cash_withdrawal","reserve_withdrawal"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
     const totalExp   = nomina + brokerFees + operExp;
     // grossProfit uses netRevenue: broker pass-through deductions are contra-revenue,
     // and since syncAll doesn't generate broker_commission expenses for pass-through clients,
@@ -118,42 +121,25 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
     return { periodExpenses, nomina, brokerFees, operExp, totalExp, grossProfit: netRevenue - totalExp, margin: netRevenue > 0 ? (netRevenue - totalExp) / netRevenue * 100 : 0 };
   }, [expenses, mt, dateFrom, dateTo, netRevenue]);
 
-  // ── CxC (accounts receivable — delivered trips only, all-time) ────────────
-  const { cxcPending, cxcOverdue, cxcUpcoming, totalCxC, totalOverdue, totalCollected, nextDue, cobroMap, getCobro } = useMemo(() => {
-    const clientMap2 = new Map(clients.map(c => [c.id, c]));
-    const brokerMap2 = new Map((brokers || []).map(b => [b.id, b]));
-    const tripNet = (tr) => {
-      const cl = clientMap2.get(tr.clientId);
-      if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return tr.revenue || 0;
-      const br = brokerMap2.get(tr.brokerId);
-      if (!br) return tr.revenue || 0;
-      return (tr.revenue || 0) - Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
-    };
-    const cxcGrouped = {};
-    trips.forEach(tr => {
-      if (!tr.clientId || !(tr.revenue > 0) || tr.status !== "delivered") return;
-      const client = clientMap2.get(tr.clientId);
-      if (!client) return;
-      const { key, expectedDate } = getPeriodInfo(tr.date, client);
-      const gKey = `${tr.clientId}::${key}`;
-      if (!cxcGrouped[gKey]) cxcGrouped[gKey] = { clientId: tr.clientId, periodKey: key, expectedDate, revenue: 0 };
-      cxcGrouped[gKey].revenue += tripNet(tr);
-    });
-    const cobroMap   = new Map(cobros.map(c => [`${c.clientId}::${c.periodKey}`, c]));
-    const getCobro   = (cid, pk) => cobroMap.get(`${cid}::${pk}`);
-    const cxcPeriods = Object.values(cxcGrouped);
-    const cxcCollected = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status === "collected");
-    const cxcPending   = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status !== "collected");
-    const cxcOverdue   = cxcPending.filter(p => p.expectedDate < today);
-    const cxcUpcoming  = cxcPending.filter(p => p.expectedDate >= today).sort((a,b) => a.expectedDate.localeCompare(b.expectedDate));
+  // ── CxC: facturas con saldo (cobros por factura, abonos parciales) ───────
+  const { cxcPending, totalCxC, totalOverdue, totalCollected, nextDue, uninvoiced } = useMemo(() => {
+    const ctx = { trips, clients, brokers };
+    const active = (invoices || []).filter(i => i.status !== "cancelled").map(i => ({ ...i, bal: invoiceBalance(i, cobros, ctx) }));
+    const cxcPending = active.filter(i => i.bal.balance > 0);
+    const overdue = cxcPending.filter(i => i.dueDate && i.dueDate < todayStr);
+    const upcoming = cxcPending.filter(i => !i.dueDate || i.dueDate >= todayStr).sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
+    const invoicedIds = new Set(active.flatMap(i => i.tripIds || []));
+    const cm = new Map(clients.map(c => [c.id, c])), bm = new Map((brokers || []).map(b => [b.id, b]));
+    const uninvoiced = trips.filter(tr => tr.status !== "cancelled" && (tr.revenue || 0) > 0 && !invoicedIds.has(tr.id)).reduce((s, tr) => s + tripNetRevenue(tr, cm, bm), 0);
     return {
-      cxcPending, cxcOverdue, cxcUpcoming, cobroMap, getCobro,
-      totalCxC:       cxcPending.reduce((s, p) => s + p.revenue, 0),
-      totalOverdue:   cxcOverdue.reduce((s, p) => s + p.revenue, 0),
-      totalCollected: cxcCollected.reduce((s, p) => s + (getCobro(p.clientId, p.periodKey)?.amount ?? p.revenue), 0),
-      nextDue:        cxcUpcoming[0],
+      cxcPending,
+      totalCxC: cxcPending.reduce((s, i) => s + i.bal.balance, 0),
+      totalOverdue: overdue.reduce((s, i) => s + i.bal.balance, 0),
+      totalCollected: active.reduce((s, i) => s + i.bal.paid, 0),
+      nextDue: upcoming[0] || null,
+      uninvoiced,
     };
-  }, [trips, clients, cobros, brokers, today]);
+  }, [invoices, cobros, trips, clients, brokers, todayStr]);
 
   // ── CxP (accounts payable — all pending expenses) ──────────────────────
   const { cxpNomina, cxpSupplier, cxpFijos, totalCxP } = useMemo(() => {
@@ -271,6 +257,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   const errCount  = alerts.filter(a => a.severity === "error").length;
   const warnCount = alerts.filter(a => a.severity === "warning").length;
   const infoCount = alerts.filter(a => a.severity === "info").length;
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
+  const sortedAlerts = useMemo(() => { const w = { error: 0, warning: 1, info: 2 }; return [...alerts].sort((a, b) => (w[a.severity] ?? 3) - (w[b.severity] ?? 3)); }, [alerts]);
 
   return (
     <div>
@@ -300,47 +288,10 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         </div>
       </Card>
 
-      {/* ── Hero KPI: Beneficio Real ── */}
-      <div style={{ background: `linear-gradient(135deg, ${colors.card}, ${colors.cardHover})`, borderRadius: 12, border: `1px solid ${realProfit >= 0 ? colors.green + "40" : colors.red + "40"}`, padding: "20px 24px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>Beneficio Real del Periodo</div>
-          <div style={{ fontSize: 36, fontWeight: 800, color: realProfit >= 0 ? colors.green : colors.red, lineHeight: 1 }}>{fmt(realProfit)}</div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
-            {realMargin.toFixed(1)}% margen · {mt.filter(tr => tr.status === "delivered").length} entregado{mt.filter(tr => tr.status === "delivered").length !== 1 ? "s" : ""}
-            {pipelineCount > 0 && <span style={{ color: colors.yellow }}> · {pipelineCount} en proceso ({fmt(pipelineAmt)})</span>}
-            {" · tras liquidaciones de socios"}
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
-          <div style={{ textAlign: "right" }}>
-            {passThruDeduction > 0 ? (
-              <>
-                <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 1 }}>Ingresos Brutos</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: colors.textMuted }}>{fmt(revenue)}</div>
-                <div style={{ fontSize: 10, color: colors.red }}>−{fmt(passThruDeduction)} broker</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: colors.green }}>{fmt(netRevenue)} <span style={{ fontSize: 9, fontWeight: 400 }}>neto</span></div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Ingresos Devengados</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: colors.green }}>{fmt(revenue)}</div>
-              </>
-            )}
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Gastos Totales</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: colors.red }}>{fmt(totalExp)}</div>
-          </div>
-          {totalPartnerComm > 0 && (
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Liquidaciones Socios</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: colors.purple }}>−{fmt(totalPartnerComm)}</div>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* ── Profit First: las tres cuentas ── */}
+      <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} isMobile={isMobile} />
 
-      {/* ── CFO: Pipeline de Facturación ── */}
+      {/* ── Pipeline de Facturación ── */}
       <Card style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => setPage("invoices")}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -413,15 +364,11 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       {/* ── Row 1: KPIs financieros ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 16 }}>
         <Stat label="CxC POR COBRAR" value={fmt(totalCxC)} color={colors.orange}
-          sub={`${cxcPending.length} periodo${cxcPending.length !== 1 ? "s" : ""} pendiente${cxcPending.length !== 1 ? "s" : ""} (historico)`}
+          sub={`${cxcPending.length} factura${cxcPending.length !== 1 ? "s" : ""} con saldo${uninvoiced > 0 ? ` · sin facturar ${fmt(uninvoiced)}` : ""}`}
           onClick={() => setPage("cxc")} />
         <Stat label="CxP PENDIENTE" value={fmt(totalCxP)} color={colors.red}
           sub={`Nomina + suplidores + fijos`}
           onClick={() => setPage("cxp")} />
-        <Stat label="POSICION DE CAJA" value={fmt(cashPosition)} color={cashPosition >= 0 ? colors.cyan : colors.red}
-          sub={cashPosition >= 0 ? "CxC supera CxP ok" : "CxP supera CxC alerta"} />
-        <Stat label="MARGEN BRUTO" value={`${margin.toFixed(1)}%`} color={margin >= 20 ? colors.green : margin >= 10 ? colors.yellow : colors.red}
-          sub={`Antes de socios`} />
       </div>
 
       {/* ── Row 2: CxC · CxP · Brokers ── */}
@@ -434,8 +381,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
           <MiniRow label="Pendiente total" value={fmt(totalCxC)} color={colors.orange} />
           {nextDue && (
             <MiniRow
-              label={`Prox: ${clients.find(c => c.id === nextDue.clientId)?.companyName?.split(" ")[0] || "—"} (${nextDue.expectedDate})`}
-              value={fmt(nextDue.revenue)} color={colors.cyan} />
+              label={`Prox: ${nextDue.invoiceNumber || "#" + nextDue.id} · ${clients.find(c => c.id === nextDue.clientId)?.companyName?.split(" ")[0] || "—"}${nextDue.dueDate ? ` (${nextDue.dueDate})` : ""}`}
+              value={fmt(nextDue.bal.balance)} color={colors.cyan} />
           )}
           <MiniRow label="Cobrado" value={fmt(totalCollected)} color={colors.green} />
           <div style={{ marginTop: 10, fontSize: 10, color: colors.accent, textAlign: "right" }}>Ver Cuentas x Cobrar</div>
@@ -480,7 +427,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
         {/* P&L desglose */}
         <Card>
-          <SectionTitle label="Desglose de Gastos del Periodo" color={colors.red} />
+          <SectionTitle label="Gastos del período (salen de OpEx)" color={colors.red} />
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
               { label: "Ingresos brutos", value: revenue, color: colors.green, icon: "up" },
@@ -494,13 +441,6 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
                 <span style={{ fontSize: 13, fontWeight: 700, color }}>{fmt(Math.abs(value))}</span>
               </div>
             ))}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0 0", marginTop: 4, borderTop: `2px solid ${colors.border}` }}>
-              <span style={{ fontSize: 13, fontWeight: 700 }}>Beneficio real admin</span>
-              <div style={{ textAlign: "right" }}>
-                <span style={{ fontSize: 18, fontWeight: 800, color: realProfit >= 0 ? colors.green : colors.red }}>{fmt(realProfit)}</span>
-                <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 8 }}>{realMargin.toFixed(1)}%</span>
-              </div>
-            </div>
           </div>
         </Card>
 
@@ -596,7 +536,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         </Card>
 
         {/* Alertas */}
-        <Card style={{ cursor: "pointer" }} onClick={() => setPage("agents")}>
+        <Card>
           <SectionTitle label="Alertas del Sistema" color={colors.red} />
           {alerts.length === 0
             ? <div style={{ display: "flex", alignItems: "center", gap: 8, color: colors.green, fontSize: 13, padding: "10px 0" }}>
@@ -624,14 +564,16 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
                     <span style={{ color: colors.accent, fontSize: 12 }}>notificacion{infoCount !== 1 ? "es" : ""}</span>
                   </div>
                 )}
-                {alerts.filter(a => a.severity === "error").slice(0,2).map(a => (
-                  <div key={a.id} style={{ fontSize: 10, color: colors.red, padding: "3px 0", borderBottom: `1px solid ${colors.border}11` }}>
-                    {a.msg}
-                  </div>
-                ))}
+                {sortedAlerts.slice(0, showAllAlerts ? sortedAlerts.length : 4).map(a => {
+                  const c = a.severity === "error" ? colors.red : a.severity === "warning" ? colors.orange : colors.accent;
+                  return <div key={a.id} style={{ fontSize: 11, color: colors.text, padding: "5px 0", borderTop: `1px solid ${colors.border}22`, display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: c, marginTop: 5, flexShrink: 0 }} />
+                    <span><span style={{ color: c, fontWeight: 700, fontSize: 10 }}>{t.agentCat?.[a.category] || a.category}</span> · {a.msg}</span>
+                  </div>;
+                })}
+                {sortedAlerts.length > 4 && <div onClick={() => setShowAllAlerts(v => !v)} style={{ marginTop: 8, fontSize: 10, color: colors.accent, textAlign: "right", cursor: "pointer" }}>{showAllAlerts ? "Ver menos" : `Ver todas (${sortedAlerts.length})`}</div>}
               </>
           }
-          <div style={{ marginTop: 10, fontSize: 10, color: colors.accent, textAlign: "right" }}>Ver Agentes</div>
         </Card>
       </div>
 

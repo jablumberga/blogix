@@ -9,7 +9,9 @@
     "prebuild": "node scripts/bump-sw-cache.mjs",
     "build": "vite build",
     "build:mobile": "cp capacitor.config.prod.json capacitor.config.json && (vite build && npx cap sync && cp capacitor.config.dev.json capacitor.config.json || (cp capacitor.config.dev.json capacitor.config.json; echo 'ERROR: build:mobile failed — dev config restored'; exit 1))",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:api": "node scripts/dev-server.mjs",
+    "dev:all": "(node scripts/dev-server.mjs &) && vite"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.1",
@@ -22,7 +24,8 @@
     "bcryptjs": "^3.0.3",
     "lucide-react": "^0.383.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

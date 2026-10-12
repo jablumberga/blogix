@@ -18,7 +18,8 @@ export function expenseTruckId(expense, tripMap) {
   return null;
 }
 
-export const today = () => new Date().toISOString().slice(0, 10);
+/** Fecha de HOY en hora local (no UTC): en RD después de las 8 pm, toISOString() ya da el día siguiente. */
+export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
 export const monthStr = () => {
   const d = new Date();
@@ -165,30 +166,21 @@ export function computeAlerts({ trips, expenses, clients, drivers, trucks, partn
 // Generates classic settlement periods: half-1 = 1st–15th, half-2 = 16th–30th.
 // Day 31 of any month is treated as belonging to the NEXT month's half-1
 // (dateFrom is set to the 31st of the previous month when applicable).
-export function genSettlementPeriods(dates = []) {
+/**
+ * Quincenas de toda la app: 1–15 y 16–último día del mes (31 incluido).
+ * Las usan Oficina, Nómina, Facturas y Liquidaciones de socios.
+ */
+export function genBillingPeriods(dates = []) {
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
   const now = new Date(); const day = now.getDate();
-  let y = now.getFullYear(), m = now.getMonth() + 1, h;
-  if (day <= 15) { h = 1; }
-  else if (day <= 30) { h = 2; }
-  else { h = 1; if (m === 12) { m = 1; y++; } else { m++; } }
-  const earliest = [...dates].sort()[0] || `${y}-${pad(m)}-01`;
+  let y = now.getFullYear(), m = now.getMonth() + 1, h = day <= 15 ? 1 : 2;
+  const earliest = [...dates].filter(Boolean).sort()[0] || `${y}-${pad(m)}-01`;
   const buildPd = (py, pm, ph) => {
     const mStr = `${py}-${pad(pm)}`;
-    if (ph === 2) {
-      return { year: py, month: pm, half: ph, mStr,
-        dateFrom: `${mStr}-16`, dateTo: `${mStr}-30`,
-        label: `${MONTHS_ES[pm-1]} 16–30, ${py}` };
-    }
-    // Half-1: starts on day 1, but if previous month had 31 days include that day too
-    const prevM = pm === 1 ? 12 : pm - 1;
-    const prevY = pm === 1 ? py - 1 : py;
-    const prevMStr = `${prevY}-${pad(prevM)}`;
-    const lastPrev = lastDayOf(prevY, prevM);
-    const dateFrom = lastPrev === 31 ? `${prevMStr}-31` : `${mStr}-01`;
-    return { year: py, month: pm, half: ph, mStr,
-      dateFrom, dateTo: `${mStr}-15`,
-      label: `${MONTHS_ES[pm-1]} 1–15, ${py}` };
+    const last = lastDayOf(py, pm);
+    return ph === 1
+      ? { year: py, month: pm, half: 1, mStr, dateFrom: `${mStr}-01`, dateTo: `${mStr}-15`, label: `${MONTHS_ES[pm-1]} 1–15, ${py}` }
+      : { year: py, month: pm, half: 2, mStr, dateFrom: `${mStr}-16`, dateTo: `${mStr}-${pad(last)}`, label: `${MONTHS_ES[pm-1]} 16–${last}, ${py}` };
   };
   const periods = [];
   for (let i = 0; i < 60; i++) {
@@ -198,8 +190,9 @@ export function genSettlementPeriods(dates = []) {
   }
   return periods;
 }
+/** Alias histórico: las liquidaciones usan las mismas quincenas de facturación. */
+export const genSettlementPeriods = genBillingPeriods;
 
-// ─── Billing / Period Helpers ─────────────────────────────────────────────────
 export const pad = n => String(n).padStart(2, "0");
 
 export const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -208,44 +201,8 @@ export const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Juli
 // Corte 1: day 30 of prev month → day 14 of current month (day 31 of prev included via >= filter)
 // Corte 2: day 15 → day 29 of current month
 // Days 30+ belong to the NEXT month's corte 1.
-export function genPeriods(dates = []) {
-  const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
-  const now = new Date(); const day = now.getDate();
-  let y = now.getFullYear(), m = now.getMonth() + 1, h;
-  if (day <= 14) { h = 1; }
-  else if (day <= 29) { h = 2; }
-  else { h = 1; if (m === 12) { m = 1; y++; } else { m++; } }
-  const earliest = [...dates].sort()[0] || `${y}-${pad(m)}-01`;
-  const buildPd = (py, pm, ph) => {
-    const mStr = `${py}-${pad(pm)}`;
-    if (ph === 2) {
-      return { year: py, month: pm, half: ph, mStr,
-        dateFrom: `${mStr}-15`, dateTo: `${mStr}-29`,
-        label: `${MONTHS_ES[pm-1]} 15–29, ${py}` };
-    }
-    // Corte 1: from day 30 (or last day if < 30) of prev month to day 14 of current month
-    const prevM = pm === 1 ? 12 : pm - 1;
-    const prevY = pm === 1 ? py - 1 : py;
-    const prevMStr = `${prevY}-${pad(prevM)}`;
-    const fromDay = Math.min(30, lastDayOf(prevY, prevM));
-    return { year: py, month: pm, half: ph, mStr,
-      dateFrom: `${prevMStr}-${pad(fromDay)}`, dateTo: `${mStr}-14`,
-      label: `${fromDay} ${MONTHS_ES[prevM-1]}–14 ${MONTHS_ES[pm-1]}, ${py}` };
-  };
-  const periods = [];
-  for (let i = 0; i < 60; i++) {
-    const pd = buildPd(y, m, h); periods.push(pd);
-    if (pd.dateTo < earliest) break;
-    if (h === 2) { h = 1; } else { h = 2; if (m === 1) { m = 12; y--; } else { m--; } }
-  }
-  return periods;
-}
-
-// Computes due date for a supplier expense.
-// "invoice_date" cycle: dueDate = expenseDate + creditDays
-// "cutoff_period" cycle: dueDate = end_of_cut_period + creditDays
-//   period 1: days 1–period1CutDay → cutoff at period1CutDay
-//   period 2: days (period1CutDay+1)–end_of_month → cutoff at end_of_month
+/** Nómina de choferes: mismas quincenas que facturación (1–15 y 16–último día). */
+export const genPeriods = genBillingPeriods;
 export function getSupplierDueDate(expenseDate, supplier) {
   if (!expenseDate) return expenseDate;
   if (!supplier || supplier.paymentCondition !== "credit" || !supplier.creditDays) return expenseDate;

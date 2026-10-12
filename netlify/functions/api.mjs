@@ -16,6 +16,9 @@
  * Optional env var (set AFTER running migration SQL):
  *   BLOGIX_RELATIONAL=true  → use relational bl_* tables instead of JSON blob
  */
+import { validateTripWrites, linkJoint, checkTripRef, sameRefTrips, sanitizeDriverTrips } from "../../src/utils/tripRef.js";
+import bcrypt from "bcryptjs";
+import { buildCompanionTrip } from "../../src/utils/jointTrip.js";
 
 const ALLOWED_ORIGINS = new Set([
   "https://blogix.do",
@@ -132,6 +135,23 @@ function applyRLS(data, user) {
     };
   }
 
+  if (user.role === "assistant") {
+    // Oficina: ve viajes, choferes, socios, camiones y clientes (sin tarifas ni contactos),
+    // y los adelantos (para la nómina). No ve dinero de la empresa: facturas, cobros, banco.
+    const slimClient = c => ({ id: c.id, companyName: c.companyName, status: c.status, rules: c.rules || {} });
+    const slimDriver = d => { const { password, license, ...rest } = d; return rest; }; // teléfono sí: va en la relación de viajes
+    const slimPartner = p => ({ id: p.id, name: p.name, status: p.status, model: p.model });
+    return {
+      trips:            data.trips || [],
+      drivers:          (data.drivers || []).map(slimDriver),
+      partners:         (data.partners || []).map(slimPartner),
+      trucks:           data.trucks || [],
+      clients:          (data.clients || []).map(slimClient),
+      expenses:         (data.expenses || []).filter(e => e.category === "adelanto_conductor" || e.category === "driverPay" || e.category === "nominaTotalOverride"),
+      brokers: [], suppliers: [], fixedTemplates: [], cobros: [], invoices: [], settlementStatus: {},
+    };
+  }
+
   if (user.role === "driver") {
     const driver    = (data.drivers || []).find(d => d.id === user.refId);
     if (!driver) return { error: "Driver not found" };
@@ -147,11 +167,16 @@ function applyRLS(data, user) {
     );
     // Drivers need active clients to fill out the new-trip form
     const activeClients = (data.clients || []).filter(c => !c.status || c.status === "active");
+    // Para viajes conjuntos el chofer elige al compañero: lista mínima de los demás choferes
+    // (id, nombre, camión) y todos los camiones activos (los suyos marcados `mine`).
+    const colleagues = (data.drivers || []).filter(d => d.id !== driver.id && d.status !== "inactive").map(d => ({ id: d.id, name: d.name, truckId: d.truckId || null, slim: true }));
+    const myTruckIds = new Set(myTrucks.map(tk => tk.id));
+    const allTrucks = (data.trucks || []).filter(tk => tk.status !== "inactive" || myTruckIds.has(tk.id)).map(tk => ({ id: tk.id, plate: tk.plate, size: tk.size, driverId: tk.driverId || null, partnerId: tk.partnerId || null, mine: myTruckIds.has(tk.id) }));
     return {
-      drivers:          [driver],
+      drivers:          [driver, ...colleagues],
       trips:            myTrips,
       expenses:         myExp,
-      trucks:           myTrucks,
+      trucks:           allTrucks.length ? allTrucks : myTrucks,
       clients:          activeClients,
       partners:         [], brokers: [], suppliers: [],
       settlementStatus: {}, fixedTemplates: [], cobros: [], invoices: [],
@@ -177,6 +202,28 @@ const defaultData = {
 };
 
 // ── Relational table helpers ──────────────────────────────────────────────────
+
+
+// ── Referencia de factura única por cliente (salvo viaje conjunto de 2 camiones) ──
+// Valida solo viajes nuevos o cambiados; aplica el enlace de conjunto en ambos viajes.
+// Devuelve { error } si hay conflicto, o { trips, extraUpserts } con los enlaces aplicados.
+async function enforceTripRefs(url, key, incoming) {
+  let existing = [];
+  try { existing = await readTable(url, key, "bl_trips"); } catch { existing = []; }
+  const [drivers, trucks] = await Promise.all([readTable(url, key, "bl_drivers").catch(() => []), readTable(url, key, "bl_trucks").catch(() => [])]);
+  const { errors, links } = validateTripWrites({ incoming, existing, drivers, trucks });
+  if (errors.length) return { error: errors[0].error, tripId: errors[0].tripId };
+  const byId = new Map(incoming.map(t => [t.id, t]));
+  const extra = new Map();
+  for (const { tripId, otherId } of links) {
+    const tr = byId.get(tripId); const other = byId.get(otherId) || extra.get(otherId) || existing.find(t => t.id === otherId);
+    if (!tr || !other) continue;
+    const l = linkJoint(tr, other);
+    byId.set(tripId, l.trip);
+    if (byId.has(otherId)) byId.set(otherId, l.other); else extra.set(otherId, l.other);
+  }
+  return { trips: [...byId.values()], extraUpserts: [...extra.values()] };
+}
 
 async function readTable(url, key, table) {
   const res = await fetch(`${url}/rest/v1/${table}?select=rec&order=id`, {
@@ -209,7 +256,7 @@ async function readSettlementStatus(url, key) {
 async function readAllTables(url, key) {
   const [
     trips, expenses, trucks, drivers, clients, partners,
-    brokers, suppliers, invoices, cobros, fixedTemplates, settlementStatus,
+    brokers, suppliers, invoices, cobros, fixedTemplates, settlementStatus, staff,
   ] = await Promise.all([
     readTable(url, key, "bl_trips"),
     readTable(url, key, "bl_expenses"),
@@ -223,15 +270,17 @@ async function readAllTables(url, key) {
     readTable(url, key, "bl_cobros"),
     readTable(url, key, "bl_fixed_templates"),
     readSettlementStatus(url, key),
+    readTable(url, key, "bl_staff").catch(() => []), // tabla nueva: puede no existir aún
   ]);
   // Extract bank config stored in the settlement_status blob under __ keys
-  const { __bankAccount, __bankReconciliation, ...cleanSettlementStatus } = settlementStatus;
+  const { __bankAccount, __bankReconciliation, __pfSettings, ...cleanSettlementStatus } = settlementStatus;
   return {
     trips, expenses, trucks, drivers, clients, partners, brokers, suppliers,
-    invoices, cobros, fixedTemplates,
+    invoices, cobros, fixedTemplates, staff,
     settlementStatus: cleanSettlementStatus,
     bankAccount: __bankAccount || null,
     bankReconciliation: __bankReconciliation || null,
+    pfSettings: __pfSettings || null,
   };
 }
 
@@ -301,6 +350,7 @@ async function syncAllTables(url, key, body) {
   await run("bl_invoices",         () => syncTable(url, key, "bl_invoices",        body.invoices));
   await run("bl_cobros",           () => syncTable(url, key, "bl_cobros",          body.cobros));
   await run("bl_fixed_templates",  () => syncTable(url, key, "bl_fixed_templates", body.fixedTemplates));
+  await run("bl_staff",            () => syncTable(url, key, "bl_staff",           body.staff));
   if (errors.length > 0) throw new Error(errors.join("; "));
   // syncSettlementStatus is intentionally NOT called here — the POST handler is the sole writer
   // of the version stamp so _version is always set atomically after all tables confirm success.
@@ -312,6 +362,8 @@ async function syncAllTables(url, key, body) {
 // password from Supabase and restore it so the sync doesn't wipe it.
 async function restorePasswords(url, key, records, table) {
   if (!Array.isArray(records) || records.length === 0) return records;
+  // Una contraseña en texto plano (registro nuevo creado desde la app) se guarda ya hasheada
+  records = await Promise.all(records.map(async r => (typeof r.password === "string" && r.password && !r.password.startsWith("$2")) ? { ...r, password: await bcrypt.hash(r.password, 10) } : r));
   if (records.every(r => r.password)) return records; // all have new passwords — skip fetch
   const res = await fetch(`${url}/rest/v1/${table}?select=id,rec`, {
     headers: supabaseHeaders(key),
@@ -361,8 +413,13 @@ async function relationalSafetyCheck(url, key, body, coreKeys) {
 
 function stripPasswords(data) {
   const strip = arr => Array.isArray(arr) ? arr.map(({ password: _pw, ...rest }) => rest) : arr;
-  return { ...data, partners: strip(data.partners), drivers: strip(data.drivers) };
+  return { ...data, partners: strip(data.partners), drivers: strip(data.drivers), staff: strip(data.staff) };
 }
+
+// Campos que la asistente de oficina puede cambiar en un viaje
+const ASSISTANT_TRIP_FIELDS = ["docs", "docStatus", "podDelivered", "docsReceivedAt", "docsReceivedBy", "invoiceRef"];
+// La asistente solo puede pasar un viaje a «entregado» (al recibir documentos); nunca cancelarlo ni revertirlo
+const assistantStatusOk = (cur, next) => next === "delivered" && (cur === "pending" || cur === "in_transit" || cur == null);
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 export default async (request) => {
@@ -390,6 +447,27 @@ export default async (request) => {
   const url = new URL(request.url);
   const isExport = url.pathname.endsWith("/export");
   const useRelational = BLOGIX_RELATIONAL === "true";
+
+  // ── GET /api/data/check-ref: ¿esta referencia ya existe para el cliente? ─────
+  // Cualquier usuario autenticado (el chofer no ve los viajes de otros, pero sí
+  // necesita saber si la referencia está tomada antes de guardar). Devuelve solo
+  // lo mínimo del otro viaje: id, fecha, placa, chofer y si está marcado conjunto.
+  if (request.method === "GET" && url.pathname.endsWith("/check-ref")) {
+    const q = url.searchParams;
+    const probe = { id: Number(q.get("tripId")) || null, clientId: Number(q.get("clientId")) || null, truckId: Number(q.get("truckId")) || null,
+      invoiceRef: q.get("ref") || "", status: "pending" };
+    if (!probe.clientId || !String(probe.invoiceRef).trim()) return Response.json({ found: null, canJoin: false, error: null }, { headers: corsHeaders });
+    let trips = [], drivers = [], trucks = [];
+    try { [trips, drivers, trucks] = await Promise.all([readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trips"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_drivers").catch(() => []), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trucks").catch(() => [])]); }
+    catch (e) { return Response.json({ error: `DB read failed: ${e.message}` }, { status: 500, headers: corsHeaders }); }
+    const others = sameRefTrips(probe, trips);
+    if (others.length === 0) return Response.json({ found: null, canJoin: false, error: null }, { headers: corsHeaders });
+    const o = others[0];
+    const found = { id: o.id, date: o.date, plate: trucks.find(t => t.id === o.truckId)?.plate || null, driverName: drivers.find(d => d.id === o.driverId)?.name || null, joint: !!o.joint, count: others.length };
+    const asJoint = checkTripRef({ ...probe, joint: true }, trips, { drivers, trucks });
+    const plain = checkTripRef(probe, trips, { drivers, trucks });
+    return Response.json({ found, canJoin: asJoint.ok, alreadyOk: plain.ok, error: asJoint.ok ? null : asJoint.error, hint: plain.ok ? null : plain.error }, { headers: corsHeaders });
+  }
 
   // ── GET ───────────────────────────────────────────────────────────────────
   if (request.method === "GET") {
@@ -478,9 +556,69 @@ export default async (request) => {
       const driverTripIds = new Set(driverTrips.map(tr => tr.id));
       const driverExps = (body.expenses || [])
         .filter(e => (e.tripId && driverTripIds.has(e.tripId)) || (!e.tripId && e.driverId === driverId))
-        .filter(e => { const n = Number(e.id); return Number.isInteger(n) && n > 0; });
+        .filter(e => { const n = Number(e.id); return Number.isInteger(n) && n > 0; })
+        .filter(e => Number(e.amount) >= 0 && Number.isFinite(Number(e.amount)));
 
+      const remap = { trips: {}, expenses: {} };
       if (useRelational) {
+        // El chofer solo crea o edita viajes suyos válidos; nunca borra ni toca lo facturado/cobrado/recibido
+        {
+          const [exTrips, exClients, exTrucks, exInvoices, exCobros, exExps] = await Promise.all([
+            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trips"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_clients").catch(() => []),
+            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trucks").catch(() => []), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_invoices").catch(() => []),
+            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_cobros").catch(() => []), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_expenses").catch(() => [])]);
+          // ── Ids: el chofer solo ve sus propios registros, así que su app puede numerar un viaje o gasto
+          //    nuevo con un id que ya usa OTRO chofer. Aquí se detecta y se asigna un id libre; la app
+          //    recibe el mapa (remap) y adopta los ids nuevos. Nunca se sobrescribe lo de otro.
+          const tripById = new Map(exTrips.map(t => [t.id, t]));
+          let nextTrip = Math.max(0, ...exTrips.map(t => Number(t.id) || 0), ...driverTrips.map(t => Number(t.id) || 0)) + 1;
+          for (const tr of driverTrips) {
+            const ex = tripById.get(tr.id);
+            if (ex && ex.driverId !== driverId) { remap.trips[tr.id] = nextTrip; tr.id = nextTrip++; }
+          }
+          for (const e of driverExps) if (remap.trips[e.tripId]) e.tripId = remap.trips[e.tripId];
+          const expById = new Map(exExps.map(e => [e.id, e]));
+          const myTripIdsNow = new Set(driverTrips.map(t => t.id));
+          let nextExp = Math.max(0, ...exExps.map(e => Number(e.id) || 0), ...driverExps.map(e => Number(e.id) || 0)) + 1;
+          for (const e of driverExps) {
+            const ex = expById.get(e.id);
+            const isMine = ex && ((ex.tripId && myTripIdsNow.has(ex.tripId)) || (!ex.tripId && ex.driverId === driverId));
+            if (ex && !isMine) { remap.expenses[e.id] = nextExp; e.id = nextExp++; }
+          }
+          const mine = exTrips.filter(t => t.driverId === driverId);
+          const san = sanitizeDriverTrips({ incoming: driverTrips, existing: mine, driverId, clients: exClients, trucks: exTrucks, invoices: exInvoices, cobros: exCobros });
+          if (san.errors.length) return Response.json({ error: san.errors[0].error, code: "invalid_trip", tripId: san.errors[0].tripId }, { status: 422, headers: corsHeaders });
+          driverTrips.length = 0; driverTrips.push(...san.trips);
+        }
+        // Referencia de factura: no repetida, salvo viaje conjunto (se enlaza aquí, el chofer no ve otros viajes)
+        const refs = await enforceTripRefs(SUPABASE_URL, SUPABASE_SERVICE_KEY, driverTrips);
+        if (refs.error) return Response.json({ error: refs.error, code: "duplicate_ref", tripId: refs.tripId }, { status: 422, headers: corsHeaders });
+        driverTrips.length = 0; driverTrips.push(...refs.trips);
+        // Viaje conjunto registrado por este chofer: el servidor crea el viaje del compañero
+        const needCompanion = driverTrips.filter(tr => tr.joint && tr.jointDriverId && tr.jointTruckId && !tr.jointWith && tr.status !== "cancelled");
+        if (needCompanion.length > 0) {
+          const [allTrips, allDrivers, allTrucks, allClients, allExps] = await Promise.all([
+            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trips"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_drivers"),
+            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trucks"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_clients"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_expenses")]);
+          let nextTripId = Math.max(0, ...allTrips.map(t => Number(t.id) || 0), ...driverTrips.map(t => Number(t.id) || 0)) + 1;
+          let nextExpId = Math.max(0, ...allExps.map(e => Number(e.id) || 0), ...driverExps.map(e => Number(e.id) || 0)) + 1;
+          const newTrips = [], newExps = [];
+          for (const tr of needCompanion) {
+            if (Number(tr.jointDriverId) === driverId) continue; // no puede enlazarse consigo mismo
+            const already = allTrips.find(t => t.jointWith === tr.id && t.status !== "cancelled");
+            if (already) { tr.jointWith = already.id; continue; }   // ya se creó en un guardado anterior
+            const built = buildCompanionTrip({ trip: tr, companionDriverId: tr.jointDriverId, companionTruckId: tr.jointTruckId, drivers: allDrivers, trucks: allTrucks, clients: allClients, nextTripId, nextExpenseId: nextExpId, createdBy: tr.createdBy });
+            if (!built) continue;
+            nextTripId += 1; nextExpId += built.expenses.length;
+            newTrips.push(built.trip); newExps.push(...built.expenses);
+            tr.jointWith = built.trip.id;
+          }
+          if (newTrips.length) await fetch(`${SUPABASE_URL}/rest/v1/bl_trips`, { method: "POST", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify(newTrips.map(tr => ({ id: tr.id, rec: tr }))) });
+          if (newExps.length) await fetch(`${SUPABASE_URL}/rest/v1/bl_expenses`, { method: "POST", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify(newExps.map(e => ({ id: e.id, rec: e }))) });
+        }
+        if (refs.extraUpserts.length > 0) {
+          await fetch(`${SUPABASE_URL}/rest/v1/bl_trips`, { method: "POST", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify(refs.extraUpserts.map(tr => ({ id: tr.id, rec: tr }))) });
+        }
         // Upsert driver's trips (skip upsert if none, but always delete stale)
         if (driverTrips.length > 0) {
           await fetch(`${SUPABASE_URL}/rest/v1/bl_trips`, {
@@ -489,11 +627,7 @@ export default async (request) => {
             body: JSON.stringify(driverTrips.map(tr => ({ id: tr.id, rec: tr }))),
           });
         }
-        const tripIds = driverTrips.map(tr => tr.id);
-        const tripDeleteUrl = tripIds.length > 0
-          ? `${SUPABASE_URL}/rest/v1/bl_trips?rec->>driverId=eq.${driverId}&id=not.in.(${tripIds.join(",")})`
-          : `${SUPABASE_URL}/rest/v1/bl_trips?rec->>driverId=eq.${driverId}`;
-        await fetch(tripDeleteUrl, { method: "DELETE", headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+        // Un chofer NUNCA borra viajes: si quiere anular uno, lo marca cancelado (y el admin decide).
 
         // Upsert driver's expenses (skip upsert if none, but always delete stale)
         if (driverExps.length > 0) {
@@ -507,9 +641,13 @@ export default async (request) => {
         // Exclude admin-created categories — driverPay (generated by syncAll), nominaTotalOverride,
         // and adelanto_conductor must never be wiped by a driver save even if the driver's local
         // state doesn't have them yet
+        // Solo puede retirar gastos que él mismo registra (combustible, peajes…) y que sigan PENDIENTES;
+        // nunca nómina, ayudantes, adelantos, comisiones ni nada ya pagado.
+        const protectedCats = ["nominaTotalOverride", "driverPay", "adelanto_conductor", "helper", "broker_commission", "partner_settlement"];
+        const catFilter = protectedCats.map(c => `rec->>category=neq.${c}`).join("&");
         const expDeleteUrl = expIds.length > 0
-          ? `${SUPABASE_URL}/rest/v1/bl_expenses?rec->>driverId=eq.${driverId}&rec->>category=neq.nominaTotalOverride&rec->>category=neq.driverPay&rec->>category=neq.adelanto_conductor&id=not.in.(${expIds.join(",")})`
-          : `${SUPABASE_URL}/rest/v1/bl_expenses?rec->>driverId=eq.${driverId}&rec->>category=neq.nominaTotalOverride&rec->>category=neq.driverPay&rec->>category=neq.adelanto_conductor`;
+          ? `${SUPABASE_URL}/rest/v1/bl_expenses?rec->>driverId=eq.${driverId}&${catFilter}&rec->>status=neq.paid&id=not.in.(${expIds.join(",")})`
+          : `${SUPABASE_URL}/rest/v1/bl_expenses?rec->>driverId=eq.${driverId}&${catFilter}&rec->>status=neq.paid`;
         await fetch(expDeleteUrl, { method: "DELETE", headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
       } else {
         // Legacy JSON blob: read-modify-write for driver's records only
@@ -537,7 +675,55 @@ export default async (request) => {
           });
         }
       }
-      return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "driver-write" }, { headers: corsHeaders });
+      // Sube la versión: un admin con el app abierto recibe conflicto y recarga (no borra lo que el chofer creó)
+      let newVersion = 0;
+      if (useRelational) {
+        try {
+          const sRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_settlement_status?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+          const cur = sRes.ok ? ((await sRes.json())[0]?.data || {}) : {};
+          newVersion = Date.now();
+          await syncSettlementStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY, { ...cur, _version: newVersion });
+        } catch { newVersion = 0; }
+      }
+      const remapped = Object.keys(remap.trips).length + Object.keys(remap.expenses).length;
+      return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "driver-write", ...(newVersion ? { _version: newVersion } : {}), ...(remapped ? { remap } : {}) }, { headers: corsHeaders });
+    }
+
+    // ── Asistente de oficina: solo documentos de viajes existentes ───────
+    if (sessionUser.role === "assistant") {
+      let body;
+      try { body = await request.json(); }
+      catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
+      const incoming = (body.trips || []).filter(tr => Number.isInteger(Number(tr.id)) && Number(tr.id) > 0);
+      if (!useRelational) return Response.json({ error: "Modo blob no soportado para asistente" }, { status: 400, headers: corsHeaders });
+      const errors = [];
+      let changed = 0;
+      for (const tr of incoming) {
+        const getRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_trips?id=eq.${Number(tr.id)}&select=rec`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+        if (!getRes.ok) { errors.push(`viaje ${tr.id}: lectura ${getRes.status}`); continue; }
+        const rows = await getRes.json();
+        const current = rows[0]?.rec;
+        if (!current) continue; // la asistente no crea viajes
+        const patch = {};
+        for (const k of ASSISTANT_TRIP_FIELDS) if (k in tr && JSON.stringify(tr[k]) !== JSON.stringify(current[k])) patch[k] = tr[k];
+        if (tr.status !== current.status && assistantStatusOk(current.status, tr.status)) patch.status = tr.status;
+        if (Object.keys(patch).length === 0) continue;
+        const upRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_trips?id=eq.${Number(tr.id)}`, {
+          method: "PATCH", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "return=minimal" },
+          body: JSON.stringify({ rec: { ...current, ...patch } }),
+        });
+        if (!upRes.ok) errors.push(`viaje ${tr.id}: ${upRes.status}`); else changed++;
+      }
+      if (errors.length) return Response.json({ error: errors.join("; ") }, { status: 500, headers: corsHeaders });
+      // Sube la versión para que un admin con el app abierto reciba conflicto y recargue
+      let newVersion = 0;
+      if (changed > 0) {
+        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_settlement_status?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+        const cur = sRes.ok ? ((await sRes.json())[0]?.data || {}) : {};
+        newVersion = Date.now();
+        await syncSettlementStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY, { ...cur, _version: newVersion });
+      }
+      return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "assistant-write", changed, ...(newVersion ? { _version: newVersion } : {}) }, { headers: corsHeaders });
     }
 
     if (sessionUser.role !== "admin") {
@@ -549,7 +735,7 @@ export default async (request) => {
     catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
 
     const knownKeys = ["trips", "drivers", "trucks", "clients", "expenses", "invoices"];
-    if (!knownKeys.some(k => k in body)) {
+    if (body.patch !== true && !knownKeys.some(k => k in body)) {
       return Response.json({ error: "Invalid data structure" }, { status: 400, headers: corsHeaders });
     }
 
@@ -582,6 +768,56 @@ export default async (request) => {
       }
     }
 
+    // ── Guardado por registro (patch): solo lo que cambió, con ids a borrar ───────────
+    // body.tables = { trips: { upserts:[...], deletes:[ids] }, ... } + settlementStatus/bankAccount/pfSettings
+    if (body.patch === true) {
+      if (!useRelational) return Response.json({ error: "patch solo en modo relacional" }, { status: 400, headers: corsHeaders });
+      const TABLES = { trips: "bl_trips", expenses: "bl_expenses", trucks: "bl_trucks", drivers: "bl_drivers", clients: "bl_clients", partners: "bl_partners",
+        brokers: "bl_brokers", suppliers: "bl_suppliers", invoices: "bl_invoices", cobros: "bl_cobros", fixedTemplates: "bl_fixed_templates", staff: "bl_staff" };
+      const tables = body.tables || {};
+      for (const k of Object.keys(tables)) if (!TABLES[k]) return Response.json({ error: `tabla desconocida: ${k}` }, { status: 400, headers: corsHeaders });
+      const up = (k) => Array.isArray(tables[k]?.upserts) ? tables[k].upserts : [];
+      const del = (k) => (Array.isArray(tables[k]?.deletes) ? tables[k].deletes : []).map(Number).filter(n => Number.isInteger(n) && n > 0);
+      try {
+        for (const k of ["partners", "drivers", "staff"]) if (up(k).length) tables[k].upserts = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, up(k), TABLES[k]);
+        let extraTrips = [];
+        if (up("trips").length) {
+          const refs = await enforceTripRefs(SUPABASE_URL, SUPABASE_SERVICE_KEY, up("trips"));
+          if (refs.error) return Response.json({ error: refs.error, code: "duplicate_ref", tripId: refs.tripId }, { status: 422, headers: corsHeaders });
+          tables.trips.upserts = refs.trips; extraTrips = refs.extraUpserts || [];
+        }
+        let changed = 0;
+        for (const [k, table] of Object.entries(TABLES)) {
+          const rows = [...up(k), ...(k === "trips" ? extraTrips : [])].filter(r => r && r.id != null).map(r => ({ id: r.id, rec: r }));
+          if (rows.length) {
+            const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method: "POST", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify(rows) });
+            if (!r.ok) throw new Error(`upsert ${table}: ${await r.text()}`);
+            changed += rows.length;
+          }
+          const ids = del(k);
+          if (ids.length) {
+            const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=in.(${ids.join(",")})`, { method: "DELETE", headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+            if (!r.ok) throw new Error(`delete ${table}: ${await r.text()}`);
+            changed += ids.length;
+          }
+        }
+        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_settlement_status?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+        const cur = sRes.ok ? ((await sRes.json())[0]?.data || {}) : {};
+        const { _version: _v, __bankAccount, __bankReconciliation, __pfSettings, ...curStatus } = cur;
+        const newVersion = Date.now();
+        await syncSettlementStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+          ...(body.settlementStatus != null ? body.settlementStatus : curStatus),
+          _version: newVersion,
+          __bankAccount: body.bankAccount != null ? body.bankAccount : __bankAccount,
+          __bankReconciliation: body.bankReconciliation != null ? body.bankReconciliation : __bankReconciliation,
+          __pfSettings: body.pfSettings != null ? body.pfSettings : __pfSettings,
+        });
+        return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "patch", changed, _version: newVersion }, { headers: corsHeaders });
+      } catch (err) {
+        return Response.json({ error: String(err) }, { status: 500, headers: corsHeaders });
+      }
+    }
+
     const coreKeys = ["trips", "clients", "trucks", "drivers", "expenses", "partners", "invoices", "cobros"];
     const anyEmpty = coreKeys.some(k => Array.isArray(body[k]) && body[k].length === 0);
 
@@ -597,6 +833,12 @@ export default async (request) => {
       // Restore passwords that GET strips — prevents every admin save from wiping login credentials
       if (body.partners) body.partners = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.partners, "bl_partners");
       if (body.drivers)  body.drivers  = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.drivers,  "bl_drivers");
+      if (body.staff)    body.staff    = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.staff,    "bl_staff");
+      if (Array.isArray(body.trips)) {
+        const refs = await enforceTripRefs(SUPABASE_URL, SUPABASE_SERVICE_KEY, body.trips);
+        if (refs.error) return Response.json({ error: refs.error, code: "duplicate_ref", tripId: refs.tripId }, { status: 422, headers: corsHeaders });
+        body.trips = refs.trips;
+      }
 
       try {
         await syncAllTables(SUPABASE_URL, SUPABASE_SERVICE_KEY, body);
@@ -607,6 +849,7 @@ export default async (request) => {
           _version: newVersion,
           ...(body.bankAccount != null           ? { __bankAccount: body.bankAccount }           : {}),
           ...(body.bankReconciliation != null     ? { __bankReconciliation: body.bankReconciliation } : {}),
+          ...(body.pfSettings != null             ? { __pfSettings: body.pfSettings }             : {}),
         });
         return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "relational", _version: newVersion }, { headers: corsHeaders });
       } catch (err) {
@@ -662,5 +905,5 @@ export default async (request) => {
 };
 
 export const config = {
-  path: ["/api/data", "/api/data/export"],
+  path: ["/api/data", "/api/data/export", "/api/data/check-ref"],
 };

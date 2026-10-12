@@ -46,8 +46,8 @@ export default function BrokersPage({ t, brokers, setBrokers, trips, setTrips, s
             <button onClick={() => openEdit(b)} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
             <button onClick={() => {
               const brokerTripIds = new Set((trips || []).filter(tr => tr.brokerId === b.id).map(tr => tr.id));
-              if (setTrips) setTrips(prev => prev.map(tr => tr.brokerId === b.id ? { ...tr, brokerId: null } : tr));
-              if (setExpenses) setExpenses(prev => prev.filter(e => !(e.category === "broker_commission" && brokerTripIds.has(e.tripId))));
+              if (brokerTripIds.size > 0) { window.alert(`${b.name} está en ${brokerTripIds.size} viaje(s). No se puede eliminar: desactívalo o quítalo de los clientes para que no se use más.`); return; }
+              if (!window.confirm(`¿Eliminar el broker ${b.name}?`)) return;
               setBrokers(brokers.filter(x => x.id !== b.id));
             }} style={{ padding: "8px 10px", border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
           </Td>

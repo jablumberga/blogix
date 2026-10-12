@@ -11,7 +11,7 @@
 
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { signToken } from "./api.mjs";
+import { signToken, verifyToken } from "./api.mjs";
 
 const ALLOWED_ORIGINS = new Set([
   "https://blogix.do",
@@ -135,6 +135,31 @@ export default async (request) => {
     return Response.json({ ok: true }, { headers: corsHeaders });
   }
 
+  // ── POST /api/auth/password — el admin cambia la contraseña de un chofer / socio / usuario ──
+  // Acción dedicada: la contraseña nunca viaja en el autoguardado ni se guarda en texto plano.
+  if (action === "password") {
+    const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const session = token ? await verifyToken(token, BLOGIX_SECRET) : null;
+    if (!session || session.role !== "admin") return Response.json({ error: "Solo el administrador puede cambiar contraseñas" }, { status: 403, headers: corsHeaders });
+    let body;
+    try { body = await request.json(); } catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
+    const TABLES = { drivers: "bl_drivers", partners: "bl_partners", staff: "bl_staff" };
+    const table = TABLES[body?.table];
+    const id = Number(body?.id);
+    const pw = typeof body?.password === "string" ? body.password : "";
+    if (!table || !(id > 0)) return Response.json({ error: "table/id inválidos" }, { status: 400, headers: corsHeaders });
+    if (pw.length < 4 || pw.length > 256) return Response.json({ error: "La contraseña debe tener al menos 4 caracteres" }, { status: 400, headers: corsHeaders });
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || BLOGIX_RELATIONAL !== "true") return Response.json({ error: "Cambio de contraseña solo disponible en modo relacional" }, { status: 501, headers: corsHeaders });
+    const h = { "Content-Type": "application/json", "apikey": SUPABASE_SERVICE_KEY, "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}` };
+    const getRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}&select=rec`, { headers: h });
+    const rows = getRes.ok ? await getRes.json() : [];
+    if (!rows[0]?.rec) return Response.json({ error: "Registro no encontrado (guarda primero el registro y vuelve a intentar)" }, { status: 404, headers: corsHeaders });
+    const newHash = await bcrypt.hash(pw, 10);
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, { method: "PATCH", headers: { ...h, "Prefer": "return=minimal" }, body: JSON.stringify({ rec: { ...rows[0].rec, password: newHash } }) });
+    if (!patchRes.ok) return Response.json({ error: `No se pudo guardar (${patchRes.status})` }, { status: 502, headers: corsHeaders });
+    return Response.json({ ok: true }, { headers: corsHeaders });
+  }
+
   if (action === "login") {
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
                request.headers.get("x-real-ip") || "unknown";
@@ -172,21 +197,27 @@ export default async (request) => {
         // Relational mode — bl_* tables use { id, rec } column layout (api.mjs pattern)
         try {
           const sbHeaders = { "Content-Type": "application/json", "apikey": SUPABASE_SERVICE_KEY, "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}` };
-          const [pRes, dRes] = await Promise.all([
+          const [pRes, dRes, sRes] = await Promise.all([
             fetch(`${SUPABASE_URL}/rest/v1/bl_partners?select=id,rec`, { headers: sbHeaders }),
             fetch(`${SUPABASE_URL}/rest/v1/bl_drivers?select=id,rec`,  { headers: sbHeaders }),
+            fetch(`${SUPABASE_URL}/rest/v1/bl_staff?select=id,rec`,    { headers: sbHeaders }),
           ]);
           const partners = pRes.ok
             ? (await pRes.json())
-                .filter(row => row.rec?.username && row.rec?.password)
+                .filter(row => row.rec?.username && row.rec?.password && row.rec?.status !== "inactive")
                 .map(row => ({ id: `p-${row.id}`, _dbId: row.id, _role: "partner", username: row.rec.username, password: row.rec.password, role: "partner", name: row.rec.name, refId: row.id }))
             : [];
           const drivers = dRes.ok
             ? (await dRes.json())
-                .filter(row => row.rec?.username && row.rec?.password)
+                .filter(row => row.rec?.username && row.rec?.password && row.rec?.status !== "inactive")
                 .map(row => ({ id: `d-${row.id}`, _dbId: row.id, _role: "driver", username: row.rec.username, password: row.rec.password, role: "driver", name: row.rec.name, refId: row.id }))
             : [];
-          dynamicUsers = [...partners, ...drivers];
+          const staff = sRes.ok
+            ? (await sRes.json())
+                .filter(row => row.rec?.username && row.rec?.password && row.rec?.status !== "inactive")
+                .map(row => ({ id: `s-${row.id}`, _dbId: row.id, _role: "staff", username: row.rec.username, password: row.rec.password, role: row.rec.role || "assistant", name: row.rec.name, refId: row.id }))
+            : [];
+          dynamicUsers = [...partners, ...drivers, ...staff];
         } catch (err) {
           console.warn("[auth] Failed to load users from relational tables:", err.message);
         }
@@ -220,7 +251,7 @@ export default async (request) => {
     }
 
     const allUsers = [...adminUsers, ...dynamicUsers];
-    const candidate = allUsers.find(u => u.username === username);
+    const candidate = allUsers.find(u => String(u.username).toLowerCase() === username.trim().toLowerCase());
 
     if (!candidate) {
       return Response.json({ ok: false, error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
@@ -252,7 +283,7 @@ export default async (request) => {
         const newHash = await bcrypt.hash(password, 10);
         if (BLOGIX_RELATIONAL === "true") {
           // bl_* tables store all fields inside rec JSONB — must read current rec then merge
-          const table = candidate._role === "partner" ? "bl_partners" : "bl_drivers";
+          const table = candidate._role === "partner" ? "bl_partners" : candidate._role === "staff" ? "bl_staff" : "bl_drivers";
           const getRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${candidate._dbId}&select=rec`, {
             headers: { "Content-Type": "application/json", "apikey": SUPABASE_SERVICE_KEY, "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}` },
           });
@@ -313,5 +344,5 @@ export default async (request) => {
 };
 
 export const config = {
-  path: ["/api/auth/login", "/api/auth/logout"],
+  path: ["/api/auth/login", "/api/auth/logout", "/api/auth/password"],
 };

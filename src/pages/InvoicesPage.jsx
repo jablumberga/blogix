@@ -1,8 +1,12 @@
 import { useState, useMemo } from "react";
-import { Plus, X, Pencil, Trash2, FileText, CheckCircle2, Clock, Send, Ban, AlertCircle, Lock } from "lucide-react";
+import { Plus, X, Pencil, Trash2, FileText, CheckCircle2, Clock, Send, Ban, AlertCircle, Lock, Eye, FileSpreadsheet } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, nxId, getPeriodInfo } from "../utils/helpers.js";
+import { fmt, nxId, getPeriodInfo, today } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../components/ui/index.jsx";
+import { invoiceHTML, invoiceSheet, openPrintWindow } from "../utils/printReport.js";
+import { DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
+import { invoiceBalance, buildAbono } from "../utils/cobros.js";
+import CobroModal from "../components/CobroModal.jsx";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function nextInvoiceNumber(invoices) {
@@ -19,7 +23,7 @@ function calcDueDate(date, client) {
   const terms = client?.rules?.paymentTerms || 30;
   const d = new Date(date + "T12:00:00");
   d.setDate(d.getDate() + terms);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 const STATUS_CONFIG = {
@@ -105,9 +109,9 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, isMobile }) {
+export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, partners = [], pfSettings = DEFAULT_PF_SETTINGS, isMobile }) {
 
-  const today = new Date().toISOString().slice(0, 10);
+  const todayStr = today();
 
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -116,7 +120,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
 
   const emptyForm = {
     invoiceNumber: "",
-    date: today,
+    date: todayStr,
     clientId: "",
     tripIds: [],
     status: "draft",
@@ -124,6 +128,11 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     dueDate: "",
   };
   const [form, setForm] = useState(emptyForm);
+
+  // Cliente que exige referencia: solo se factura lo que la oficina marcó como RECIBIDO (con eso te pagan).
+  // Cliente sin esa regla: se factura normal.
+  const needsRef = (cl) => cl?.rules?.requiresInvoiceRef === true;
+  const isReceived = (tr) => { const cl = clients.find(c => c.id === tr?.clientId); return !needsRef(cl) || tr?.docStatus === "delivered" || !!tr?.docsReceivedAt; };
 
   // Map of tripId → invoice (excluding the invoice being edited and cancelled invoices)
   const invoicedTripMap = useMemo(() => {
@@ -142,10 +151,14 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
 
   const clientTrips = useMemo(() => {
     if (!clientId) return [];
+    // Solo lo facturable: viajes del cliente, con ingreso, recibidos en oficina (si el cliente exige referencia)
+    // y que no estén ya en otra factura (los de la factura que se edita sí se muestran)
     return trips
       .filter(tr => tr.clientId === clientId && tr.status !== "cancelled" && (tr.revenue || 0) > 0)
+      .filter(tr => isReceived(tr) || form.tripIds.includes(tr.id))
+      .filter(tr => !invoicedTripMap.has(tr.id))
       .sort((a, b) => (b.date||"").localeCompare(a.date||""));
-  }, [clientId, trips]);
+  }, [clientId, trips, invoicedTripMap, form.tripIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Per-trip broker deductions for pass-through clients (shown in trip selector)
   const tripBrokerDeductions = useMemo(() => {
@@ -184,7 +197,20 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     setForm(prev => ({ ...prev, date: val, dueDate: due }));
   };
 
+  const exportInvoiceXlsx = async (inv, cl) => {
+    const XLSX = await import("xlsx");
+    const rows = invoiceSheet({ inv, client: cl, trips, trucks, brokers });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"] = [{ wch: 5 }, { wch: 12 }, { wch: 16 }, { wch: 28 }, { wch: 12 }, { wch: 10 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Factura");
+    XLSX.writeFile(wb, `factura-${inv.invoiceNumber || inv.id}.xlsx`);
+  };
+
   const toggleTrip = (tripId) => {
+    const tr = trips.find(t => t.id === tripId);
+    if (tr && !isReceived(tr)) return;
+    if (invoicedTripMap.has(tripId)) return; // ya facturado en otra factura
     setForm(prev => {
       const ids = prev.tripIds.includes(tripId)
         ? prev.tripIds.filter(id => id !== tripId)
@@ -214,6 +240,17 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
       alert("Selecciona un cliente y al menos un viaje.");
       return;
     }
+    // Regla: un viaje no se factura dos veces (salvo que la otra factura esté anulada)
+    const twice = form.tripIds.filter(id => invoicedTripMap.has(id));
+    if (twice.length > 0) {
+      alert(`No se puede facturar: ${twice.length} viaje(s) ya están en otra factura (${twice.map(id => `#${id} → ${invoicedTripMap.get(id)?.invoiceNumber || "factura " + invoicedTripMap.get(id)?.id}`).join(", ")}). Anula esa factura primero.`);
+      return;
+    }
+    const notReceived = form.tripIds.map(id => trips.find(t => t.id === id)).filter(tr => tr && !isReceived(tr));
+    if (notReceived.length > 0) {
+      alert(`No se puede facturar: ${notReceived.length} viaje(s) cuya referencia la oficina aún no marcó como recibida (${notReceived.map(tr => `#${tr.id} ${tr.invoiceRef || ""}`).join(", ")}). Este cliente paga por referencia recibida.`);
+      return;
+    }
     const cl = clients.find(c => c.id === Number(form.clientId));
     const data = {
       ...form,
@@ -231,64 +268,45 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     setEditId(null);
   };
 
+  // ── Cobros por factura (abonos) ──────────────────────────────────────────
+  const [cobroFor, setCobroFor] = useState(null); // factura a la que se registra un cobro
+  const balCtx = { trips, clients, brokers };
+  const balanceOf = (inv) => invoiceBalance(inv, cobros, balCtx);
+
+  const registerAbono = (inv, form) => {
+    const abono = buildAbono({ inv, ...form, cobros, trips, trucks, partners, clients, brokers, settings: pfSettings, nextId: nxId(cobros) });
+    if (!abono) { window.alert("Monto o fecha inválidos."); return; }
+    const next = [...cobros, abono];
+    setCobros(next);
+    const b = invoiceBalance(inv, next, balCtx);
+    setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, status: b.settled ? "paid" : (i.status === "draft" ? "sent" : i.status), paidDate: b.settled ? form.date : null } : i));
+    setCobroFor(null);
+  };
+
   const deleteInvoice = (id) => {
-    if (!window.confirm("¿Eliminar esta factura? Los viajes quedarán disponibles para facturar de nuevo.")) return;
-    setInvoices(prev => prev.filter(inv => inv.id !== id));
-    setCobros(prev => prev.filter(c => c.invoiceId !== id));
+    const inv = invoices.find(x => x.id === id);
+    if (!inv) return;
+    const b = balanceOf(inv);
+    const ids = new Set(inv.tripIds || []);
+    if (!window.confirm("¿Eliminar esta factura? Los viajes quedarán disponibles para facturar de nuevo" + (b.paid > 0 ? ` y se borrarán sus ${b.abonos.length} cobro(s) por ${fmt(b.paid)} (se revierte su reparto Profit First)` : "") + ".")) return;
+    setInvoices(prev => prev.filter(x => x.id !== id));
+    setCobros(prev => prev.filter(c => c.invoiceId !== id).map(c => c.invoiceId ? c : { ...c, collectedTripIds: (c.collectedTripIds || []).filter(t => !ids.has(t)) }));
+  };
+
+  // Anular: la factura conserva su número (queda registrada como ANULADA), los viajes vuelven a estar
+  // disponibles y se borran sus cobros. Eliminar es para facturas hechas por error.
+  const cancelInvoice = (id) => {
+    const inv = invoices.find(x => x.id === id);
+    if (!inv || inv.status === "cancelled") return;
+    const b = balanceOf(inv);
+    if (!window.confirm(`¿Anular la factura ${inv.invoiceNumber || "#" + inv.id}? Conserva su número como ANULADA; los viajes quedan disponibles para facturar de nuevo` + (b.paid > 0 ? ` y se borran sus cobros por ${fmt(b.paid)}` : "") + ".")) return;
+    const ids = new Set(inv.tripIds || []);
+    setInvoices(prev => prev.map(x => x.id === id ? { ...x, status: "cancelled", cancelledAt: todayStr } : x));
+    setCobros(prev => prev.filter(c => c.invoiceId !== id).map(c => c.invoiceId ? c : { ...c, collectedTripIds: (c.collectedTripIds || []).filter(t => !ids.has(t)) }));
   };
 
   const setStatus = (id, status) => {
-    const inv = invoices.find(x => x.id === id); // read before queuing update
     setInvoices(prev => prev.map(i => i.id === id ? { ...i, status } : i));
-    if (status === "paid" && inv) markInvoicePaid(inv);
-  };
-
-  const markInvoicePaid = (inv) => {
-    const cl = clients.find(c => c.id === inv.clientId);
-    if (!cl) return;
-    const isPassThrough = cl?.rules?.brokerPassThrough === true;
-    // Net amount per trip (gross minus broker commission for pass-through clients)
-    const tripNetAmt = (tr) => {
-      const gross = tr?.revenue || 0;
-      if (!isPassThrough || !tr?.brokerId) return gross;
-      const broker = brokers.find(b => b.id === tr.brokerId);
-      if (!broker) return gross;
-      return gross - Math.round(gross * (broker.commissionPct || 10) / 100);
-    };
-    // Group invoice trips by periodKey
-    const byPeriod = new Map();
-    (inv.tripIds || []).forEach(tid => {
-      const tr = trips.find(t => t.id === tid);
-      if (!tr) return;
-      const { key } = getPeriodInfo(tr.date, cl);
-      if (!byPeriod.has(key)) byPeriod.set(key, []);
-      byPeriod.get(key).push(tid);
-    });
-    // Update cobros — mark these trips as collected in each period
-    setCobros(prev => {
-      let next = [...prev];
-      byPeriod.forEach((tripIds, periodKey) => {
-        const idx = next.findIndex(c => c.clientId === inv.clientId && c.periodKey === periodKey);
-        if (idx >= 0) {
-          const existing = next[idx];
-          const merged = [...new Set([...(existing.collectedTripIds || []), ...tripIds])];
-          const allTripsInPeriod = trips.filter(tr => {
-            if (tr.clientId !== inv.clientId || !(tr.revenue > 0)) return false;
-            const { key } = getPeriodInfo(tr.date, cl);
-            return key === periodKey;
-          });
-          const allCollected = allTripsInPeriod.every(tr => merged.includes(tr.id));
-          next[idx] = { ...existing, collectedTripIds: merged, status: allCollected ? "collected" : "partial", collectedDate: allCollected ? inv.date : existing.collectedDate };
-        } else {
-          const tripRevenue = tripIds.reduce((s, tid) => {
-            const tr = trips.find(t => t.id === tid);
-            return s + tripNetAmt(tr);
-          }, 0);
-          next.push({ id: nxId(next), clientId: inv.clientId, periodKey, status: "partial", collectedDate: null, amount: tripRevenue, collectedTripIds: tripIds });
-        }
-      });
-      return next;
-    });
   };
 
   // Prefer stored net amount (broker pass-through deducted at save time).
@@ -302,14 +320,15 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   const stats = useMemo(() => {
     const active = invoices.filter(inv => inv.status !== "cancelled");
     const pending = active.filter(inv => inv.status !== "paid");
-    const overdue = pending.filter(inv => inv.dueDate && inv.dueDate < today);
+    const overdue = pending.filter(inv => inv.dueDate && inv.dueDate < todayStr);
+    const bal = (inv) => invoiceBalance(inv, cobros, { trips, clients, brokers }).balance;
     return {
       totalInvoiced: active.reduce((s, inv) => s + invAmt(inv), 0),
-      totalPending:  pending.reduce((s, inv) => s + invAmt(inv), 0),
-      totalOverdue:  overdue.reduce((s, inv) => s + invAmt(inv), 0),
+      totalPending:  pending.reduce((s, inv) => s + bal(inv), 0),
+      totalOverdue:  overdue.reduce((s, inv) => s + bal(inv), 0),
       count: active.length,
     };
-  }, [invoices, tripRevMap, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [invoices, cobros, tripRevMap, todayStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Filtered list ────────────────────────────────────────────────────────
   let filtered = [...invoices].sort((a, b) => (b.date||"").localeCompare(a.date||""));
@@ -352,6 +371,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
               <Th>Cliente</Th>
               <Th style={{ display: isMobile ? "none" : undefined }}>Viajes</Th>
               <Th align="right">Monto</Th>
+              <Th align="right">Cobrado / saldo</Th>
               <Th style={{ display: isMobile ? "none" : undefined }}>Vence</Th>
               <Th>Estado</Th>
               <Th align="right">Acciones</Th>
@@ -361,9 +381,10 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
             {filtered.map(inv => {
               const cl = clients.find(c => c.id === inv.clientId);
               const amount = invAmt(inv);
+              const bal = balanceOf(inv);
               const cfg = STATUS_CONFIG[inv.status] || STATUS_CONFIG.draft;
-              const isOverdue = inv.status !== "paid" && inv.status !== "cancelled" && inv.dueDate && inv.dueDate < today;
-              const daysLeft = inv.dueDate ? Math.ceil((new Date(inv.dueDate) - new Date(today)) / 86400000) : null;
+              const isOverdue = inv.status !== "paid" && inv.status !== "cancelled" && inv.dueDate && inv.dueDate < todayStr;
+              const daysLeft = inv.dueDate ? Math.ceil((new Date(inv.dueDate) - new Date(todayStr)) / 86400000) : null;
               return (
                 <tr key={inv.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
                   <Td bold>
@@ -380,6 +401,12 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                     {inv.brokerDeduction > 0 && (
                       <div style={{ fontSize: 9, color: colors.orange, fontWeight: 400 }}>−{fmt(inv.brokerDeduction)} broker</div>
                     )}
+                  </Td>
+                  <Td align="right">
+                    {inv.status === "cancelled" ? <span style={{ color: colors.textMuted }}>—</span> : <>
+                      <div style={{ color: colors.green, fontWeight: 600 }}>{fmt(bal.paid)}{bal.abonos.length > 1 ? <span style={{ fontSize: 9, color: colors.textMuted, fontWeight: 400 }}> ({bal.abonos.length} abonos)</span> : null}</div>
+                      <div style={{ fontSize: 10, color: bal.balance > 0 ? colors.orange : colors.textMuted }}>saldo {fmt(bal.balance)}</div>
+                    </>}
                   </Td>
                   <Td style={{ display: isMobile ? "none" : undefined }}>
                     {inv.dueDate
@@ -399,13 +426,20 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                           <Send size={10}/>
                         </button>
                       )}
-                      {inv.status === "sent" && (
-                        <button onClick={() => setStatus(inv.id, "paid")} title="Marcar cobrada" style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.green}`, background: colors.green+"18", color: colors.green, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
+                      {inv.status !== "cancelled" && bal.balance > 0 && (
+                        <button onClick={() => setCobroFor(inv)} title="Registrar cobro (total o abono)" style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.green}`, background: colors.green+"18", color: colors.green, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
                           ✓ Cobrar
                         </button>
                       )}
-                      <button onClick={() => openEdit(inv)} title="Editar" style={{ background: "none", border: "none", color: colors.accent, cursor: "pointer", padding: 4 }}><Pencil size={13}/></button>
-                      <button onClick={() => deleteInvoice(inv.id)} title="Eliminar" style={{ background: "none", border: "none", color: colors.red, cursor: "pointer", padding: 4 }}><Trash2 size={13}/></button>
+                      <button onClick={() => openPrintWindow(`Factura ${inv.invoiceNumber || inv.id}`, invoiceHTML({ inv, client: cl, trips, trucks, brokers }))} title="Ver factura (PDF)" style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: "transparent", color: colors.text, cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                        <Eye size={11}/> Ver factura
+                      </button>
+                      <button onClick={() => exportInvoiceXlsx(inv, cl)} title="Generar Excel" style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.green}60`, background: "transparent", color: colors.green, cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                        <FileSpreadsheet size={11}/> Excel
+                      </button>
+                      {inv.status !== "cancelled" && <button onClick={() => openEdit(inv)} title="Editar" style={{ background: "none", border: "none", color: colors.accent, cursor: "pointer", padding: 4 }}><Pencil size={13}/></button>}
+                      {inv.status !== "cancelled" && <button onClick={() => cancelInvoice(inv.id)} title="Anular (conserva el número)" style={{ background: "none", border: "none", color: colors.orange, cursor: "pointer", padding: 4 }}><Ban size={13}/></button>}
+                      <button onClick={() => deleteInvoice(inv.id)} title="Eliminar (factura por error)" style={{ background: "none", border: "none", color: colors.red, cursor: "pointer", padding: 4 }}><Trash2 size={13}/></button>
                     </div>
                   </Td>
                 </tr>
@@ -448,7 +482,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
               </Sel>
               <div>
                 <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Fecha Vencimiento</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: form.dueDate < today && form.status !== "paid" ? colors.red : colors.text, padding: "7px 0" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: form.dueDate < todayStr && form.status !== "paid" ? colors.red : colors.text, padding: "7px 0" }}>
                   {form.dueDate || (selectedClient ? calcDueDate(form.date, selectedClient) : "—")}
                   {selectedClient?.rules?.paymentTerms ? <span style={{ fontSize: 10, color: colors.textMuted, fontWeight: 400 }}> ({selectedClient.rules.paymentTerms} días)</span> : null}
                 </div>
@@ -485,9 +519,9 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                   <div style={{ border: `1px solid ${colors.border}`, borderRadius: 10, overflow: "hidden", maxHeight: 360, overflowY: "auto" }}>
                     {clientTrips.map(trip => {
                       const isInOther = invoicedTripMap.has(trip.id);
-                      const docsOk = trip.docStatus === "delivered";
+                      const docsOk = isReceived(trip);
                       const ineligible = !docsOk;
-                      const reason = !docsOk ? "Docs pendientes — entrega primero los documentos" : null;
+                      const reason = !docsOk ? "Pendiente: la oficina aún no marcó esta referencia como recibida (este cliente paga por referencia)" : null;
                       return (
                         <TripSelectRow
                           key={trip.id}
@@ -543,5 +577,6 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
         </div>
       </div>
     )}
+    {cobroFor && (() => { const b = balanceOf(cobroFor); return <CobroModal inv={cobroFor} amount={b.amount} paid={b.paid} balance={b.balance} onSave={f => registerAbono(cobroFor, f)} onClose={() => setCobroFor(null)} />; })()}
   </div>;
 }

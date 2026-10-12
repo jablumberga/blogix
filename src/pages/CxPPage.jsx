@@ -1,11 +1,12 @@
 import { useMemo } from "react";
 import { CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, getSupplierDueDate } from "../utils/helpers.js";
+import { fmt, getSupplierDueDate, today } from "../utils/helpers.js";
 import { Card, PageHeader, Badge, Th, Td } from "../components/ui/index.jsx";
+import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
 
-export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, suppliers, trips, isMobile }) {
-  const today = new Date().toISOString().slice(0, 10);
+export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, suppliers, trips, cobros = [], pfSettings, isMobile }) {
+  const todayStr = today();
 
   const supplierMap = useMemo(() => new Map((suppliers || []).map(s => [s.id, s])), [suppliers]);
   const brokerMap   = useMemo(() => new Map((brokers  || []).map(b => [b.id, b])), [brokers]);
@@ -16,9 +17,9 @@ export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, su
     if (e.dueDate) return e.dueDate;
     const sup = supplierMap.get(e.supplierId);
     if (sup?.paymentCondition === "credit" && sup.creditDays > 0) {
-      return getSupplierDueDate(e.date || today, sup);
+      return getSupplierDueDate(e.date || todayStr, sup);
     }
-    return e.date || today;
+    return e.date || todayStr;
   };
 
   // Enrich pending expenses with due date + overdue/urgency flags
@@ -27,19 +28,19 @@ export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, su
       .filter(e => !e.status || e.status === "pending")
       .map(e => {
         const due = getExpDueDate(e);
-        const daysLeft = Math.ceil((new Date(due) - new Date(today)) / 86400000);
+        const daysLeft = Math.ceil((new Date(due) - new Date(todayStr)) / 86400000);
         return { ...e, _dueDate: due, _daysLeft: daysLeft, _isOverdue: daysLeft < 0 };
       })
       .sort((a, b) => a._dueDate.localeCompare(b._dueDate));
-  }, [expenses, supplierMap, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [expenses, supplierMap, todayStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const markGroupPaid = (keys) => {
     const ids = new Set(keys);
-    setExpenses(prev => prev.map(e => ids.has(e.id) ? { ...e, status: "paid", paidDate: today } : e));
+    setExpenses(prev => prev.map(e => ids.has(e.id) ? { ...e, status: "paid", paidDate: todayStr } : e));
   };
 
   const markOnePaid = (id) => {
-    setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: "paid", paidDate: today } : e));
+    setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: "paid", paidDate: todayStr } : e));
   };
 
   // ── Group definitions ─────────────────────────────────────────────────────
@@ -121,6 +122,8 @@ export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, su
 
   return <div>
     <PageHeader title="Cuentas por Pagar" />
+    <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} compact isMobile={isMobile} />
+    <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 12 }}>Todo lo de esta página se paga desde <b style={{ color: colors.cyan }}>OpEx</b>. Las liquidaciones de socios no están aquí: son pass-through y se pagan en Liquidaciones.</div>
 
     {/* KPI cards */}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 12, marginBottom: 16 }}>

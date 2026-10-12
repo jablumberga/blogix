@@ -127,7 +127,7 @@ export async function loadData() {
   return { source: "default", data: null };
 }
 
-export async function saveData(data, version = 0) {
+export async function saveData(data, version = 0, patch = null) {
   const token = getToken();
   const key   = lsKey(token);
   localStorage.setItem(key, JSON.stringify(data));
@@ -145,15 +145,16 @@ export async function saveData(data, version = 0) {
     const res = await fetch(API_URL, {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ ...data, _version: version }),
+      body: JSON.stringify(patch ? { ...patch, _version: version } : { ...data, _version: version }),
     });
     if (res.ok) {
       _apiAvailable = true;
       clearDirty();
       const json = await res.json().catch(() => ({}));
-      return { saved: "api", version: json._version || 0 };
+      return { saved: "api", version: json._version || 0, ...(json.remap ? { remap: json.remap } : {}) };
     }
     if (res.status === 409) { return { saved: "conflict" }; }
+    if (res.status === 422) { const j = await res.json().catch(() => ({})); return { saved: "rejected", error: j.error || "Datos rechazados por el servidor", code: j.code, tripId: j.tripId }; }
     if (res.status === 401) {
       // Token expired or invalid — force re-login, don't show "offline"
       localStorage.removeItem(key);
@@ -168,4 +169,28 @@ export async function saveData(data, version = 0) {
   }
 
   return { saved: "localStorage" };
+}
+
+
+/** Consulta al servidor si una referencia de factura ya existe para el cliente (viaje conjunto). */
+/** Cambia la contraseña de un chofer/socio/usuario (solo admin). Acción dedicada, fuera del autoguardado. */
+export async function setPassword({ table, id, password }) {
+  const token = getToken();
+  if (!token) return { ok: false, error: "Sin sesión" };
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/password`, { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ table, id, password }) });
+    const j = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true } : { ok: false, error: j.error || `Error ${res.status}` };
+  } catch { return { ok: false, error: "Sin conexión con el servidor" }; }
+}
+
+export async function checkRef({ clientId, ref, truckId, tripId }) {
+  const token = getToken();
+  if (!token || !clientId || !String(ref || "").trim()) return { found: null, canJoin: false, error: null };
+  try {
+    const qs = new URLSearchParams({ clientId: String(clientId), ref: String(ref), truckId: String(truckId || ""), tripId: String(tripId || "") });
+    const res = await fetch(`${API_URL}/check-ref?${qs}`, { headers: authHeaders(), cache: "no-store" });
+    if (!res.ok) return { found: null, canJoin: false, error: null, offline: true };
+    return await res.json();
+  } catch { return { found: null, canJoin: false, error: null, offline: true }; }
 }

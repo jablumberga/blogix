@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { getToken } from "./api.js";
 import { colors } from "./constants/theme.js";
 import { Badge } from "./components/ui/index.jsx";
 import LoginPage from "./components/LoginPage.jsx";
 import LandingPage from "./pages/LandingPage.jsx";
-import CfoChat from "./components/CfoChat.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
-import AgentsPage from "./pages/AgentsPage.jsx";
 import PartnerDashboard from "./pages/PartnerDashboard.jsx";
 import DriverDashboard from "./pages/DriverDashboard.jsx";
 import TripsPage from "./pages/TripsPage.jsx";
@@ -25,15 +23,19 @@ import SettlementsPage from "./pages/SettlementsPage.jsx";
 import CxCPage from "./pages/CxCPage.jsx";
 import InvoicesPage from "./pages/InvoicesPage.jsx";
 import BancoPage from "./pages/BancoPage.jsx";
+import AssistantDashboard from "./pages/AssistantDashboard.jsx";
+import StaffPage from "./pages/StaffPage.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
 function SyncAllButton({ syncAll, sidebarOpen }) {
   const [msg, setMsg] = useState(null);
   const handle = () => {
-    const { added, removed, invoicesPatched } = syncAll();
+    const { added, removed, invoicesPatched, cobrosAllocated = 0, jointLinked = 0 } = syncAll();
     const parts = [];
     if (added > 0) parts.push(`+${added} nómina`);
+    if (cobrosAllocated > 0) parts.push(`${cobrosAllocated} cobro${cobrosAllocated !== 1 ? "s" : ""} con Profit First`);
+    if (jointLinked > 0) parts.push(`${jointLinked} viaje${jointLinked !== 1 ? "s" : ""} conjunto${jointLinked !== 1 ? "s" : ""} enlazado${jointLinked !== 1 ? "s" : ""}`);
     if (removed > 0) parts.push(`−${removed} gasto${removed !== 1 ? "s" : ""} broker`);
     if (invoicesPatched > 0) parts.push(`${invoicesPatched} factura${invoicesPatched !== 1 ? "s" : ""} actualizadas`);
     const text = parts.length > 0 ? `✅ ${parts.join(", ")}` : "✅ Todo sincronizado";
@@ -84,14 +86,16 @@ async function initPushNotifications(userRole) {
 export default function App() {
   const {
     lang, setLang, t, user, login, logout, forceSync, syncAll,
-    isAdmin, isPartner, isDriver, allUsers,
+    isAdmin, isPartner, isDriver, isAssistant, allUsers,
+    staff, setStaff,
     clients, setClients, partners, setPartners, trucks, setTrucks,
     drivers, setDrivers, trips, setTrips, expenses, setExpenses,
     brokers, setBrokers, suppliers, setSuppliers,
     fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus,
     cobros, setCobros, invoices, setInvoices,
     bankAccount, setBankAccount, bankReconciliation, setBankReconciliation,
-    syncStatus, partner, partnerTruckIds, driverObj, alerts,
+    pfSettings, setPfSettings,
+    syncStatus, syncError, setSyncError, syncNotice, setSyncNotice, partner, partnerTruckIds, driverObj, alerts,
   } = useApp();
 
   const [page, setPage] = useState(() => {
@@ -100,6 +104,7 @@ export default function App() {
       const u = s ? JSON.parse(s) : null;
       if (u?.role === "driver") return "driverDash";
       if (u?.role === "partner") return "partnerDash";
+      if (u?.role === "assistant") return "assistantDash";
     } catch {}
     return "dashboard";
   });
@@ -154,7 +159,7 @@ export default function App() {
   if (!user) return <LoginPage t={t} onLogin={(u, remember, token) => {
     login(u, remember, token);
     setShowLanding(true);
-    setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : "dashboard");
+    setPage(u.role === "partner" ? "partnerDash" : u.role === "driver" ? "driverDash" : u.role === "assistant" ? "assistantDash" : "dashboard");
     initPushNotifications(u.role);
   }} />;
 
@@ -172,6 +177,7 @@ export default function App() {
     { id: "fleet",       icon: Truck,            label: t.fleet },
     { id: "drivers",     icon: Users,            label: t.drivers },
     { id: "partners",    icon: UserCog,          label: t.partners },
+    { id: "staff",       icon: UserCheck,        label: "Usuarios" },
     { id: "brokers",     icon: Briefcase,        label: t.brokers },
     { divider: true },
     { id: "expenses",    icon: Receipt,          label: t.expenses },
@@ -180,8 +186,6 @@ export default function App() {
     { id: "banco",       icon: Landmark,         label: "Banco" },
     { id: "suppliers",   icon: Store,            label: t.suppliers },
     { id: "settlements", icon: Handshake,        label: t.settlements },
-    { divider: true },
-    { id: "agents",      icon: ShieldCheck,      label: t.agents, badge: alertCount },
   ];
   const partnerNav = [
     { id: "partnerDash", icon: LayoutDashboard, label: t.partnerDashboard },
@@ -190,14 +194,19 @@ export default function App() {
   const driverNav = [
     { id: "driverDash", icon: LayoutDashboard, label: t.dashboard },
   ];
-  const navItems = isAdmin ? adminNav : isPartner ? partnerNav : driverNav;
+  const assistantNav = [
+    { id: "assistantDash", icon: LayoutDashboard, label: "Oficina" },
+  ];
+  const navItems = isAdmin ? adminNav : isPartner ? partnerNav : isAssistant ? assistantNav : driverNav;
 
-  const ctx = { t, user, isMobile, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, partner, partnerTruckIds, driverObj, alerts };
+  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, partner, partnerTruckIds, driverObj, alerts };
 
   const pageTitles = {
     dashboard:   t.dashboard,
     partnerDash: t.partnerDashboard,
     driverDash:  t.dashboard,
+    assistantDash: "Oficina — documentos y nómina",
+    staff:       "Usuarios",
     clients:     t.clients,
     invoices:    "Facturas",
     cxc:         "Cuentas x Cobrar",
@@ -212,11 +221,10 @@ export default function App() {
     banco:       "Banco",
     suppliers:   t.suppliers,
     settlements: t.settlements,
-    agents:      t.agents,
   };
 
   const bottomNavTabs = [
-    { id: "dashboard", icon: Home,         label: "Dashboard" },
+    { id: "dashboard", icon: Home,         label: "Dashboard", badge: alertCount },
     { id: "trips",     icon: Truck,        label: "Viajes"    },
     { id: "expenses",  icon: DollarSign,   label: "Gastos"    },
     { id: "__mas__",   icon: Menu,         label: "Más"       },
@@ -267,7 +275,6 @@ export default function App() {
         </nav>
 
         <div style={{ padding: "8px 6px", borderTop: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", gap: 2 }}>
-          {isAdmin && <CfoChat data={{ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, settlementStatus }} t={t} sidebarOpen={sidebarOpen} isMobile={isMobile} />}
           {isAdmin && <SyncAllButton syncAll={syncAll} sidebarOpen={sidebarOpen} />}
 
           {/* User info row — visible only when sidebar is open */}
@@ -342,6 +349,18 @@ export default function App() {
             </button>
           </div>
         )}
+        {syncNotice && !syncError && (
+          <div style={{ position: "sticky", top: 0, zIndex: 100, background: colors.orange, color: "#fff", padding: "8px 16px", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 8, marginBottom: 12 }}>
+            <span>ℹ {syncNotice}</span>
+            <button onClick={() => setSyncNotice(null)} style={{ background: "rgba(255,255,255,0.25)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontWeight: 700 }}>Entendido</button>
+          </div>
+        )}
+        {syncError && (
+          <div style={{ position: "sticky", top: 0, zIndex: 100, background: colors.red, color: "#fff", padding: "10px 16px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 8, marginBottom: 12 }}>
+            <span>⚠ No se guardó: {syncError}</span>
+            <button onClick={() => setSyncError(null)} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontWeight: 700 }}>Entendido</button>
+          </div>
+        )}
         {isDriver && syncStatus === "offline" && (
           <div style={{ position: "sticky", top: 0, zIndex: 100, background: colors.orange, color: "#fff", padding: "8px 16px", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 8, marginBottom: 12 }}>
             <span>Sin conexión — los cambios se guardan localmente</span>
@@ -351,6 +370,8 @@ export default function App() {
         {page === "dashboard"   && isAdmin   && <AdminDashboard   {...ctx} setPage={setPage} />}
         {page === "partnerDash" && isPartner  && <PartnerDashboard {...ctx} />}
         {page === "driverDash"  && isDriver   && <DriverDashboard  {...ctx} />}
+        {page === "assistantDash" && isAssistant && <AssistantDashboard {...ctx} />}
+        {page === "staff"       && isAdmin    && <StaffPage        {...ctx} />}
         {page === "clients"     && isAdmin    && <ClientsPage      {...ctx} />}
         {page === "invoices"    && isAdmin    && <InvoicesPage      {...ctx} />}
         {page === "cxc"         && isAdmin    && <CxCPage          {...ctx} setPage={setPage} />}
@@ -365,7 +386,6 @@ export default function App() {
         {page === "banco"       && isAdmin    && <BancoPage        {...ctx} />}
         {page === "suppliers"   && isAdmin    && <SuppliersPage    {...ctx} />}
         {page === "settlements" && (isAdmin || isPartner) && <SettlementsPage  {...ctx} />}
-        {page === "agents"      && isAdmin    && <AgentsPage       {...ctx} />}
       </div>
 
       {/* Mobile bottom navigation — partner */}

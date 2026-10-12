@@ -1,26 +1,32 @@
 import { useState, useMemo } from "react";
 import { Truck, Route, TrendingUp, TrendingDown, CircleDollarSign } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, pad, MONTHS_ES } from "../utils/helpers.js";
+import { fmt, pad, MONTHS_ES, today, genSettlementPeriods } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Sel, Badge, Th, Td, StatusBadge } from "../components/ui/index.jsx";
+import { computeSettlement, computeSettlementChain, normalizePartner, PARTNER_MODELS } from "../utils/partnerModels.js";
+import { settlementHTML } from "./SettlementsPage.jsx";
+import { openPrintWindow } from "../utils/printReport.js";
+import { FileText } from "lucide-react";
 
 const MODES = ["quincena", "mes", "dia", "ano", "custom"];
 const MODE_LABELS = { quincena: "Quincena", mes: "Mes", dia: "Día", ano: "Año", custom: "Personalizado" };
 
-export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, partner, partnerTruckIds, clients, brokers, settlementStatus, setSettlementStatus, isMobile }) {
+function Row({ label, value, color, bold }) {
+  return <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: `1px solid ${colors.border}11`, fontWeight: bold ? 700 : 400 }}>
+    <span style={{ color: colors.textMuted }}>{label}</span><span style={{ color: color || colors.text }}>{value < 0 ? "− " : ""}{fmt(Math.abs(value))}</span>
+  </div>;
+}
+
+export default function PartnerDashboard({ pfSettings, t, trips, trucks, expenses, drivers, partner, partnerTruckIds, clients, brokers, settlementStatus, setSettlementStatus, isMobile }) {
   const now = new Date();
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
-  const todayStr = now.toISOString().slice(0, 10);
+  const todayStr = today();
 
   const [truckFilter, setTruckFilter] = useState("all");
   const [viewMode, setViewMode] = useState("quincena");
 
-  // Quincena state — new cutoffs: half-1 = 1–15, half-2 = 16–30
-  const _initCorte = () => {
-    const day = now.getDate(), y = now.getFullYear(), m = now.getMonth() + 1;
-    if (day > 30) { const nm = m === 12 ? 1 : m + 1, ny = m === 12 ? y + 1 : y; return { year: ny, month: nm, half: 1 }; }
-    return { year: y, month: m, half: day >= 16 ? 2 : 1 };
-  };
+  // Quincena: 1–15 y 16–último día del mes (misma regla que Oficina y Liquidaciones)
+  const _initCorte = () => { const day = now.getDate(); return { year: now.getFullYear(), month: now.getMonth() + 1, half: day <= 15 ? 1 : 2 }; };
   const _init = _initCorte();
   const [qYear, setQYear]   = useState(_init.year);
   const [qMonth, setQMonth] = useState(_init.month);
@@ -43,14 +49,9 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
   const { dateFrom, dateTo, periodLabel } = useMemo(() => {
     if (viewMode === "quincena") {
       const mStr = `${qYear}-${pad(qMonth)}`;
-      const endDay = Math.min(30, lastDayOf(qYear, qMonth));
-      if (qHalf === 1) {
-        const prevM = qMonth === 1 ? 12 : qMonth - 1;
-        const prevY = qMonth === 1 ? qYear - 1 : qYear;
-        const dateFrom = lastDayOf(prevY, prevM) === 31 ? `${prevY}-${pad(prevM)}-31` : `${mStr}-01`;
-        return { dateFrom, dateTo: `${mStr}-15`, periodLabel: `${MONTHS_ES[qMonth-1]} 1–15, ${qYear}` };
-      }
-      return { dateFrom: `${mStr}-16`, dateTo: `${mStr}-${pad(endDay)}`, periodLabel: `${MONTHS_ES[qMonth-1]} 16–${endDay}, ${qYear}` };
+      const last = lastDayOf(qYear, qMonth);
+      if (qHalf === 1) return { dateFrom: `${mStr}-01`, dateTo: `${mStr}-15`, periodLabel: `${MONTHS_ES[qMonth-1]} 1–15, ${qYear}` };
+      return { dateFrom: `${mStr}-16`, dateTo: `${mStr}-${pad(last)}`, periodLabel: `${MONTHS_ES[qMonth-1]} 16–${last}, ${qYear}` };
     }
     if (viewMode === "mes") {
       const mStr = `${mYear}-${pad(mMonth)}`;
@@ -85,66 +86,26 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
 
   const activeTruckSet = truckFilter === "all" ? pTruckSet : new Set([Number(truckFilter)]);
 
-  const tripIdSet     = new Set(filtered.map(tr => tr.id));
-  const tripDriverMap = new Map(filtered.map(tr => [tr.id, tr.driverId]).filter(([,d]) => d));
-
-  const tripDriverPayExps  = expenses.filter(e => e.category === "driverPay" && tripIdSet.has(e.tripId));
-  const driverIdsFromTrips = new Set(filtered.map(tr => tr.driverId).filter(Boolean));
-  const driverIdsFromPay   = new Set(tripDriverPayExps.map(e => e.driverId).filter(Boolean));
-  const allDriverIds       = new Set([...driverIdsFromTrips, ...driverIdsFromPay]);
-
-  // Include fixed-salary drivers whose nómina arrives only via nominaTotalOverride
-  expenses.forEach(e => {
-    if (e.category !== "nominaTotalOverride") return;
-    if (!e.driverId || allDriverIds.has(e.driverId)) return;
-    if (!(e.date >= dateFrom && e.date <= dateTo)) return;
-    const driverTruckId = (drivers || []).find(d => d.id === e.driverId)?.truckId;
-    if ((e.truckId && pTruckSet.has(e.truckId)) || (driverTruckId && pTruckSet.has(driverTruckId))) {
-      allDriverIds.add(e.driverId);
+  // ── Misma función que Liquidaciones (3 modelos, reembolso primero) ─────────
+  const p = normalizePartner(partner || {});
+  const myTruckList = trucks.filter(tk => activeTruckSet.has(tk.id) && pTruckSet.has(tk.id));
+  const period = { dateFrom, dateTo, half: viewMode === "quincena" ? qHalf : null, label: periodLabel, mStr: dateFrom.slice(0, 7) };
+  // Quincena: misma cadena que Liquidaciones (el saldo que el socio quedó debiendo pasa a la siguiente)
+  const settle = (() => {
+    if (viewMode === "quincena" && truckFilter === "all") {
+      const pds = genSettlementPeriods([...trips.map(tr => tr.date), dateFrom]).filter(x => !pfSettings?.startDate || x.dateTo >= pfSettings.startDate);
+      const chain = computeSettlementChain({ partner: p, periods: pds, trips, expenses, trucks: myTruckList, clients, brokers, drivers });
+      const hit = chain.get(`${period.mStr}-${period.half}`);
+      if (hit) return { ...hit, period: { ...hit.period, label: periodLabel } };
     }
-  });
-
-  const overrideExps = expenses.filter(e =>
-    e.category === "nominaTotalOverride" &&
-    allDriverIds.has(e.driverId) &&
-    e.date >= dateFrom && e.date <= dateTo
-  );
-  const overriddenDriverIds = new Set(overrideExps.map(e => e.driverId));
-
-  const allExpenses = [
-    ...expenses.filter(e => {
-      if (!tripIdSet.has(e.tripId)) return false;
-      if (e.category === "driverPay") {
-        const dId = e.driverId || tripDriverMap.get(e.tripId);
-        if (dId && overriddenDriverIds.has(dId)) return false;
-      }
-      return true;
-    }),
-    ...overrideExps,
-    // Non-trip expenses linked to partner's active truck(s) by truckId
-    ...expenses.filter(e =>
-      !e.tripId && e.truckId && activeTruckSet.has(e.truckId) &&
-      e.date >= dateFrom && e.date <= dateTo
-    ),
-  ];
-
-  const retenciones = allExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s+e.amount, 0);
-  const otrosGastos = allExpenses.filter(e => e.category !== "broker_commission").reduce((s,e) => s+e.amount, 0);
-
-  const passThruDeduction = filtered.reduce((s, tr) => {
-    const cl = clientMap.get(tr.clientId);
-    if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return s;
-    const br = brokerMap.get(tr.brokerId);
-    if (!br) return s;
-    return s + Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
-  }, 0);
-
-  const grossRev         = filtered.reduce((s,tr) => s+(tr.revenue||0), 0);
-  const rev              = grossRev - passThruDeduction;
-  const totalDeducciones = passThruDeduction + retenciones + otrosGastos;
-  const net              = rev - retenciones - otrosGastos;
-  const adminComm        = Math.max(0, Math.round(net * ((partner?.commissionPct||0) / 100)));
-  const toReceive        = net - adminComm;
+    return computeSettlement({ partner: p, period, trips, expenses, trucks: myTruckList, clients, brokers, drivers });
+  })();
+  const passThruDeduction = settle.brokerDeduction;
+  const rev = settle.netRevenue;
+  const totalDeducciones = settle.commission + settle.reimbursement + settle.fixedTotal + (settle.model === "profit_share" ? settle.companyShare : 0);
+  const toReceive = settle.toTransfer;
+  const modelLabel = PARTNER_MODELS[settle.model]?.label || settle.model;
+  const settleStatus = viewMode === "quincena" ? ((settlementStatus || {})[`${p.id}-${qYear}-${pad(qMonth)}-${qHalf}`] || "unpaid") : null;
 
   const inputStyle = { padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 12 };
 
@@ -204,8 +165,27 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
       <StatCard icon={Route}           label={t.totalTrips}  value={filtered.length}  color={colors.cyan} />
       <StatCard icon={TrendingUp}      label={passThruDeduction > 0 ? "Ingreso Neto" : "Ingreso Bruto"} value={fmt(rev)} color={colors.green} />
       <StatCard icon={TrendingDown}    label="Total Deducciones" value={fmt(totalDeducciones)} color={colors.orange} />
-      <StatCard icon={CircleDollarSign} label="A Recibir"   value={fmt(toReceive)}   color={toReceive >= 0 ? colors.green : colors.red} />
+      <StatCard icon={CircleDollarSign} label="A Recibir"   value={fmt(Math.max(0, toReceive))}   color={toReceive >= 0 ? colors.green : colors.red} sub={toReceive < 0 ? `debes ${fmt(-toReceive)} · pasa a la siguiente quincena` : settle.previousBalance > 0 ? `incluye ${fmt(settle.previousBalance)} que debías` : undefined} />
     </div>
+
+    <Card style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>Mi liquidación · {periodLabel} <Badge label={modelLabel} color={colors.accent} /></div>
+          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{settle.tripCount} viaje{settle.tripCount !== 1 ? "s" : ""} entregado{settle.tripCount !== 1 ? "s" : ""}{settle.expenseLines.length > 0 ? ` · ${settle.expenseLines.length} gasto(s) descontado(s)` : ""}{viewMode === "quincena" ? ` · pago ${settle.payDate}` : ""}{settle.previousBalance > 0 ? <span style={{ color: colors.red }}> · se descuentan {fmt(settle.previousBalance)} de la quincena anterior</span> : ""}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 11, color: colors.textMuted }}>RECIBES</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: settleStatus === "paid" ? colors.green : toReceive < 0 ? colors.red : colors.orange }}>{fmt(Math.max(0, toReceive))}</div>
+          </div>
+          {viewMode === "quincena" && <Badge label={settleStatus === "paid" ? "✓ Recibido" : "Pendiente"} color={settleStatus === "paid" ? colors.green : colors.orange} />}
+          <button onClick={() => openPrintWindow(`Liquidación ${partner?.name || ""} ${periodLabel}`, settlementHTML({ s: settle, partner: p, t, clients, trucks, status: viewMode === "quincena" ? settleStatus : null }))}
+            style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: colors.accent, color: "white", cursor: "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}><FileText size={13} /> Ver detalle</button>
+        </div>
+      </div>
+      {viewMode !== "quincena" && p.fixedCharges?.length > 0 && <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 6 }}>Los cargos fijos se aplican por quincena.</div>}
+    </Card>
 
     <Card>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
