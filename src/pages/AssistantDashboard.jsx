@@ -6,12 +6,14 @@ import { buildPayroll, buildHelperPayroll, partnerTripsInPeriod, TRIP_DOCS } fro
 import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow, helperPeriodReportHTML } from "../utils/printReport.js";
 import { applyReceived } from "../utils/jointTrip.js";
 import { Card, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
+import DeliveryReceiptPanel from "../components/DeliveryReceiptPanel.jsx";
 
 /**
  * Panel de la asistente administrativa:
  *  - choferes y socios con sus viajes de la quincena de facturación (1–15, 16–31)
  *  - checklist de documentos físicos recibidos por viaje
  *  - relación de viajes por chofer (PDF, sin montos)
+ *  - constancia de entrega individual (acumulada por quincena, sin montos; PDF y WhatsApp)
  *  - nómina del período para contabilidad (PDF y Excel)
  */
 export default function AssistantDashboard({ user, trips, setTrips, drivers = [], partners = [], trucks = [], clients = [], expenses = [], ayudantes = [], isMobile }) {
@@ -29,6 +31,8 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
 
   const selectedDriver = sel?.kind === "driver" ? payroll.drivers.find(r => r.driver.id === sel.id) : null;
   const selectedPartner = sel?.kind === "partner" ? partnerRows.find(r => r.partner.id === sel.id) : null;
+  // La persona elegida aunque ya no tenga viajes en este período (p. ej. al marcar su último pendiente)
+  const selPerson = sel ? (sel.kind === "driver" ? (selectedDriver?.driver || drivers.find(d => d.id === sel.id)) : (selectedPartner?.partner || partners.find(p => p.id === sel.id))) : null;
   // En el panel se ven TODOS los viajes del período (recibidos y pendientes); en nómina y PDF solo los recibidos
   const detailItems = selectedDriver ? selectedDriver.allTrips : selectedPartner ? selectedPartner.items : [];
 
@@ -117,12 +121,13 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
         {!sel && <div style={{ textAlign: "center", padding: 40, color: colors.textMuted, fontSize: 13 }}>Elige un chofer o socio para ver sus viajes del período y marcar los documentos recibidos.</div>}
         {sel && <>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-            <h3 style={{ margin: 0, fontSize: 15 }}>{selectedDriver ? selectedDriver.driver.name : selectedPartner?.partner.name}</h3>
+            <h3 style={{ margin: 0, fontSize: 15 }}>{selPerson?.name || ""}</h3>
             <span style={{ fontSize: 11, color: colors.textMuted }}>{detailItems.length} viajes · {detailItems.filter(x => x.docsOk).length} recibidos · {detailItems.filter(x => !x.docsOk).length} pendientes · {period.label}</span>
             <span style={{ flex: 1 }} />
             {detailItems.length > 0 && <Btn variant="ghost" onClick={() => setAllReceived(detailItems, !detailItems.every(x => x.docsOk))} style={{ fontSize: 11 }}><ClipboardCheck size={12} /> {detailItems.every(x => x.docsOk) ? "Desmarcar todos" : "Marcar todos como recibidos"}</Btn>}
             {selectedDriver && <Btn variant="ghost" onClick={() => printDriver(selectedDriver)} style={{ fontSize: 11 }}><Printer size={12} /> Relación de viajes (PDF)</Btn>}
           </div>
+          {selPerson && <DeliveryReceiptPanel key={`${sel.kind}-${sel.id}`} kind={sel.kind} person={selPerson} trips={trips} trucks={trucks} clients={clients} drivers={drivers} user={user} onMark={setReceived} />}
           <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>

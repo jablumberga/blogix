@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, Gauge, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark, HardHat, Camera } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, Gauge, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark, HardHat, Camera, ClipboardCheck } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { getToken } from "./api.js";
 import { listReceipts } from "./utils/receiptsApi.js";
@@ -201,6 +201,7 @@ export default function App() {
     { id: "brokers",     icon: Briefcase,        label: t.brokers },
     { divider: true },
     { id: "expenses",    icon: Receipt,          label: t.expenses, badge: receiptsPending },
+    { id: "assistantDash", icon: ClipboardCheck, label: "Entregas (oficina)" },
     { id: "cxp",         icon: CreditCard,       label: "Cuentas x Pagar" },
     { id: "nomina",      icon: Banknote,         label: "Nómina" },
     { id: "banco",       icon: Landmark,         label: "Banco" },
@@ -393,7 +394,7 @@ export default function App() {
         {page === "dashboard"   && isAdmin   && <AdminDashboard   {...ctx} setPage={setPage} />}
         {page === "partnerDash" && isPartner  && <PartnerDashboard {...ctx} />}
         {page === "driverDash"  && isDriver   && <DriverDashboard  {...ctx} />}
-        {page === "assistantDash" && isAssistant && <AssistantDashboard {...ctx} />}
+        {page === "assistantDash" && (isAssistant || isAdmin) && <AssistantDashboard {...ctx} />}
         {page === "staff"       && isAdmin    && <StaffPage        {...ctx} />}
         {page === "clients"     && isAdmin    && <ClientsPage      {...ctx} />}
         {page === "invoices"    && isAdmin    && <InvoicesPage      {...ctx} />}

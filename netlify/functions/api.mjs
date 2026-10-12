@@ -141,7 +141,7 @@ function applyRLS(data, user) {
     // y los adelantos (para la nómina). No ve dinero de la empresa: facturas, cobros, banco.
     const slimClient = c => ({ id: c.id, companyName: c.companyName, status: c.status, rules: c.rules || {} });
     const slimDriver = d => { const { password, license, ...rest } = d; return rest; }; // teléfono sí: va en la relación de viajes
-    const slimPartner = p => ({ id: p.id, name: p.name, status: p.status, model: p.model });
+    const slimPartner = p => ({ id: p.id, name: p.name, status: p.status, model: p.model, phone: p.phone || "" }); // teléfono: constancia por WhatsApp
     return {
       trips:            data.trips || [],
       drivers:          (data.drivers || []).map(slimDriver),
@@ -433,7 +433,7 @@ function stripPasswords(data) {
 }
 
 // Campos que la asistente de oficina puede cambiar en un viaje
-const ASSISTANT_TRIP_FIELDS = ["docs", "docStatus", "podDelivered", "docsReceivedAt", "docsReceivedBy", "invoiceRef"];
+const ASSISTANT_TRIP_FIELDS = ["docs", "docStatus", "podDelivered", "docsReceivedAt", "docsReceivedBy", "docsReceivedTs", "invoiceRef"];
 // La asistente solo puede pasar un viaje a «entregado» (al recibir documentos); nunca cancelarlo ni revertirlo
 const assistantStatusOk = (cur, next) => next === "delivered" && (cur === "pending" || cur === "in_transit" || cur == null);
 
