@@ -84,9 +84,12 @@ export function cobroPassThrough({ tripIds = [], trips = [], trucks = [], partne
 }
 
 /** Asigna un cobro completo: devuelve el objeto `pf` que se guarda en el cobro. */
-export function allocateCobro({ amount, tripIds, trips, trucks, partners, clients, brokers, settings = DEFAULT_PF_SETTINGS }) {
-  const pt = cobroPassThrough({ tripIds, trips, trucks, partners, clients, brokers });
-  const a = allocateIncome({ amount, passThrough: pt.total, reservePct: settings.reservePct });
+export function allocateCobro({ amount, tripIds, trips, trucks, partners, clients, brokers, settings = DEFAULT_PF_SETTINGS, invoiceAmount = null }) {
+  const full = cobroPassThrough({ tripIds, trips, trucks, partners, clients, brokers });
+  // Abono parcial: el pass-through se aparta en proporción a lo que entra (no todo de golpe)
+  const frac = invoiceAmount > 0 ? Math.min(1, Math.max(0, (Number(amount) || 0) / invoiceAmount)) : 1;
+  const pt = { partner: round2(full.partner * frac), broker: round2(full.broker * frac) };
+  const a = allocateIncome({ amount, passThrough: pt.partner + pt.broker, reservePct: settings.reservePct });
   return { ...a, passThroughPartner: pt.partner, passThroughBroker: pt.broker, at: today() };
 }
 

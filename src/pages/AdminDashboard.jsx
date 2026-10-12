@@ -1,7 +1,9 @@
 import { useState, useMemo } from "react";
 import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote, FileText, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, monthStr, getPeriodInfo, expenseTruckId, today } from "../utils/helpers.js";
+import { fmt, monthStr, expenseTruckId, today } from "../utils/helpers.js";
+import { invoiceBalance } from "../utils/cobros.js";
+import { tripNetRevenue } from "../utils/partnerModels.js";
 import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
 import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
 
@@ -119,42 +121,25 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
     return { periodExpenses, nomina, brokerFees, operExp, totalExp, grossProfit: netRevenue - totalExp, margin: netRevenue > 0 ? (netRevenue - totalExp) / netRevenue * 100 : 0 };
   }, [expenses, mt, dateFrom, dateTo, netRevenue]);
 
-  // ── CxC (accounts receivable — delivered trips only, all-time) ────────────
-  const { cxcPending, cxcOverdue, cxcUpcoming, totalCxC, totalOverdue, totalCollected, nextDue, cobroMap, getCobro } = useMemo(() => {
-    const clientMap2 = new Map(clients.map(c => [c.id, c]));
-    const brokerMap2 = new Map((brokers || []).map(b => [b.id, b]));
-    const tripNet = (tr) => {
-      const cl = clientMap2.get(tr.clientId);
-      if (!cl?.rules?.brokerPassThrough || !tr.brokerId) return tr.revenue || 0;
-      const br = brokerMap2.get(tr.brokerId);
-      if (!br) return tr.revenue || 0;
-      return (tr.revenue || 0) - Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100);
-    };
-    const cxcGrouped = {};
-    trips.forEach(tr => {
-      if (!tr.clientId || !(tr.revenue > 0) || tr.status !== "delivered") return;
-      const client = clientMap2.get(tr.clientId);
-      if (!client) return;
-      const { key, expectedDate } = getPeriodInfo(tr.date, client);
-      const gKey = `${tr.clientId}::${key}`;
-      if (!cxcGrouped[gKey]) cxcGrouped[gKey] = { clientId: tr.clientId, periodKey: key, expectedDate, revenue: 0 };
-      cxcGrouped[gKey].revenue += tripNet(tr);
-    });
-    const cobroMap   = new Map(cobros.map(c => [`${c.clientId}::${c.periodKey}`, c]));
-    const getCobro   = (cid, pk) => cobroMap.get(`${cid}::${pk}`);
-    const cxcPeriods = Object.values(cxcGrouped);
-    const cxcCollected = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status === "collected");
-    const cxcPending   = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status !== "collected");
-    const cxcOverdue   = cxcPending.filter(p => p.expectedDate < todayStr);
-    const cxcUpcoming  = cxcPending.filter(p => p.expectedDate >= todayStr).sort((a,b) => a.expectedDate.localeCompare(b.expectedDate));
+  // ── CxC: facturas con saldo (cobros por factura, abonos parciales) ───────
+  const { cxcPending, totalCxC, totalOverdue, totalCollected, nextDue, uninvoiced } = useMemo(() => {
+    const ctx = { trips, clients, brokers };
+    const active = (invoices || []).filter(i => i.status !== "cancelled").map(i => ({ ...i, bal: invoiceBalance(i, cobros, ctx) }));
+    const cxcPending = active.filter(i => i.bal.balance > 0);
+    const overdue = cxcPending.filter(i => i.dueDate && i.dueDate < todayStr);
+    const upcoming = cxcPending.filter(i => !i.dueDate || i.dueDate >= todayStr).sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
+    const invoicedIds = new Set(active.flatMap(i => i.tripIds || []));
+    const cm = new Map(clients.map(c => [c.id, c])), bm = new Map((brokers || []).map(b => [b.id, b]));
+    const uninvoiced = trips.filter(tr => tr.status !== "cancelled" && (tr.revenue || 0) > 0 && !invoicedIds.has(tr.id)).reduce((s, tr) => s + tripNetRevenue(tr, cm, bm), 0);
     return {
-      cxcPending, cxcOverdue, cxcUpcoming, cobroMap, getCobro,
-      totalCxC:       cxcPending.reduce((s, p) => s + p.revenue, 0),
-      totalOverdue:   cxcOverdue.reduce((s, p) => s + p.revenue, 0),
-      totalCollected: cxcCollected.reduce((s, p) => s + (getCobro(p.clientId, p.periodKey)?.amount ?? p.revenue), 0),
-      nextDue:        cxcUpcoming[0],
+      cxcPending,
+      totalCxC: cxcPending.reduce((s, i) => s + i.bal.balance, 0),
+      totalOverdue: overdue.reduce((s, i) => s + i.bal.balance, 0),
+      totalCollected: active.reduce((s, i) => s + i.bal.paid, 0),
+      nextDue: upcoming[0] || null,
+      uninvoiced,
     };
-  }, [trips, clients, cobros, brokers, todayStr]);
+  }, [invoices, cobros, trips, clients, brokers, todayStr]);
 
   // ── CxP (accounts payable — all pending expenses) ──────────────────────
   const { cxpNomina, cxpSupplier, cxpFijos, totalCxP } = useMemo(() => {
@@ -379,7 +364,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       {/* ── Row 1: KPIs financieros ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 16 }}>
         <Stat label="CxC POR COBRAR" value={fmt(totalCxC)} color={colors.orange}
-          sub={`${cxcPending.length} periodo${cxcPending.length !== 1 ? "s" : ""} pendiente${cxcPending.length !== 1 ? "s" : ""} (historico)`}
+          sub={`${cxcPending.length} factura${cxcPending.length !== 1 ? "s" : ""} con saldo${uninvoiced > 0 ? ` · sin facturar ${fmt(uninvoiced)}` : ""}`}
           onClick={() => setPage("cxc")} />
         <Stat label="CxP PENDIENTE" value={fmt(totalCxP)} color={colors.red}
           sub={`Nomina + suplidores + fijos`}
@@ -396,8 +381,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
           <MiniRow label="Pendiente total" value={fmt(totalCxC)} color={colors.orange} />
           {nextDue && (
             <MiniRow
-              label={`Prox: ${clients.find(c => c.id === nextDue.clientId)?.companyName?.split(" ")[0] || "—"} (${nextDue.expectedDate})`}
-              value={fmt(nextDue.revenue)} color={colors.cyan} />
+              label={`Prox: ${nextDue.invoiceNumber || "#" + nextDue.id} · ${clients.find(c => c.id === nextDue.clientId)?.companyName?.split(" ")[0] || "—"}${nextDue.dueDate ? ` (${nextDue.dueDate})` : ""}`}
+              value={fmt(nextDue.bal.balance)} color={colors.cyan} />
           )}
           <MiniRow label="Cobrado" value={fmt(totalCollected)} color={colors.green} />
           <div style={{ marginTop: 10, fontSize: 10, color: colors.accent, textAlign: "right" }}>Ver Cuentas x Cobrar</div>

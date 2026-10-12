@@ -8,7 +8,7 @@ import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
 const FILTER_OPTS   = ["todos", "pendientes", "conciliados", "debitos", "creditos"];
 const FILTER_LABELS = { todos: "Todos", pendientes: "Pendientes", conciliados: "Conciliados", debitos: "Solo Débitos", creditos: "Solo Créditos" };
 
-export default function BancoPage({ expenses, setExpenses, cobros, clients, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, isMobile }) {
+export default function BancoPage({ expenses, setExpenses, cobros, clients, invoices = [], bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, isMobile }) {
   const [filter, setFilter]           = useState("todos");
   const [showSettings, setShowSettings] = useState(false);
   const [draft, setDraft]             = useState(null);
@@ -37,19 +37,19 @@ export default function BancoPage({ expenses, setExpenses, cobros, clients, bank
         amount: e.amount || 0,
       }));
     const credits = (cobros || [])
-      .filter(c => (c.status === "collected" || c.status === "partial") && (c.collectedDate || c.pf?.at || c.date || "") >= openingDate)
+      .filter(c => (c.status === "collected" || c.status === "partial") && c.method !== "cash" && (c.collectedDate || c.pf?.at || c.date || "") >= openingDate) // efectivo no entra al banco
       .map(c => {
         const cl = clientMap.get(c.clientId);
         return {
           key: `cobro-${c.id}`,
           type: "credit",
           date: c.collectedDate || c.pf?.at || c.date || "",
-          description: c.description || (cl ? `Cobro — ${cl.companyName}` : `Cobro #${c.id}`),
+          description: c.description || `Cobro ${(invoices || []).find(i => i.id === c.invoiceId)?.invoiceNumber || ""}${cl ? ` — ${cl.companyName}` : ""}`.trim() || `Cobro #${c.id}`,
           amount: c.amount || 0,
         };
       });
     return [...debits, ...credits].sort((a, b) => b.date.localeCompare(a.date));
-  }, [expenses, cobros, clientMap, bankAccount?.openingDate]);
+  }, [expenses, cobros, invoices, clientMap, bankAccount?.openingDate]);
 
   const { saldoConciliado, saldoProyectado, debitosPendientes, creditosPendientes } = useMemo(() => {
     const opening = bankAccount?.openingBalance || 0;

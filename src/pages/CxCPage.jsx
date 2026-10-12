@@ -1,7 +1,9 @@
 import { useState, useMemo } from "react";
-import { ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Trash2 } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, getPeriodInfo } from "../utils/helpers.js";
+import { fmt, nxId } from "../utils/helpers.js";
+import { invoiceBalance, buildAbono, COBRO_METHODS } from "../utils/cobros.js";
+import CobroModal from "../components/CobroModal.jsx";
 import { Card, PageHeader } from "../components/ui/index.jsx";
 import { allocateCobro, accountBalances, DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 import { today as todayFn } from "../utils/helpers.js";
@@ -51,7 +53,8 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
         const daysLeft = inv.dueDate ? Math.ceil((new Date(inv.dueDate) - new Date(today)) / 86400000) : null;
         const invTrips = (inv.tripIds || []).map(tid => trips.find(t => t.id === tid)).filter(Boolean);
         const grossAmt = invTrips.reduce((s, tr) => s + (tr.revenue || 0), 0);
-        return { ...inv, client: cl, amount, grossAmt, isPassThrough, isOverdue, daysLeft, invTrips };
+        const bal = invoiceBalance(inv, cobros, { trips, clients, brokers });
+        return { ...inv, client: cl, amount, grossAmt, isPassThrough, isOverdue, daysLeft, invTrips, paid: bal.paid, balance: bal.balance, abonos: bal.abonos };
       })
       .sort((a, b) => {
         if (a.isOverdue && !b.isOverdue) return -1;
@@ -60,7 +63,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
         if (a.status !== "paid" && b.status === "paid") return -1;
         return (a.dueDate || "").localeCompare(b.dueDate || "");
       }),
-    [invoices, clients, trips, today] // eslint-disable-line react-hooks/exhaustive-deps
+    [invoices, cobros, clients, trips, today] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // ── Trips not covered by any active invoice ──────────────────────────────
@@ -96,105 +99,30 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
   }, [sinFacturarTrips, clientMap, brokerMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
-  const kpiPending  = activeInvoices.filter(i => i.status !== "paid").reduce((s, i) => s + i.amount, 0);
-  const kpiOverdue  = activeInvoices.filter(i => i.isOverdue).reduce((s, i) => s + i.amount, 0);
-  const kpiCobrado  = activeInvoices.filter(i => i.status === "paid").reduce((s, i) => s + i.amount, 0);
+  const kpiPending  = activeInvoices.filter(i => i.status !== "paid").reduce((s, i) => s + i.balance, 0);
+  const kpiOverdue  = activeInvoices.filter(i => i.isOverdue).reduce((s, i) => s + i.balance, 0);
+  const kpiCobrado  = activeInvoices.reduce((s, i) => s + i.paid, 0);
   const kpiSinFact  = sinFacturarTrips.reduce((s, tr) => s + tripNetAmt(tr), 0);
   const nextDueInv  = activeInvoices.filter(i => i.status !== "paid" && !i.isOverdue && i.dueDate)[0];
 
-  // ── Cobro helpers ─────────────────────────────────────────────────────────
-  const cobroMap = useMemo(() =>
-    new Map(cobros.map(c => [`${c.clientId}::${c.periodKey}`, c])),
-    [cobros]
-  );
-
-  const upsertCobro = (clientId, periodKey, patch) => {
-    const existing = cobroMap.get(`${clientId}::${periodKey}`);
-    if (existing) {
-      setCobros(cobros.map(c =>
-        c.clientId === clientId && c.periodKey === periodKey ? { ...c, ...patch } : c
-      ));
-    } else {
-      const newId = cobros.length > 0 ? Math.max(...cobros.map(c => c.id)) + 1 : 1;
-      setCobros([...cobros, { id: newId, clientId, periodKey, status: "pending", collectedDate: null, amount: 0, collectedTripIds: [], ...patch }]);
-    }
+  // ── Cobros por factura (abonos totales o parciales) ──────────────────────
+  const [cobroFor, setCobroFor] = useState(null);
+  const balCtx = { trips, clients, brokers };
+  const registerAbono = (inv, form) => {
+    const abono = buildAbono({ inv, ...form, cobros, trips, trucks, partners, clients, brokers, settings: pfSettings, nextId: nxId(cobros) });
+    if (!abono) { window.alert("Monto o fecha inválidos."); return; }
+    const next = [...cobros, abono];
+    setCobros(next);
+    const b = invoiceBalance(inv, next, balCtx);
+    setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, status: b.settled ? "paid" : (i.status === "draft" ? "sent" : i.status), paidDate: b.settled ? form.date : null } : i));
+    setCobroFor(null);
   };
-
-  // Mark all trips in invoice as cobrado + set invoice status = paid
-  const cobrarInvoice = (inv) => {
-    const cl = clientMap.get(inv.clientId);
-    if (!cl) return;
-    const byPeriod = new Map();
-    (inv.tripIds || []).forEach(tid => {
-      const tr = trips.find(t => t.id === tid);
-      if (!tr) return;
-      const { key } = getPeriodInfo(tr.date, cl);
-      if (!byPeriod.has(key)) byPeriod.set(key, []);
-      byPeriod.get(key).push(tid);
-    });
-    let newCobros = [...cobros];
-    byPeriod.forEach((tripIds, periodKey) => {
-      const idx = newCobros.findIndex(c => c.clientId === inv.clientId && c.periodKey === periodKey);
-      const periodTrips = trips.filter(tr => {
-        if (tr.clientId !== inv.clientId || !(tr.revenue > 0)) return false;
-        const { key: k } = getPeriodInfo(tr.date, cl);
-        return k === periodKey;
-      });
-      const merged = [...new Set([...(idx >= 0 ? newCobros[idx].collectedTripIds || [] : []), ...tripIds])];
-      const allDone = periodTrips.every(tr => merged.includes(tr.id));
-      // Use net amounts (what was actually received for pass-through clients)
-      const amt = merged.reduce((s, tid) => {
-        const t = trips.find(tr => tr.id === tid);
-        return s + (t ? tripNetAmt(t) : 0);
-      }, 0);
-      const patch = { collectedTripIds: merged, status: allDone ? "collected" : "partial", collectedDate: allDone ? today : null, amount: amt, pf: pfFor(amt, merged) };
-      if (idx >= 0) newCobros[idx] = { ...newCobros[idx], ...patch };
-      else newCobros.push({ id: newCobros.length > 0 ? Math.max(...newCobros.map(c => c.id)) + 1 : 1, clientId: inv.clientId, periodKey, ...patch });
-    });
-    setCobros(newCobros);
-    setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, status: "paid" } : i));
-  };
-
-  const isTripCobrado = (tripId, clientId, tripDate) => {
-    const cl = clientMap.get(clientId);
-    if (!cl) return false;
-    const { key: periodKey } = getPeriodInfo(tripDate, cl);
-    const cobro = cobroMap.get(`${clientId}::${periodKey}`);
-    if (!cobro) return false;
-    if (cobro.status === "collected" && !cobro.collectedTripIds) return true;
-    return (cobro.collectedTripIds || []).includes(tripId);
-  };
-
-  const toggleTripCobro = (tr) => {
-    const cl = clientMap.get(tr.clientId);
-    if (!cl) return;
-    const { key: periodKey } = getPeriodInfo(tr.date, cl);
-    const existing = cobroMap.get(`${tr.clientId}::${periodKey}`);
-    const currentIds = new Set(existing ? (existing.collectedTripIds || []) : []);
-    if (currentIds.has(tr.id)) {
-      const paidInv = (invoices || []).find(i => i.status === "paid" && (i.tripIds || []).includes(tr.id));
-      if (paidInv) { window.alert(`Este viaje está en la factura ${paidInv.invoiceNumber} marcada como cobrada. Para desmarcarlo, anula o elimina esa factura en Facturas; así factura y cobro quedan iguales.`); return; }
-      currentIds.delete(tr.id);
-    }
-    else currentIds.add(tr.id);
-    const collected = [...currentIds];
-    const periodTrips = trips.filter(t => {
-      if (t.clientId !== tr.clientId || !(t.revenue > 0)) return false;
-      const { key: k } = getPeriodInfo(t.date, cl);
-      return k === periodKey;
-    });
-    const allDone = periodTrips.every(t => currentIds.has(t.id));
-    const amt = collected.reduce((s, tid) => {
-      const t = trips.find(x => x.id === tid);
-      return s + (t ? tripNetAmt(t) : 0);
-    }, 0);
-    upsertCobro(tr.clientId, periodKey, {
-      collectedTripIds: collected,
-      status: allDone ? "collected" : collected.length > 0 ? "partial" : "pending",
-      collectedDate: allDone ? today : null,
-      amount: amt,
-      pf: collected.length > 0 ? pfFor(amt, collected) : null,
-    });
+  const deleteAbono = (inv, abono) => {
+    if (!window.confirm(`¿Borrar el cobro de ${fmt(abono.amount)} del ${abono.date}? Se revierte su reparto Profit First y la factura vuelve a quedar con saldo.`)) return;
+    const next = cobros.filter(c => c.id !== abono.id);
+    setCobros(next);
+    const b = invoiceBalance(inv, next, balCtx);
+    setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, status: b.settled ? "paid" : "sent", paidDate: b.settled ? i.paidDate : null } : i));
   };
 
   // ── Filters ───────────────────────────────────────────────────────────────
@@ -232,6 +160,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
               <span style={{ fontSize: 11, color: colors.textMuted }}>·</span>
               <span style={{ fontWeight: 600, fontSize: 13 }}>{inv.client?.companyName || "—"}</span>
               {inv.status === "paid"   && <span style={{ fontSize: 10, color: colors.green,   background: colors.green+"18",   padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>✓ Cobrada</span>}
+              {inv.status !== "paid" && inv.paid > 0 && <span style={{ fontSize: 10, color: colors.cyan, background: colors.cyan+"18", padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>Abono parcial</span>}
               {inv.status === "draft"  && <span style={{ fontSize: 10, color: colors.textMuted, background: colors.textMuted+"18", padding: "2px 8px", borderRadius: 10 }}>Borrador</span>}
               {inv.status === "sent" && !inv.isOverdue && <span style={{ fontSize: 10, color: colors.accent, background: colors.accent+"18", padding: "2px 8px", borderRadius: 10 }}>Enviada</span>}
               {inv.isOverdue           && <span style={{ fontSize: 10, color: colors.red,    background: colors.red+"18",    padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>⚠ Vencida</span>}
@@ -271,15 +200,16 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
               {brokerDed > 0 && (
                 <div style={{ fontSize: 10, color: colors.orange }}>−{fmt(brokerDed)} broker</div>
               )}
+              {inv.paid > 0 && <div style={{ fontSize: 10, color: colors.green }}>cobrado {fmt(inv.paid)}{inv.balance > 0 ? <span style={{ color: colors.orange }}> · saldo {fmt(inv.balance)}</span> : ""}</div>}
               <button onClick={() => setExpandedInv(e => ({ ...e, [inv.id]: !e[inv.id] }))}
                 style={{ fontSize: 10, color: colors.textMuted, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>
                 {isExp ? <ChevronDown size={10}/> : <ChevronRight size={10}/>} ver viajes
               </button>
             </div>
-            {inv.status === "sent" && (
-              <button onClick={() => cobrarInvoice(inv)}
+            {inv.balance > 0 && (
+              <button onClick={() => setCobroFor(inv)}
                 style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: colors.green, color: "white", cursor: "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
-                ✓ Cobrar
+                ✓ Registrar cobro
               </button>
             )}
           </div>
@@ -287,11 +217,17 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
 
         {isExp && (
           <div style={{ marginTop: 12, borderTop: `1px solid ${colors.border}33`, paddingTop: 10 }}>
+            {inv.abonos.length > 0 && <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 10, color: colors.green, fontWeight: 700, marginBottom: 4 }}>COBROS REGISTRADOS</div>
+              {inv.abonos.map(a => <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "4px 0", borderBottom: `1px solid ${colors.border}11` }}>
+                <span>{a.date} · {COBRO_METHODS[a.method] || a.method}{a.reference ? ` · ${a.reference}` : ""}{a.note ? ` · ${a.note}` : ""}<span style={{ fontSize: 10, color: "#9b7fe8", marginLeft: 8 }}>Reserva {fmt(a.pf?.reserve || 0)} · OpEx {fmt(a.pf?.opex || 0)}</span></span>
+                <span style={{ display: "flex", gap: 8, alignItems: "center" }}><b style={{ color: colors.green }}>{fmt(a.amount)}</b><button onClick={() => deleteAbono(inv, a)} title="Borrar cobro" style={{ background: "none", border: "none", color: colors.red, cursor: "pointer", padding: 2 }}><Trash2 size={12} /></button></span>
+              </div>)}
+            </div>}
             <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-                    <th style={{ width: 36, padding: "3px 8px" }} />
                     {["Fecha", "Destino", "Camión", "Tarifa"].map((h, i) => (
                       <th key={h} style={{ textAlign: i === 3 ? "right" : "left", padding: "3px 8px", color: colors.textMuted, fontWeight: 600, fontSize: 11 }}>{h}</th>
                     ))}
@@ -300,16 +236,9 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
                 <tbody>
                   {inv.invTrips.slice().sort((a, b) => a.date.localeCompare(b.date)).map(tr => {
                     const truck = trucks?.find(t => t.id === tr.truckId);
-                    const cobrado = isTripCobrado(tr.id, tr.clientId, tr.date);
+                    const cobrado = inv.status === "paid";
                     return (
                       <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11`, opacity: cobrado ? 0.65 : 1 }}>
-                        <td style={{ padding: "5px 8px", textAlign: "center" }}>
-                          <button onClick={() => toggleTripCobro(tr)}
-                            title={cobrado ? "Desmarcar cobrado" : "Marcar cobrado"}
-                            style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${cobrado ? colors.green : colors.border}`, background: cobrado ? colors.green : "transparent", color: "white", cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                            {cobrado ? "✓" : ""}
-                          </button>
-                        </td>
                         <td style={{ padding: "5px 8px", textDecoration: cobrado ? "line-through" : "none", color: cobrado ? colors.textMuted : colors.text }}>{tr.date}</td>
                         <td style={{ padding: "5px 8px", color: colors.textMuted }}>{tr.municipality}{tr.province ? `, ${tr.province}` : ""}</td>
                         <td style={{ padding: "5px 8px", color: colors.textMuted }}>{truck?.plate || "—"}</td>
@@ -322,7 +251,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
                   {brokerDed > 0 ? (
                     <>
                       <tr style={{ borderTop: `1px solid ${colors.border}44` }}>
-                        <td colSpan={4} style={{ padding: "5px 8px", fontWeight: 600, fontSize: 11, color: colors.textMuted }}>
+                        <td colSpan={3} style={{ padding: "5px 8px", fontWeight: 600, fontSize: 11, color: colors.textMuted }}>
                           Subtotal bruto — {inv.invTrips.length} viaje{inv.invTrips.length !== 1 ? "s" : ""}
                         </td>
                         <td style={{ padding: "5px 8px", textAlign: "right", fontWeight: 700, fontSize: 12, color: colors.textMuted }}>
@@ -330,7 +259,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
                         </td>
                       </tr>
                       <tr>
-                        <td colSpan={4} style={{ padding: "3px 8px", fontSize: 11, color: colors.orange }}>
+                        <td colSpan={3} style={{ padding: "3px 8px", fontSize: 11, color: colors.orange }}>
                           Comisión broker (descontada)
                         </td>
                         <td style={{ padding: "3px 8px", textAlign: "right", fontWeight: 600, fontSize: 11, color: colors.orange }}>
@@ -338,7 +267,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
                         </td>
                       </tr>
                       <tr style={{ background: colors.green + "0d" }}>
-                        <td colSpan={4} style={{ padding: "6px 8px", fontWeight: 700, fontSize: 12, color: inv.status === "paid" ? colors.green : colors.text }}>
+                        <td colSpan={3} style={{ padding: "6px 8px", fontWeight: 700, fontSize: 12, color: inv.status === "paid" ? colors.green : colors.text }}>
                           Neto a cobrar
                         </td>
                         <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 800, fontSize: 14, color: inv.status === "paid" ? colors.green : colors.text }}>
@@ -348,7 +277,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
                     </>
                   ) : (
                     <tr style={{ borderTop: `1px solid ${colors.border}44` }}>
-                      <td colSpan={4} style={{ padding: "6px 8px", fontWeight: 600, fontSize: 11, color: colors.textMuted }}>
+                      <td colSpan={3} style={{ padding: "6px 8px", fontWeight: 600, fontSize: 11, color: colors.textMuted }}>
                         Total — {inv.invTrips.length} viaje{inv.invTrips.length !== 1 ? "s" : ""}
                       </td>
                       <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 800, fontSize: 13, color: inv.status === "paid" ? colors.green : colors.text }}>
@@ -519,7 +448,6 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                           <thead>
                             <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-                              <th style={{ width: 36, padding: "3px 8px" }} />
                               {["Fecha", "Destino", "Camión", isPassThrough ? "Neto" : "Ingreso"].map((h, i) => (
                                 <th key={h} style={{ textAlign: i === 3 ? "right" : "left", padding: "3px 8px", color: colors.textMuted, fontWeight: 600, fontSize: 11 }}>{h}</th>
                               ))}
@@ -528,18 +456,11 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
                           <tbody>
                             {g.trips.slice().sort((a, b) => a.date.localeCompare(b.date)).map(tr => {
                               const truck = trucks?.find(t => t.id === tr.truckId);
-                              const cobrado = isTripCobrado(tr.id, tr.clientId, tr.date);
+                              const cobrado = false;
                               const net = tripNetAmt(tr);
                               const hasDed = net < (tr.revenue || 0);
                               return (
-                                <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11`, opacity: cobrado ? 0.65 : 1 }}>
-                                  <td style={{ padding: "5px 8px", textAlign: "center" }}>
-                                    <button onClick={() => toggleTripCobro(tr)}
-                                      title={cobrado ? "Desmarcar cobrado" : "Marcar cobrado"}
-                                      style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${cobrado ? colors.green : colors.border}`, background: cobrado ? colors.green : "transparent", color: "white", cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                                      {cobrado ? "✓" : ""}
-                                    </button>
-                                  </td>
+                                <tr key={tr.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
                                   <td style={{ padding: "5px 8px" }}>{tr.date}</td>
                                   <td style={{ padding: "5px 8px", color: colors.textMuted }}>{tr.municipality}{tr.province ? `, ${tr.province}` : ""}</td>
                                   <td style={{ padding: "5px 8px", color: colors.textMuted }}>{truck?.plate || "—"}</td>
@@ -565,6 +486,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
           }
         </div>
       )}
+      {cobroFor && (() => { const b = invoiceBalance(cobroFor, cobros, balCtx); return <CobroModal inv={cobroFor} amount={b.amount} paid={b.paid} balance={b.balance} onSave={f => registerAbono(cobroFor, f)} onClose={() => setCobroFor(null)} />; })()}
     </div>
   );
 }

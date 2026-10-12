@@ -59,7 +59,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     const inv = invoicedTripMap.get(Number(id));
     if (inv) parts.push(`la factura ${inv.invoiceNumber || "#" + inv.id} (${inv.status === "paid" ? "cobrada" : inv.status === "sent" ? "enviada" : "borrador"})`);
     const cobro = (cobros || []).find(c => (c.collectedTripIds || []).map(Number).includes(Number(id)));
-    if (cobro) parts.push(`el cobro del período ${cobro.periodKey}${cobro.pf ? " (ya repartido con Profit First)" : ""}`);
+    if (cobro) { const cinv = (invoices || []).find(i => i.id === cobro.invoiceId); parts.push((cobro.invoiceId ? `el cobro del ${cobro.date} de la factura ${cinv?.invoiceNumber || "#" + cobro.invoiceId}` : `el cobro del período ${cobro.periodKey}`) + (cobro.pf ? " (ya repartido con Profit First)" : "")); }
     return parts.length ? `Este viaje está en ${parts.join(" y en ")}. Anula primero ${parts.length > 1 ? "ambos" : "eso"} en ${inv ? "Facturas" : ""}${inv && cobro ? " / " : ""}${cobro ? "CxC" : ""}.` : null;
   };
 
