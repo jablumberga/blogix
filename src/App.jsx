@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, ShieldCheck, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { getToken } from "./api.js";
 import { colors } from "./constants/theme.js";
@@ -7,7 +7,6 @@ import { Badge } from "./components/ui/index.jsx";
 import LoginPage from "./components/LoginPage.jsx";
 import LandingPage from "./pages/LandingPage.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
-import AgentsPage from "./pages/AgentsPage.jsx";
 import PartnerDashboard from "./pages/PartnerDashboard.jsx";
 import DriverDashboard from "./pages/DriverDashboard.jsx";
 import TripsPage from "./pages/TripsPage.jsx";
@@ -187,8 +186,6 @@ export default function App() {
     { id: "banco",       icon: Landmark,         label: "Banco" },
     { id: "suppliers",   icon: Store,            label: t.suppliers },
     { id: "settlements", icon: Handshake,        label: t.settlements },
-    { divider: true },
-    { id: "agents",      icon: ShieldCheck,      label: t.agents, badge: alertCount },
   ];
   const partnerNav = [
     { id: "partnerDash", icon: LayoutDashboard, label: t.partnerDashboard },
@@ -224,11 +221,10 @@ export default function App() {
     banco:       "Banco",
     suppliers:   t.suppliers,
     settlements: t.settlements,
-    agents:      t.agents,
   };
 
   const bottomNavTabs = [
-    { id: "dashboard", icon: Home,         label: "Dashboard" },
+    { id: "dashboard", icon: Home,         label: "Dashboard", badge: alertCount },
     { id: "trips",     icon: Truck,        label: "Viajes"    },
     { id: "expenses",  icon: DollarSign,   label: "Gastos"    },
     { id: "__mas__",   icon: Menu,         label: "Más"       },
@@ -384,7 +380,6 @@ export default function App() {
         {page === "banco"       && isAdmin    && <BancoPage        {...ctx} />}
         {page === "suppliers"   && isAdmin    && <SuppliersPage    {...ctx} />}
         {page === "settlements" && (isAdmin || isPartner) && <SettlementsPage  {...ctx} />}
-        {page === "agents"      && isAdmin    && <AgentsPage       {...ctx} />}
       </div>
 
       {/* Mobile bottom navigation — partner */}

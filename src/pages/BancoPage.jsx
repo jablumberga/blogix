@@ -1,17 +1,27 @@
 import { useState, useMemo } from "react";
-import { Landmark, TrendingUp, TrendingDown, ArrowUp, CheckCircle2, Circle, Settings, X } from "lucide-react";
+import { Landmark, TrendingUp, TrendingDown, ArrowUp, ArrowDownToLine, CheckCircle2, Circle, Settings, X } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt } from "../utils/helpers.js";
+import { fmt, today, nxId } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Th, Td, Badge } from "../components/ui/index.jsx";
 import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
 
 const FILTER_OPTS   = ["todos", "pendientes", "conciliados", "debitos", "creditos"];
 const FILTER_LABELS = { todos: "Todos", pendientes: "Pendientes", conciliados: "Conciliados", debitos: "Solo Débitos", creditos: "Solo Créditos" };
 
-export default function BancoPage({ expenses, cobros, clients, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, isMobile }) {
+export default function BancoPage({ expenses, setExpenses, cobros, clients, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, isMobile }) {
   const [filter, setFilter]           = useState("todos");
   const [showSettings, setShowSettings] = useState(false);
   const [draft, setDraft]             = useState(null);
+  const [wd, setWd] = useState(null); // retiro en edición: { date, amount, kind, description }
+  const saveWithdrawal = () => {
+    const amount = Number(wd?.amount) || 0;
+    if (!(amount > 0) || !wd.date) { window.alert("Indica fecha y monto mayor que 0."); return; }
+    const category = wd.kind === "reserve" ? "reserve_withdrawal" : "cash_withdrawal";
+    if (wd.kind === "reserve" && !window.confirm(`Retirar ${fmt(amount)} de la RESERVA (owner's comp / profit / tax). Profit First: solo si es un retiro planificado del dueño o pago de impuestos. ¿Continuar?`)) return;
+    setExpenses(prev => [...prev, { id: nxId(prev), category, amount, date: wd.date, paidDate: wd.date, status: "paid", paymentMethod: "transfer", tripId: null, truckId: null, supplierId: null,
+      description: wd.description || (wd.kind === "reserve" ? "Retiro de Reserva" : "Retiro a caja") }]);
+    setWd(null);
+  };
 
   const clientMap = useMemo(() => new Map((clients || []).map(c => [c.id, c])), [clients]);
 
@@ -88,6 +98,22 @@ export default function BancoPage({ expenses, cobros, clients, bankAccount, setB
     <div>
       <PageHeader title="Banco" />
       <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} setPfSettings={setPfSettings} setBankAccount={setBankAccount} isMobile={isMobile} />
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+        <button onClick={() => setWd(wd ? null : { date: today(), amount: "", kind: "cash", description: "" })} style={{ padding: "7px 12px", borderRadius: 8, border: `1px solid ${colors.border}`, background: wd ? "transparent" : colors.accent, color: wd ? colors.textMuted : "white", cursor: "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}><ArrowDownToLine size={13} /> {wd ? "Cancelar" : "Registrar retiro"}</button>
+      </div>
+      {wd && <Card style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Retiro de la cuenta</div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr) auto", gap: 10, alignItems: "end" }}>
+          <div><div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Fecha</div><input type="date" style={inp} value={wd.date} onChange={e => setWd({ ...wd, date: e.target.value })} /></div>
+          <div><div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Monto (DOP)</div><input type="number" style={inp} value={wd.amount} onChange={e => setWd({ ...wd, amount: e.target.value })} /></div>
+          <div><div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Tipo</div>
+            <select style={inp} value={wd.kind} onChange={e => setWd({ ...wd, kind: e.target.value })}><option value="cash">A caja (efectivo para gastos)</option><option value="reserve">De la Reserva (dueño / impuestos)</option></select></div>
+          <div><div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Concepto</div><input style={inp} value={wd.description} onChange={e => setWd({ ...wd, description: e.target.value })} placeholder="opcional" /></div>
+          <button onClick={saveWithdrawal} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: colors.green, color: "white", fontWeight: 700, cursor: "pointer" }}>Guardar</button>
+        </div>
+        <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>A caja: sale del banco pero no toca OpEx hasta que registres cada gasto en efectivo. De la Reserva: baja la cuenta Reserva del Profit First.</div>
+      </Card>}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 12, marginBottom: 16 }}>
         <StatCard icon={Landmark}     label="Saldo Conciliado"    value={fmt(saldoConciliado)}   color={saldoConciliado >= 0 ? colors.green : colors.red} />

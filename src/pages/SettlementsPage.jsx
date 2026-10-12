@@ -171,7 +171,7 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
  * Profit First: lo transferido es pass-through (gasto `partner_settlement`);
  * lo que la empresa retiene (reembolsos, cargos) es ingreso real y se reparte 20/80.
  */
-export default function SettlementsPage({ t, trips = [], trucks = [], expenses = [], setExpenses, clients = [], partners = [], brokers = [], drivers = [], settlementStatus = {}, setSettlementStatus, user, partner, pfSettings = DEFAULT_PF_SETTINGS, isMobile }) {
+export default function SettlementsPage({ t, trips = [], trucks = [], expenses = [], setExpenses, clients = [], partners = [], brokers = [], drivers = [], settlementStatus = {}, setSettlementStatus, cobros = [], user, partner, pfSettings = DEFAULT_PF_SETTINGS, isMobile }) {
   const isPartnerView = user?.role === "partner";
   const periods = useMemo(() => genSettlementPeriods(trips.map(tr => tr.date)), [trips]);
   const list = isPartnerView ? [partner].filter(Boolean) : partners;
@@ -197,6 +197,12 @@ export default function SettlementsPage({ t, trips = [], trucks = [], expenses =
 
   const toggle = ({ p, s, key, status }) => {
     const paid = status === "paid";
+    if (!paid) {
+      // Aviso informativo: viajes de esta liquidación que el cliente todavía no ha pagado
+      const collected = new Set(cobros.flatMap(c => (c.collectedTripIds || []).map(Number)));
+      const notCollected = s.trips.filter(tr => !collected.has(Number(tr.id)));
+      if (notCollected.length && !window.confirm(`${notCollected.length} de ${s.trips.length} viaje(s) de esta liquidación aún NO han sido cobrados al cliente (${fmt(notCollected.reduce((a, tr) => a + (Number(tr.revenue) || 0), 0))}).\n\n¿Marcar como transferida de todos modos?`)) return;
+    }
     setSettlementStatus(prev => ({ ...prev, [key]: paid ? "unpaid" : "paid" }));
     if (!setExpenses) return;
     if (paid) { setExpenses(prev => prev.filter(e => !(e.category === "partner_settlement" && e.settlementKey === key))); return; }

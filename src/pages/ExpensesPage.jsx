@@ -38,7 +38,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   };
   // ¿Este gasto se le descuenta al socio en su liquidación (reembolso a la empresa)?
   const isChargedToPartner = (e) => {
-    if (["driverPay", "nominaTotalOverride", "adelanto_conductor", "broker_commission", "partner_settlement"].includes(e.category)) return false;
+    if (["driverPay", "nominaTotalOverride", "adelanto_conductor", "broker_commission", "partner_settlement", "cash_withdrawal", "reserve_withdrawal"].includes(e.category)) return false;
     const p = partnerOfExpense(e);
     return !!p && expenseChargedToPartner(e, p);
   };
@@ -105,10 +105,16 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
     setTplForm({ name: "", category: "loan", amount: "", paymentMethod: "transfer", truckId: null });
   };
 
+  // Genera los gastos fijos del mes UNA sola vez: cada gasto lleva templateId + mes (YYYY-MM);
+  // si ya existe para ese mes, se salta (así «Generar este mes» no duplica).
   const genFromTemplates = () => {
-    const todayStr = today();
-    const newExps = (fixedTemplates || []).map(tpl => ({ id: null, date: todayStr, category: tpl.category, amount: tpl.amount, paymentMethod: tpl.paymentMethod, description: tpl.name, tripId: null, truckId: tpl.truckId || null, supplierId: null, status: "pending" }));
-    if (newExps.length === 0) return;
+    const todayStr = today(); const month = todayStr.slice(0, 7);
+    const have = new Set(expenses.filter(e => e.templateId && e.templateMonth).map(e => `${e.templateId}|${e.templateMonth}`));
+    const pending = (fixedTemplates || []).filter(tpl => !have.has(`${tpl.id}|${month}`));
+    const skipped = (fixedTemplates || []).length - pending.length;
+    if (pending.length === 0) { window.alert(`Los gastos fijos de ${month} ya están generados (${skipped}).`); return; }
+    if (!window.confirm(`Generar ${pending.length} gasto(s) fijo(s) de ${month}` + (skipped ? ` (${skipped} ya existían y se omiten)` : "") + "?")) return;
+    const newExps = pending.map(tpl => ({ id: null, date: todayStr, category: tpl.category, amount: tpl.amount, paymentMethod: tpl.paymentMethod, description: tpl.name, tripId: null, truckId: tpl.truckId || null, supplierId: null, status: "pending", templateId: tpl.id, templateMonth: month }));
     setExpenses(prev => { let next = [...prev]; newExps.forEach(e => next.push({ ...e, id: nxId(next) })); return next; });
   };
 

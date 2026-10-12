@@ -297,6 +297,20 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
       .filter(c => c.status !== "pending" || (c.collectedTripIds || []).length > 0 || c.note));
   };
 
+  // Anular: la factura conserva su número (queda registrada como ANULADA), los viajes vuelven a estar
+  // disponibles y se quita su cobro si lo tenía. Eliminar es para facturas hechas por error.
+  const cancelInvoice = (id) => {
+    const inv = invoices.find(x => x.id === id);
+    if (!inv || inv.status === "cancelled") return;
+    if (!window.confirm(`¿Anular la factura ${inv.invoiceNumber || "#" + inv.id}? Conserva su número como ANULADA; los viajes quedan disponibles para facturar de nuevo` + (inv.status === "paid" ? " y se quita su cobro registrado" : "") + ".")) return;
+    const cl = clients.find(c => c.id === inv.clientId);
+    const ids = new Set(inv.tripIds || []);
+    setInvoices(prev => prev.map(x => x.id === id ? { ...x, status: "cancelled", cancelledAt: todayStr } : x));
+    if (cl) setCobros(prev => prev
+      .map(c => c.clientId !== inv.clientId || !(c.collectedTripIds || []).some(tid => ids.has(tid)) ? c : rebuildCobro(c, cl, (c.collectedTripIds || []).filter(tid => !ids.has(tid))))
+      .filter(c => c.status !== "pending" || (c.collectedTripIds || []).length > 0 || c.note));
+  };
+
   const setStatus = (id, status) => {
     const inv = invoices.find(x => x.id === id); // read before queuing update
     setInvoices(prev => prev.map(i => i.id === id ? { ...i, status } : i));
@@ -444,8 +458,9 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                       <button onClick={() => exportInvoiceXlsx(inv, cl)} title="Generar Excel" style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.green}60`, background: "transparent", color: colors.green, cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                         <FileSpreadsheet size={11}/> Excel
                       </button>
-                      <button onClick={() => openEdit(inv)} title="Editar" style={{ background: "none", border: "none", color: colors.accent, cursor: "pointer", padding: 4 }}><Pencil size={13}/></button>
-                      <button onClick={() => deleteInvoice(inv.id)} title="Eliminar" style={{ background: "none", border: "none", color: colors.red, cursor: "pointer", padding: 4 }}><Trash2 size={13}/></button>
+                      {inv.status !== "cancelled" && <button onClick={() => openEdit(inv)} title="Editar" style={{ background: "none", border: "none", color: colors.accent, cursor: "pointer", padding: 4 }}><Pencil size={13}/></button>}
+                      {inv.status !== "cancelled" && <button onClick={() => cancelInvoice(inv.id)} title="Anular (conserva el número)" style={{ background: "none", border: "none", color: colors.orange, cursor: "pointer", padding: 4 }}><Ban size={13}/></button>}
+                      <button onClick={() => deleteInvoice(inv.id)} title="Eliminar (factura por error)" style={{ background: "none", border: "none", color: colors.red, cursor: "pointer", padding: 4 }}><Trash2 size={13}/></button>
                     </div>
                   </Td>
                 </tr>

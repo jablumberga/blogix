@@ -49,7 +49,7 @@ export default function ProfitFirstPanel({ cobros = [], expenses = [], pfSetting
       <Account icon={TrendingUp} label="INCOME · COBRADO" value={b.income} color={colors.green}
         lines={[["Ingreso real (tuyo)", b.real], ["Apartado socios/broker", b.passThrough, colors.orange], ...(b.passThroughPending > 0 ? [["Pendiente de transferir", b.passThroughPending, colors.orange]] : [])]} />
       <Account icon={PiggyBank} label={`RESERVA · ${pct} %`} value={b.reserve} color={PF_PURPLE}
-        lines={[["Owner's comp + profit + tax", "no se toca"], ...(b.openingReserve ? [["Balance inicial", b.openingReserve]] : []), ...(thisMonth ? [[`Este mes (${thisMonth.month})`, thisMonth.reserve]] : [])]} />
+        lines={[["Owner's comp + profit + tax", "no se toca"], ...(b.openingReserve ? [["Balance inicial", b.openingReserve]] : []), ...(thisMonth ? [[`Este mes (${thisMonth.month})`, thisMonth.reserve]] : []), ...(b.reserveOut ? [["Retirado (dueño / impuestos)", b.reserveOut, colors.orange]] : [])]} />
       <Account icon={Wallet} label="OPEX · DISPONIBLE" value={b.opexAvailable} color={b.opexAvailable >= 0 ? colors.cyan : colors.red}
         lines={[...(b.openingOpex ? [["Balance inicial", b.openingOpex]] : []), ["Entró (80 % de lo real)", b.opexIn - b.openingOpex], ["Pagado", b.opexOut, colors.orange], ["Compromisos pendientes", b.opexCommitted, b.opexCommitted > b.opexAvailable ? colors.red : colors.textMuted], ["Después de compromisos", b.opexAfterCommitments, b.opexAfterCommitments >= 0 ? colors.green : colors.red]]} />
     </div>

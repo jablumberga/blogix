@@ -22,7 +22,9 @@ export const DEFAULT_PF_SETTINGS = { reservePct: 20, startDate: null, openingRes
 /** Categorías de gasto que son pass-through (no consumen OpEx). */
 export const PASS_THROUGH_CATEGORIES = ["partner_settlement", "broker_commission"];
 /** Categorías que solo son memoria de nómina, no dinero que sale. */
-export const NON_CASH_CATEGORIES = ["nominaTotalOverride"];
+export const NON_CASH_CATEGORIES = ["nominaTotalOverride", "cash_withdrawal", "reserve_withdrawal"];
+/** Retiros desde Banco: a caja (no toca OpEx hasta que se registre el gasto en efectivo) o de la Reserva (dueño). */
+export const WITHDRAWAL_CATEGORIES = ["cash_withdrawal", "reserve_withdrawal"];
 
 /** Un cobro parcial también es dinero que entró: se asigna igual. */
 export const COLLECTED = ["collected", "partial"];
@@ -133,7 +135,7 @@ export function accountBalances({ cobros = [], expenses = [], settings = DEFAULT
     if (!a) continue;
     income += a.total; reserve += a.reserve; opexIn += a.opex; passThrough += a.passThrough; real += a.real;
   }
-  let opexOut = 0, opexCommitted = 0, passThroughOut = 0, passThroughReleased = 0;
+  let opexOut = 0, opexCommitted = 0, passThroughOut = 0, passThroughReleased = 0, reserveOut = 0;
   for (const e of expenses) {
     const amt = Number(e.amount) || 0;
     if (e.category === "partner_settlement" && e.status === "paid" && afterStart(e.paidDate || e.date, settings)) {
@@ -141,11 +143,12 @@ export function accountBalances({ cobros = [], expenses = [], settings = DEFAULT
       passThroughOut += amt; passThroughReleased += rOp + rRes; opexIn += rOp; reserve += rRes; real += rOp + rRes;
     }
     if (e.category === "broker_commission" && e.status === "paid" && afterStart(e.paidDate || e.date, settings)) passThroughOut += amt;
+    if (e.category === "reserve_withdrawal" && e.status === "paid" && afterStart(e.paidDate || e.date, settings)) { reserve -= amt; reserveOut += amt; }
     if (!isOpexExpense(e)) continue;
     if (e.status === "paid") { if (afterStart(e.paidDate || e.date, settings)) opexOut += amt; }
     else opexCommitted += amt;
   }
-  return { income: round2(income), real: round2(real), reserve: round2(reserve), passThrough: round2(passThrough),
+  return { income: round2(income), real: round2(real), reserve: round2(reserve), reserveOut: round2(reserveOut), passThrough: round2(passThrough),
     passThroughOut: round2(passThroughOut), passThroughReleased: round2(passThroughReleased),
     passThroughPending: round2(passThrough - passThroughOut - passThroughReleased),
     opexIn: round2(opexIn), opexOut: round2(opexOut), opexAvailable: round2(opexIn - opexOut), opexCommitted: round2(opexCommitted),

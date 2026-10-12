@@ -77,6 +77,13 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
       if (Number(form.jointDriverId) === driverObj?.id) { setFormError("El compañero no puedes ser tú mismo."); return; }
       if (Number(form.jointTruckId) === Number(form.truckId)) { setFormError("El camión del compañero debe ser distinto al tuyo."); return; }
     }
+    // Sin tarifa del cliente para el destino: el servidor lo rechaza (tarifa > 0), mejor avisar aquí
+    if (!(Number(form.revenue) > 0)) { setFormError("El cliente no tiene tarifa para este destino con tu camión. Avisa a la oficina para que la agregue en Clientes antes de registrar el viaje."); return; }
+    if (driverObj) {
+      const tk0 = trucks.find(t2 => t2.id === Number(form.truckId));
+      const pre = calcDriverPay({ driver: driverObj, trip: { ...form, revenue: Number(form.revenue) || 0, numHelpers: Number(form.numHelpers) || 0 }, truck: tk0, clientId: Number(form.clientId) });
+      if (pre.payType === "perTrip" && !pre.rateFound && !window.confirm("No tienes tarifa de pago para este destino: el viaje se guardará SIN tu pago y la oficina tendrá que ajustarlo. ¿Registrar de todos modos?")) return;
+    }
     setFormError("");
     const helpersPay = Number(form.helperPayEach) || 0;
     const helpersArr = Array.from({ length: Number(form.numHelpers) || 0 }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));

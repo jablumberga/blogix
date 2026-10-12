@@ -12,7 +12,7 @@ import { checkRef } from "../api.js";
 import { generateConduce } from "../utils/generateConduce.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td, StatusBadge, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, invoices, cobros = [], partners = [], isMobile }) {
+export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, invoices, cobros = [], partners = [], settlementStatus = {}, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({});
@@ -42,6 +42,17 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   // Viajes ya cobrados (en algún cobro registrado): no se pueden borrar ni cambiar de monto
   const collectedTripIds = useMemo(() => new Set((cobros || []).flatMap(c => (c.collectedTripIds || []).map(Number))), [cobros]);
   const isLocked = (id) => invoicedTripMap.has(Number(id)) || collectedTripIds.has(Number(id));
+  // Viaje en camión de socio cuya quincena ya se marcó como transferida: no se cancela ni se borra sin desmarcarla
+  const settledReason = (tr) => {
+    if (!tr?.date) return null;
+    const tk = trucks.find(x => x.id === Number(tr.truckId));
+    if (!tk?.partnerId) return null;
+    const half = Number(tr.date.slice(8, 10)) <= 15 ? 1 : 2;
+    const key = `${tk.partnerId}-${tr.date.slice(0, 7)}-${half}`;
+    if ((settlementStatus || {})[key] !== "paid") return null;
+    const p = (partners || []).find(x => x.id === tk.partnerId);
+    return `Este viaje ya está en la liquidación de ${p?.name || "el socio"} (${tr.date.slice(0, 7)}, quincena ${half}) marcada como TRANSFERIDA. Desmárcala primero en Liquidaciones.`;
+  };
   // Explica exactamente qué hay que anular primero (factura y/o cobro de qué quincena)
   const lockReason = (id) => {
     const parts = [];
@@ -225,6 +236,10 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       if (isLocked(editId) && prevTrip && (prevTrip.revenue !== data.revenue || prevTrip.clientId !== data.clientId || prevTrip.province !== data.province || prevTrip.municipality !== data.municipality)) {
         setFormError(`No se puede cambiar cliente, destino ni tarifa. ${lockReason(editId)}`); return;
       }
+      const settled = prevTrip && settledReason(prevTrip);
+      if (settled && (cancelled !== (prevTrip.status === "cancelled") || prevTrip.revenue !== data.revenue || prevTrip.truckId !== data.truckId || prevTrip.date !== data.date)) {
+        setFormError(`No se puede cancelar ni cambiar monto, camión o fecha. ${settled}`); return;
+      }
       let saved = { ...data, id: editId }, linked = null;
       if (refCheck.linkWith) { const l = linkJoint(saved, refCheck.linkWith); saved = l.trip; linked = l.other; }
       saved = stamp(saved, "editado");
@@ -246,11 +261,20 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
 
   const deleteTrip = (tr) => {
     if (isLocked(tr.id)) { window.alert(`No se puede eliminar. ${lockReason(tr.id)}`); return; }
+    const settled = settledReason(tr);
+    if (settled && tr.status !== "cancelled") { window.alert(`No se puede eliminar. ${settled}`); return; }
     const paid = expenses.filter(e => e.tripId === tr.id && e.status === "paid");
-    const msg = `¿Eliminar viaje del ${tr.date} a ${tr.municipality}?` + (paid.length ? `\n\nOJO: tiene ${paid.length} gasto(s) ya PAGADOS que se conservarán sin viaje.` : "\nSe eliminarán también sus gastos pendientes.");
-    if (!window.confirm(msg)) return;
+    const paidTotal = paid.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    if (!window.confirm(`¿Eliminar viaje del ${tr.date} a ${tr.municipality}?` + (paid.length ? `\n\nTiene ${paid.length} pago(s) ya hechos por ${fmt(paidTotal)}.` : "\nSe eliminarán también sus gastos pendientes."))) return;
+    // Pagos ya hechos: el dinero ya salió. O se conservan como gasto suelto, o se borran (viaje por error).
+    let keepPaid = false;
+    if (paid.length) keepPaid = window.confirm(`¿Conservar esos ${paid.length} pago(s) como gastos sueltos (sin viaje)?\n\nAceptar = conservar (el dinero sí salió)\nCancelar = borrar todo, incluidos los pagos (el viaje fue un error)`);
     setTrips(trips.filter(x => x.id !== tr.id));
-    setExpenses(expenses.filter(e => !(e.tripId === tr.id && e.status !== "paid")));
+    setExpenses(expenses.flatMap(e => {
+      if (e.tripId !== tr.id) return [e];
+      if (e.status === "paid" && keepPaid) return [{ ...e, tripId: null, description: `(viaje eliminado ${tr.date} ${tr.municipality || ""}) ${e.description || ""}`.trim() }];
+      return [];
+    }));
   };
 
   // Documentos recibidos (misma lógica que el panel de Oficina)

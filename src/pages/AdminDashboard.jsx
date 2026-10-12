@@ -111,7 +111,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       return false;
     }).reduce((s,e) => s + e.amount, 0);
     const brokerFees = periodExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s + e.amount, 0);
-    const operExp    = periodExpenses.filter(e => !["driverPay","nominaTotalOverride","broker_commission","adelanto_conductor"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
+    const operExp    = periodExpenses.filter(e => !["driverPay","nominaTotalOverride","broker_commission","adelanto_conductor","partner_settlement","cash_withdrawal","reserve_withdrawal"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
     const totalExp   = nomina + brokerFees + operExp;
     // grossProfit uses netRevenue: broker pass-through deductions are contra-revenue,
     // and since syncAll doesn't generate broker_commission expenses for pass-through clients,
@@ -272,6 +272,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   const errCount  = alerts.filter(a => a.severity === "error").length;
   const warnCount = alerts.filter(a => a.severity === "warning").length;
   const infoCount = alerts.filter(a => a.severity === "info").length;
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
+  const sortedAlerts = useMemo(() => { const w = { error: 0, warning: 1, info: 2 }; return [...alerts].sort((a, b) => (w[a.severity] ?? 3) - (w[b.severity] ?? 3)); }, [alerts]);
 
   return (
     <div>
@@ -549,7 +551,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         </Card>
 
         {/* Alertas */}
-        <Card style={{ cursor: "pointer" }} onClick={() => setPage("agents")}>
+        <Card>
           <SectionTitle label="Alertas del Sistema" color={colors.red} />
           {alerts.length === 0
             ? <div style={{ display: "flex", alignItems: "center", gap: 8, color: colors.green, fontSize: 13, padding: "10px 0" }}>
@@ -577,14 +579,16 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
                     <span style={{ color: colors.accent, fontSize: 12 }}>notificacion{infoCount !== 1 ? "es" : ""}</span>
                   </div>
                 )}
-                {alerts.filter(a => a.severity === "error").slice(0,2).map(a => (
-                  <div key={a.id} style={{ fontSize: 10, color: colors.red, padding: "3px 0", borderBottom: `1px solid ${colors.border}11` }}>
-                    {a.msg}
-                  </div>
-                ))}
+                {sortedAlerts.slice(0, showAllAlerts ? sortedAlerts.length : 4).map(a => {
+                  const c = a.severity === "error" ? colors.red : a.severity === "warning" ? colors.orange : colors.accent;
+                  return <div key={a.id} style={{ fontSize: 11, color: colors.text, padding: "5px 0", borderTop: `1px solid ${colors.border}22`, display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: c, marginTop: 5, flexShrink: 0 }} />
+                    <span><span style={{ color: c, fontWeight: 700, fontSize: 10 }}>{t.agentCat?.[a.category] || a.category}</span> · {a.msg}</span>
+                  </div>;
+                })}
+                {sortedAlerts.length > 4 && <div onClick={() => setShowAllAlerts(v => !v)} style={{ marginTop: 8, fontSize: 10, color: colors.accent, textAlign: "right", cursor: "pointer" }}>{showAllAlerts ? "Ver menos" : `Ver todas (${sortedAlerts.length})`}</div>}
               </>
           }
-          <div style={{ marginTop: 10, fontSize: 10, color: colors.accent, textAlign: "right" }}>Ver Agentes</div>
         </Card>
       </div>
 
