@@ -171,7 +171,11 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
     const { key: periodKey } = getPeriodInfo(tr.date, cl);
     const existing = cobroMap.get(`${tr.clientId}::${periodKey}`);
     const currentIds = new Set(existing ? (existing.collectedTripIds || []) : []);
-    if (currentIds.has(tr.id)) currentIds.delete(tr.id);
+    if (currentIds.has(tr.id)) {
+      const paidInv = (invoices || []).find(i => i.status === "paid" && (i.tripIds || []).includes(tr.id));
+      if (paidInv) { window.alert(`Este viaje está en la factura ${paidInv.invoiceNumber} marcada como cobrada. Para desmarcarlo, anula o elimina esa factura en Facturas; así factura y cobro quedan iguales.`); return; }
+      currentIds.delete(tr.id);
+    }
     else currentIds.add(tr.id);
     const collected = [...currentIds];
     const periodTrips = trips.filter(t => {

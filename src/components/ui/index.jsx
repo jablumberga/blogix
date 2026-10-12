@@ -1,3 +1,4 @@
+import { today } from "../../utils/helpers.js";
 import { useState, useEffect } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { colors, radius, font, space } from "../../constants/theme.js";
@@ -250,7 +251,7 @@ export function Td({ children, align = "left", bold, color: c, colSpan, style })
 
 // ─── DateFilter ───────────────────────────────────────────────────────────────
 export function DateFilter({ t, onFilter }) {
-  const todayStr = () => new Date().toISOString().slice(0, 10);
+  const todayStr = () => today();
   const [mode, setMode] = useState("thisMonth");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -262,7 +263,7 @@ export function DateFilter({ t, onFilter }) {
     if (m === "today") {
       f = todayStr(); to2 = todayStr();
     } else if (m === "thisWeek") {
-      const d = new Date(); d.setDate(d.getDate() - d.getDay()); f = d.toISOString().slice(0, 10); to2 = todayStr();
+      const d = new Date(); d.setDate(d.getDate() - d.getDay()); f = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; to2 = todayStr();
     } else if (m === "thisMonth") {
       f = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`; to2 = todayStr();
     } else {

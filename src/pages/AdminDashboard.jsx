@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote, FileText, ChevronRight } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, monthStr, getPeriodInfo, expenseTruckId } from "../utils/helpers.js";
+import { fmt, monthStr, getPeriodInfo, expenseTruckId, today } from "../utils/helpers.js";
 import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
 import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
 
@@ -43,7 +43,7 @@ function SectionTitle({ label, color }) {
 export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, pfSettings, isMobile }) {
   // brokers is used in the revenue useMemo for pass-through deduction
   const cm = monthStr();
-  const today = new Date().toISOString().slice(0, 10);
+  const todayStr = today();
   const [dateFrom, setDateFrom] = useState(`${cm}-01`);
   const [dateTo,   setDateTo]   = useState(() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(new Date(n.getFullYear(),n.getMonth()+1,0).getDate()).padStart(2,"0")}`; });
 
@@ -63,7 +63,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       else { setDateFrom(`${y}-${mo}-16`); setDateTo(`${y}-${mo}-${lastDay(y, mn)}`); }
     } else if (preset === "last30") {
       const from = new Date(now); from.setDate(from.getDate() - 30);
-      setDateFrom(from.toISOString().slice(0, 10)); setDateTo(`${y}-${mo}-${d}`);
+      setDateFrom(`${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}-${String(from.getDate()).padStart(2, "0")}`); setDateTo(`${y}-${mo}-${d}`);
     } else if (preset === "year") { setDateFrom(`${y}-01-01`); setDateTo(`${y}-12-31`); }
   };
 
@@ -145,8 +145,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
     const cxcPeriods = Object.values(cxcGrouped);
     const cxcCollected = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status === "collected");
     const cxcPending   = cxcPeriods.filter(p => getCobro(p.clientId, p.periodKey)?.status !== "collected");
-    const cxcOverdue   = cxcPending.filter(p => p.expectedDate < today);
-    const cxcUpcoming  = cxcPending.filter(p => p.expectedDate >= today).sort((a,b) => a.expectedDate.localeCompare(b.expectedDate));
+    const cxcOverdue   = cxcPending.filter(p => p.expectedDate < todayStr);
+    const cxcUpcoming  = cxcPending.filter(p => p.expectedDate >= todayStr).sort((a,b) => a.expectedDate.localeCompare(b.expectedDate));
     return {
       cxcPending, cxcOverdue, cxcUpcoming, cobroMap, getCobro,
       totalCxC:       cxcPending.reduce((s, p) => s + p.revenue, 0),
@@ -154,7 +154,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       totalCollected: cxcCollected.reduce((s, p) => s + (getCobro(p.clientId, p.periodKey)?.amount ?? p.revenue), 0),
       nextDue:        cxcUpcoming[0],
     };
-  }, [trips, clients, cobros, brokers, today]);
+  }, [trips, clients, cobros, brokers, todayStr]);
 
   // ── CxP (accounts payable — all pending expenses) ──────────────────────
   const { cxpNomina, cxpSupplier, cxpFijos, totalCxP } = useMemo(() => {

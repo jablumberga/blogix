@@ -170,6 +170,7 @@ export function AppProvider({ children }) {
         return;
       }
       if (result.saved === "api") versionRef.current = result.version || 0;
+      if (result.remap) applyRemap(result.remap);
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
@@ -225,6 +226,13 @@ export function AppProvider({ children }) {
       isReloadingRef.current = false;
       setSyncStatus(source === "api" ? "saved" : "offline");
     });
+  };
+
+  // El servidor reasignó ids (un chofer numeró un viaje/gasto con un id que ya usaba otro): la app adopta los nuevos
+  const applyRemap = (remap) => {
+    const rt = remap.trips || {}, re = remap.expenses || {};
+    if (Object.keys(rt).length) setTrips(prev => prev.map(t => rt[t.id] ? { ...t, id: rt[t.id] } : t));
+    if (Object.keys(rt).length || Object.keys(re).length) setExpenses(prev => prev.map(e => ({ ...e, ...(re[e.id] ? { id: re[e.id] } : {}), ...(rt[e.tripId] ? { tripId: rt[e.tripId] } : {}) })));
   };
 
   const logout = () => {

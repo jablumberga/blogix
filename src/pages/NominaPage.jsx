@@ -58,7 +58,7 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
         {!pay.paid && <>
           <button onClick={() => setEditingTotal(t => !t)} title="Override del total" style={smallBtn(pay.override ? PURPLE + "22" : "transparent", pay.override ? PURPLE : colors.textMuted, `1px solid ${pay.override ? PURPLE + "60" : colors.border}`)}><Pencil size={11} /> Total</button>
           {pay.override && <button onClick={onClearTotalOverride} title="Quitar override" style={{ background: "transparent", border: "none", color: colors.textMuted, cursor: "pointer", padding: 4 }}><X size={12} /></button>}
-          <button onClick={onMarkPaid} disabled={totalOut <= 0 && row.payType !== "fixed"} style={{ ...smallBtn(colors.green, "white"), padding: "7px 12px", fontSize: 12, opacity: totalOut <= 0 ? 0.5 : 1 }}><CheckCircle2 size={13} /> Marcar pagado {fmt(totalOut)}</button>
+          {(totalOut > 0 || row.payType === "fixed") && <button onClick={onMarkPaid} style={{ ...smallBtn(colors.green, "white"), padding: "7px 12px", fontSize: 12 }}><CheckCircle2 size={13} /> Marcar pagado {fmt(totalOut)}</button>}
         </>}
         {pay.paid && <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Badge label={`✓ Pagado ${fmt(totalOut)}`} color={colors.green} />

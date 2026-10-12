@@ -6,7 +6,7 @@ import { DR_PROVINCES } from "../constants/destinations.js";
 import { parseRateRows, mergeRates, TEMPLATE_HEADERS, TEMPLATE_EXAMPLE_ROWS } from "../utils/rateImport.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Chk, Th, Td } from "../components/ui/index.jsx";
 
-export default function ClientsPage({ t, clients, setClients, brokers, setTrips, isMobile }) {
+export default function ClientsPage({ t, clients, setClients, brokers, setTrips, trips = [], invoices = [], isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const emptyRules = { paymentTerms: 30, billingCycle: "net", period1PayDay: 30, period2PayDay: 15, requiresPOD: false, requiresInvoiceRef: false, requiresDocuments: false, defaultBrokerId: null, brokerPassThrough: false };
@@ -189,7 +189,9 @@ export default function ClientsPage({ t, clients, setClients, brokers, setTrips,
           <Td align="right">
             <button onClick={() => openEdit(c)} style={{ padding: "8px 10px", borderRadius: 4, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
             <button onClick={() => {
-              if (setTrips) setTrips(prev => prev.map(tr => tr.clientId === c.id ? { ...tr, clientId: null } : tr));
+              const nT = trips.filter(tr => tr.clientId === c.id).length, nI = invoices.filter(i => i.clientId === c.id).length;
+              if (nT > 0 || nI > 0) { window.alert(`${c.companyName} tiene ${nT} viaje(s) y ${nI} factura(s). No se puede eliminar: márcalo como inactivo para conservar el historial.`); return; }
+              if (!window.confirm(`¿Eliminar el cliente ${c.companyName}? Esta acción no se puede deshacer.`)) return;
               setClients(clients.filter(x => x.id !== c.id));
             }} style={{ padding: "8px 10px", borderRadius: 4, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
           </Td>

@@ -66,8 +66,16 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   const formCharge = formPartner ? expenseChargedToPartner(form, formPartner) : false;
 
   const openNew = () => { setForm({ date: today(), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "", truckId: null, supplierId: null, status: "pending", driverId: null }); setEditId(null); setShowForm(true); };
-  const openEdit = (e) => { setForm({ ...e, amount: String(e.amount), tripId: e.tripId ? String(e.tripId) : "", truckId: e.truckId || null, supplierId: e.supplierId || null }); setEditId(e.id); setShowForm(true); };
-  const deleteExpense = (id) => { if (!window.confirm("¿Eliminar este gasto?")) return; setExpenses(prev => prev.filter(e => e.id !== id)); };
+  const openEdit = (e) => {
+    if (isSettled(e)) { window.alert("Este gasto ya se descontó en una liquidación transferida al socio. Para cambiarlo, desmarca esa liquidación primero."); return; } setForm({ ...e, amount: String(e.amount), tripId: e.tripId ? String(e.tripId) : "", truckId: e.truckId || null, supplierId: e.supplierId || null }); setEditId(e.id); setShowForm(true); };
+  const AUTO = ["driverPay", "helper", "partner_settlement", "nominaTotalOverride"];
+  const deleteExpense = (id) => {
+    const e = expenses.find(x => x.id === id); if (!e) return;
+    if (e.status === "paid") { window.alert("Este gasto ya está PAGADO: eliminarlo borraría dinero que salió. Si fue un error, desmárcalo como pagado primero o registra un ajuste."); return; }
+    if (AUTO.includes(e.category)) { window.alert("Este gasto lo genera la app (nómina, ayudantes o liquidación). Cambia el viaje o la nómina en su página; no se borra a mano."); return; }
+    if (isSettled(e)) { window.alert("Este gasto ya se descontó en una liquidación transferida al socio. Desmarca esa liquidación primero."); return; }
+    if (!window.confirm("¿Eliminar este gasto?")) return; setExpenses(prev => prev.filter(x => x.id !== id));
+  };
 
   const save = () => {
     if (!form.amount || !form.date) return;
@@ -98,8 +106,8 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   };
 
   const genFromTemplates = () => {
-    const today = today();
-    const newExps = (fixedTemplates || []).map(tpl => ({ id: null, date: today, category: tpl.category, amount: tpl.amount, paymentMethod: tpl.paymentMethod, description: tpl.name, tripId: null, truckId: tpl.truckId || null, supplierId: null, status: "pending" }));
+    const todayStr = today();
+    const newExps = (fixedTemplates || []).map(tpl => ({ id: null, date: todayStr, category: tpl.category, amount: tpl.amount, paymentMethod: tpl.paymentMethod, description: tpl.name, tripId: null, truckId: tpl.truckId || null, supplierId: null, status: "pending" }));
     if (newExps.length === 0) return;
     setExpenses(prev => { let next = [...prev]; newExps.forEach(e => next.push({ ...e, id: nxId(next) })); return next; });
   };

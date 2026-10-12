@@ -1,3 +1,4 @@
+import { today } from "./helpers.js";
 /**
  * Profit First — lógica única de asignación de ingresos.
  *
@@ -80,7 +81,7 @@ export function cobroPassThrough({ tripIds = [], trips = [], trucks = [], partne
 export function allocateCobro({ amount, tripIds, trips, trucks, partners, clients, brokers, settings = DEFAULT_PF_SETTINGS }) {
   const pt = cobroPassThrough({ tripIds, trips, trucks, partners, clients, brokers });
   const a = allocateIncome({ amount, passThrough: pt.total, reservePct: settings.reservePct });
-  return { ...a, passThroughPartner: pt.partner, passThroughBroker: pt.broker, at: new Date().toISOString().slice(0, 10) };
+  return { ...a, passThroughPartner: pt.partner, passThroughBroker: pt.broker, at: today() };
 }
 
 /**

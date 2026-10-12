@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Plus, X, Pencil, Trash2, FileText, CheckCircle2, Clock, Send, Ban, AlertCircle, Lock, Eye, FileSpreadsheet } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, nxId, getPeriodInfo } from "../utils/helpers.js";
+import { fmt, nxId, getPeriodInfo, today } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../components/ui/index.jsx";
 import { invoiceHTML, invoiceSheet, openPrintWindow } from "../utils/printReport.js";
 import { allocateCobro, DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
@@ -21,7 +21,7 @@ function calcDueDate(date, client) {
   const terms = client?.rules?.paymentTerms || 30;
   const d = new Date(date + "T12:00:00");
   d.setDate(d.getDate() + terms);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 const STATUS_CONFIG = {
@@ -109,7 +109,7 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, partners = [], pfSettings = DEFAULT_PF_SETTINGS, isMobile }) {
 
-  const today = new Date().toISOString().slice(0, 10);
+  const todayStr = today();
 
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -118,7 +118,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
 
   const emptyForm = {
     invoiceNumber: "",
-    date: today,
+    date: todayStr,
     clientId: "",
     tripIds: [],
     status: "draft",
@@ -280,7 +280,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     const amount = ids.reduce((sum, id) => sum + tripNetAmt(trips.find(t => t.id === id)), 0);
     const status = ids.length === 0 ? "pending" : allCollected ? "collected" : "partial";
     return { ...cobro, collectedTripIds: ids, amount, status,
-      collectedDate: allCollected ? (cobro.collectedDate || today) : null,
+      collectedDate: allCollected ? (cobro.collectedDate || todayStr) : null,
       pf: ids.length ? allocateCobro({ amount, tripIds: ids, trips, trucks, partners, clients, brokers, settings: pfSettings }) : null };
   };
 
@@ -336,14 +336,14 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   const stats = useMemo(() => {
     const active = invoices.filter(inv => inv.status !== "cancelled");
     const pending = active.filter(inv => inv.status !== "paid");
-    const overdue = pending.filter(inv => inv.dueDate && inv.dueDate < today);
+    const overdue = pending.filter(inv => inv.dueDate && inv.dueDate < todayStr);
     return {
       totalInvoiced: active.reduce((s, inv) => s + invAmt(inv), 0),
       totalPending:  pending.reduce((s, inv) => s + invAmt(inv), 0),
       totalOverdue:  overdue.reduce((s, inv) => s + invAmt(inv), 0),
       count: active.length,
     };
-  }, [invoices, tripRevMap, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [invoices, tripRevMap, todayStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Filtered list ────────────────────────────────────────────────────────
   let filtered = [...invoices].sort((a, b) => (b.date||"").localeCompare(a.date||""));
@@ -396,8 +396,8 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
               const cl = clients.find(c => c.id === inv.clientId);
               const amount = invAmt(inv);
               const cfg = STATUS_CONFIG[inv.status] || STATUS_CONFIG.draft;
-              const isOverdue = inv.status !== "paid" && inv.status !== "cancelled" && inv.dueDate && inv.dueDate < today;
-              const daysLeft = inv.dueDate ? Math.ceil((new Date(inv.dueDate) - new Date(today)) / 86400000) : null;
+              const isOverdue = inv.status !== "paid" && inv.status !== "cancelled" && inv.dueDate && inv.dueDate < todayStr;
+              const daysLeft = inv.dueDate ? Math.ceil((new Date(inv.dueDate) - new Date(todayStr)) / 86400000) : null;
               return (
                 <tr key={inv.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
                   <Td bold>
@@ -488,7 +488,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
               </Sel>
               <div>
                 <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Fecha Vencimiento</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: form.dueDate < today && form.status !== "paid" ? colors.red : colors.text, padding: "7px 0" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: form.dueDate < todayStr && form.status !== "paid" ? colors.red : colors.text, padding: "7px 0" }}>
                   {form.dueDate || (selectedClient ? calcDueDate(form.date, selectedClient) : "—")}
                   {selectedClient?.rules?.paymentTerms ? <span style={{ fontSize: 10, color: colors.textMuted, fontWeight: 400 }}> ({selectedClient.rules.paymentTerms} días)</span> : null}
                 </div>

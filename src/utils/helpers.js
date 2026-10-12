@@ -18,7 +18,8 @@ export function expenseTruckId(expense, tripMap) {
   return null;
 }
 
-export const today = () => new Date().toISOString().slice(0, 10);
+/** Fecha de HOY en hora local (no UTC): en RD después de las 8 pm, toISOString() ya da el día siguiente. */
+export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
 export const monthStr = () => {
   const d = new Date();

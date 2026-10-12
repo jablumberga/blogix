@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import { Plus, Pencil, Trash2, X, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { nxId, fmt, expenseTruckId } from "../utils/helpers.js";
+import { nxId, fmt, expenseTruckId, today } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 
 export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTrips, clients, setExpenses, drivers, expenses, isMobile }) {
@@ -14,7 +14,7 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
   const [selectedTruckId, setSelectedTruckId] = useState(null);
   const profitRef = useRef(null);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = today();
   const firstOfMonth = useMemo(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`;
@@ -67,7 +67,7 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
   const setPreset = (key) => {
     const d = new Date();
     const y = d.getFullYear(), m = d.getMonth(), ms = String(m+1).padStart(2,"0");
-    const today = d.toISOString().slice(0,10);
+    const today = `${y}-${ms}-${String(d.getDate()).padStart(2,"0")}`;
     if (key === "month")  { setProfitFrom(`${y}-${ms}-01`); setProfitTo(today); }
     else if (key === "prev") {
       const pm = m === 0 ? 12 : m, py = m === 0 ? y-1 : y;
@@ -77,7 +77,7 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
     }
     else if (key === "30d") {
       const from = new Date(d); from.setDate(from.getDate()-30);
-      setProfitFrom(from.toISOString().slice(0,10)); setProfitTo(today);
+      setProfitFrom(`${from.getFullYear()}-${String(from.getMonth()+1).padStart(2,"0")}-${String(from.getDate()).padStart(2,"0")}`); setProfitTo(today);
     }
     else if (key === "year") { setProfitFrom(`${y}-01-01`); setProfitTo(today); }
   };
@@ -225,7 +225,12 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
             )}
             <div style={{ display: "flex", flexShrink: 0 }} onClick={e => e.stopPropagation()}>
               <button onClick={() => openEdit(tk)} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Pencil size={12}/></button>
-              <button onClick={() => setTrucks(trucks.filter(x => x.id !== tk.id))} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.red, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={12}/></button>
+              <button onClick={() => {
+                const nT = (trips || []).filter(tr => tr.truckId === tk.id).length, nE = (expenses || []).filter(e => e.truckId === tk.id).length;
+                if (nT > 0 || nE > 0) { window.alert(`${tk.plate} tiene ${nT} viaje(s) y ${nE} gasto(s) asociados. No se puede eliminar: márcalo como inactivo para conservar nómina, liquidaciones y facturas.`); return; }
+                if (!window.confirm(`¿Eliminar el camión ${tk.plate}?`)) return;
+                setTrucks(trucks.filter(x => x.id !== tk.id));
+              }} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.red, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={12}/></button>
             </div>
             {isSelected && <ChevronRight size={14} color={colors.accent} style={{ flexShrink: 0 }}/>}
           </div>;

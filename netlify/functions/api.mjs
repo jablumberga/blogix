@@ -554,13 +554,32 @@ export default async (request) => {
         .filter(e => { const n = Number(e.id); return Number.isInteger(n) && n > 0; })
         .filter(e => Number(e.amount) >= 0 && Number.isFinite(Number(e.amount)));
 
+      const remap = { trips: {}, expenses: {} };
       if (useRelational) {
         // El chofer solo crea o edita viajes suyos válidos; nunca borra ni toca lo facturado/cobrado/recibido
         {
-          const [exTrips, exClients, exTrucks, exInvoices, exCobros] = await Promise.all([
+          const [exTrips, exClients, exTrucks, exInvoices, exCobros, exExps] = await Promise.all([
             readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trips"), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_clients").catch(() => []),
             readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_trucks").catch(() => []), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_invoices").catch(() => []),
-            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_cobros").catch(() => [])]);
+            readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_cobros").catch(() => []), readTable(SUPABASE_URL, SUPABASE_SERVICE_KEY, "bl_expenses").catch(() => [])]);
+          // ── Ids: el chofer solo ve sus propios registros, así que su app puede numerar un viaje o gasto
+          //    nuevo con un id que ya usa OTRO chofer. Aquí se detecta y se asigna un id libre; la app
+          //    recibe el mapa (remap) y adopta los ids nuevos. Nunca se sobrescribe lo de otro.
+          const tripById = new Map(exTrips.map(t => [t.id, t]));
+          let nextTrip = Math.max(0, ...exTrips.map(t => Number(t.id) || 0), ...driverTrips.map(t => Number(t.id) || 0)) + 1;
+          for (const tr of driverTrips) {
+            const ex = tripById.get(tr.id);
+            if (ex && ex.driverId !== driverId) { remap.trips[tr.id] = nextTrip; tr.id = nextTrip++; }
+          }
+          for (const e of driverExps) if (remap.trips[e.tripId]) e.tripId = remap.trips[e.tripId];
+          const expById = new Map(exExps.map(e => [e.id, e]));
+          const myTripIdsNow = new Set(driverTrips.map(t => t.id));
+          let nextExp = Math.max(0, ...exExps.map(e => Number(e.id) || 0), ...driverExps.map(e => Number(e.id) || 0)) + 1;
+          for (const e of driverExps) {
+            const ex = expById.get(e.id);
+            const isMine = ex && ((ex.tripId && myTripIdsNow.has(ex.tripId)) || (!ex.tripId && ex.driverId === driverId));
+            if (ex && !isMine) { remap.expenses[e.id] = nextExp; e.id = nextExp++; }
+          }
           const mine = exTrips.filter(t => t.driverId === driverId);
           const san = sanitizeDriverTrips({ incoming: driverTrips, existing: mine, driverId, clients: exClients, trucks: exTrucks, invoices: exInvoices, cobros: exCobros });
           if (san.errors.length) return Response.json({ error: san.errors[0].error, code: "invalid_trip", tripId: san.errors[0].tripId }, { status: 422, headers: corsHeaders });
@@ -661,7 +680,8 @@ export default async (request) => {
           await syncSettlementStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY, { ...cur, _version: newVersion });
         } catch { newVersion = 0; }
       }
-      return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "driver-write", ...(newVersion ? { _version: newVersion } : {}) }, { headers: corsHeaders });
+      const remapped = Object.keys(remap.trips).length + Object.keys(remap.expenses).length;
+      return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "driver-write", ...(newVersion ? { _version: newVersion } : {}), ...(remapped ? { remap } : {}) }, { headers: corsHeaders });
     }
 
     // ── Asistente de oficina: solo documentos de viajes existentes ───────
