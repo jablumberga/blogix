@@ -17,7 +17,7 @@ function Row({ label, value, color, bold }) {
   </div>;
 }
 
-export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, partner, partnerTruckIds, clients, brokers, settlementStatus, setSettlementStatus, isMobile }) {
+export default function PartnerDashboard({ pfSettings, t, trips, trucks, expenses, drivers, partner, partnerTruckIds, clients, brokers, settlementStatus, setSettlementStatus, isMobile }) {
   const now = new Date();
   const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
   const todayStr = today();
@@ -93,7 +93,7 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
   // Quincena: misma cadena que Liquidaciones (el saldo que el socio quedó debiendo pasa a la siguiente)
   const settle = (() => {
     if (viewMode === "quincena" && truckFilter === "all") {
-      const pds = genSettlementPeriods([...trips.map(tr => tr.date), dateFrom]);
+      const pds = genSettlementPeriods([...trips.map(tr => tr.date), dateFrom]).filter(x => !pfSettings?.startDate || x.dateTo >= pfSettings.startDate);
       const chain = computeSettlementChain({ partner: p, periods: pds, trips, expenses, trucks: myTruckList, clients, brokers, drivers });
       const hit = chain.get(`${period.mStr}-${period.half}`);
       if (hit) return { ...hit, period: { ...hit.period, label: periodLabel } };

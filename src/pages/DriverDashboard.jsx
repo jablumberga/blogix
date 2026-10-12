@@ -27,7 +27,7 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
   }, [form.invoiceRef, form.clientId, form.truckId, showForm]);
   const refBlocked = !!refInfo?.found && (!refInfo.canJoin || (!form.joint && !refInfo.found.joint));
 
-  const emptyForm = { date: today(), province: "", municipality: "", truckId: driverObj?.truckId || trucks.find(tk => tk.mine)?.id || trucks[0]?.id || "", driverId: driverObj?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: 0, helperPayEach: "", discounts: [], joint: false, jointWith: null, jointDriverId: "", jointTruckId: "" };
+  const emptyForm = { date: today(), province: "", municipality: "", truckId: driverObj?.truckId || trucks.find(tk => tk.mine)?.id || trucks[0]?.id || "", driverId: driverObj?.id || "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: null, helperPayEach: "", discounts: [], joint: false, jointWith: null, jointDriverId: "", jointTruckId: "" };
 
   const openNew = () => { setForm({ ...emptyForm, createdBy: user?.name || driverObj?.name || "" }); setShowForm(true); setRateMsg(""); setFormError(""); };
 
@@ -85,9 +85,13 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
       if (pre.payType === "perTrip" && !pre.rateFound && !window.confirm("No tienes tarifa de pago para este destino: el viaje se guardará SIN tu pago y la oficina tendrá que ajustarlo. ¿Registrar de todos modos?")) return;
     }
     setFormError("");
-    const helpersPay = Number(form.helperPayEach) || 0;
-    const helpersArr = Array.from({ length: Number(form.numHelpers) || 0 }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
-    const data = { ...form, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr,
+    // Ayudantes: vacío = por defecto (1 en T1, 2 en T2) y pago según el tarifario del chofer — misma regla que Viajes
+    const tkH = trucks.find(t2 => t2.id === Number(form.truckId));
+    const preH = driverObj ? calcDriverPay({ driver: driverObj, trip: { ...form, revenue: Number(form.revenue) || 0, numHelpers: form.numHelpers === null || form.numHelpers === "" ? null : Number(form.numHelpers), helperPayEach: form.helperPayEach === "" ? null : Number(form.helperPayEach) }, truck: tkH, clientId: Number(form.clientId) }) : null;
+    const numHelpers = form.numHelpers === null || form.numHelpers === "" ? (preH?.numHelpers ?? 0) : Number(form.numHelpers);
+    const helpersPay = form.helperPayEach === "" ? (preH?.helperEach ?? 0) : Number(form.helperPayEach) || 0;
+    const helpersArr = Array.from({ length: numHelpers }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
+    const data = { ...form, numHelpers, helperPayEach: helpersPay, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr,
       jointDriverId: form.joint && form.jointDriverId ? Number(form.jointDriverId) : null, jointTruckId: form.joint && form.jointTruckId ? Number(form.jointTruckId) : null,
       createdAt: new Date().toISOString(), history: [{ at: new Date().toISOString(), by: driverObj?.name || "", action: "creado (panel chofer)" }] };
     const newId = nxId(trips);
@@ -242,7 +246,8 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
             {refInfo?.offline && <span style={{ color: colors.orange }}>Sin conexión: se verificará al guardar.</span>}
           </div>; })()}
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22`, display: "grid", gridTemplateColumns: Number(form.numHelpers) > 0 ? "1fr 1fr" : "1fr", gap: 10 }}>
-          <Sel label={t.numHelpers} value={form.numHelpers ?? 0} onChange={e => setForm({ ...form, numHelpers: Number(e.target.value) })}>
+          <Sel label={t.numHelpers} value={form.numHelpers === null || form.numHelpers === undefined ? "" : form.numHelpers} onChange={e => setForm({ ...form, numHelpers: e.target.value === "" ? null : Number(e.target.value) })}>
+            <option value="">Por defecto (1 en camión chico, 2 en grande)</option>
             {[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n === 0 ? "0 — " + t.none : `${n} ayudante${n > 1 ? "s" : ""}`}</option>)}
           </Sel>
           {Number(form.numHelpers) > 0 && <Inp label="Pago por ayudante" type="number" value={form.helperPayEach} onChange={e => setForm({ ...form, helperPayEach: e.target.value })} placeholder="0.00" />}

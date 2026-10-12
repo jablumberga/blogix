@@ -418,6 +418,8 @@ function stripPasswords(data) {
 
 // Campos que la asistente de oficina puede cambiar en un viaje
 const ASSISTANT_TRIP_FIELDS = ["docs", "docStatus", "podDelivered", "docsReceivedAt", "docsReceivedBy", "invoiceRef"];
+// La asistente solo puede pasar un viaje a «entregado» (al recibir documentos); nunca cancelarlo ni revertirlo
+const assistantStatusOk = (cur, next) => next === "delivered" && (cur === "pending" || cur === "in_transit" || cur == null);
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 export default async (request) => {
@@ -704,6 +706,7 @@ export default async (request) => {
         if (!current) continue; // la asistente no crea viajes
         const patch = {};
         for (const k of ASSISTANT_TRIP_FIELDS) if (k in tr && JSON.stringify(tr[k]) !== JSON.stringify(current[k])) patch[k] = tr[k];
+        if (tr.status !== current.status && assistantStatusOk(current.status, tr.status)) patch.status = tr.status;
         if (Object.keys(patch).length === 0) continue;
         const upRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_trips?id=eq.${Number(tr.id)}`, {
           method: "PATCH", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "return=minimal" },

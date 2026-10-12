@@ -173,7 +173,8 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
  */
 export default function SettlementsPage({ t, trips = [], trucks = [], expenses = [], setExpenses, clients = [], partners = [], brokers = [], drivers = [], settlementStatus = {}, setSettlementStatus, cobros = [], user, partner, pfSettings = DEFAULT_PF_SETTINGS, isMobile }) {
   const isPartnerView = user?.role === "partner";
-  const periods = useMemo(() => genSettlementPeriods(trips.map(tr => tr.date)), [trips]);
+  // Quincenas desde la fecha de arranque (Profit First): antes de esa fecha no hay liquidaciones ni cargos fijos
+  const periods = useMemo(() => genSettlementPeriods(trips.map(tr => tr.date)).filter(pd => !pfSettings?.startDate || pd.dateTo >= pfSettings.startDate), [trips, pfSettings?.startDate]);
   const list = isPartnerView ? [partner].filter(Boolean) : partners;
 
   // Una cadena por socio: el saldo negativo de una quincena se arrastra a la siguiente
@@ -207,6 +208,7 @@ export default function SettlementsPage({ t, trips = [], trucks = [], expenses =
     if (!setExpenses) return;
     if (paid) { setExpenses(prev => prev.filter(e => !(e.category === "partner_settlement" && e.settlementKey === key))); return; }
     const rel = settlementRelease(s, pfSettings);
+    if (rel.transfer === 0 && rel.released === 0) return; // nada que mover (p. ej. solo cargo fijo que pasa a la siguiente quincena)
     setExpenses(prev => [...prev.filter(e => !(e.category === "partner_settlement" && e.settlementKey === key)), {
       id: nxId(prev), category: "partner_settlement", partnerId: p.id, settlementKey: key, tripId: null, supplierId: null,
       date: today(), paidDate: today(), status: "paid", paymentMethod: "transfer",

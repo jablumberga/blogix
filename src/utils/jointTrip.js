@@ -62,7 +62,9 @@ export function applyReceived(trips, tripId, value, { docKeys, today, by }) {
   return trips.map(tr => {
     if (!ids.has(tr.id)) return tr;
     const docs = Object.fromEntries(docKeys.map(k => [k, value]));
-    return { ...tr, docs, docStatus: value ? "delivered" : "pending", podDelivered: value,
+    // Documentos recibidos = el viaje se entregó (cuenta para nómina, factura y liquidación del socio)
+    const status = value && (tr.status === "pending" || tr.status === "in_transit") ? "delivered" : tr.status;
+    return { ...tr, status, docs, docStatus: value ? "delivered" : "pending", podDelivered: value,
       docsReceivedAt: value ? (tr.docsReceivedAt || today) : null, docsReceivedBy: value ? (tr.docsReceivedBy || by || "") : "" };
   });
 }
