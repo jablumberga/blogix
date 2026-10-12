@@ -1,10 +1,12 @@
 import { useState, useEffect, Fragment } from "react";
-import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown } from "lucide-react";
+import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown, Camera } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
 import { calcDriverPay, DEFAULT_HELPERS, tripSize } from "../utils/driverPay.js";
 import { crewSlots, buildHelperLines, helperExpensePlan, planToNewExpenses, clientHelpersMode, clientSkipsHelpers, isDirectLine } from "../utils/ayudantes.js";
 import HelperSlots from "../components/HelperSlots.jsx";
+import ReceiptCapture from "../components/ReceiptCapture.jsx";
+import MyReceipts from "../components/MyReceipts.jsx";
 import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
 import { checkRef } from "../api.js";
 import { Card, StatCard, PageHeader, Inp, Sel, Btn, Th, Td, DestinationSelect } from "../components/ui/index.jsx";
@@ -16,6 +18,8 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
   const [formError, setFormError] = useState("");
   // Referencia de factura: el chofer no ve los viajes de otros, así que se consulta al servidor mientras escribe
   const [refInfo, setRefInfo] = useState(null);   // { found, canJoin, alreadyOk, error, hint, checking }
+  const [showReceipt, setShowReceipt] = useState(false); // foto de gasto
+  useEffect(() => { const open = () => setShowReceipt(true); window.addEventListener("blogix:open-receipt", open); return () => window.removeEventListener("blogix:open-receipt", open); }, []);
   useEffect(() => {
     const ref = String(form.invoiceRef || "").trim(), clientId = Number(form.clientId), truckId = Number(form.truckId);
     if (!showForm || !ref || !clientId) { setRefInfo(null); return; }
@@ -182,7 +186,8 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
   const totalNeto = Math.max(0, totalBruto - totalHelpers - totalDescuentos - totalAdelantos);
 
   return <div>
-    <PageHeader title={`${t.dashboard} — ${driverObj?.name || ""}`} action={<Btn onClick={openNew}><Plus size={14} /> {t.newTrip}</Btn>} />
+    <PageHeader title={`${t.dashboard} — ${driverObj?.name || ""}`} action={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Btn variant="warning" onClick={() => setShowReceipt(true)} data-open-receipt><Camera size={14} /> Foto de gasto</Btn><Btn onClick={openNew}><Plus size={14} /> {t.newTrip}</Btn></div>} />
+    {showReceipt && <ReceiptCapture trucks={trucks} trips={trips.filter(tr => tr.driverId === driverObj?.id)} defaultTruckId={driverObj?.truckId || (trucks.find(tk => tk.mine)?.id ?? null)} onClose={() => setShowReceipt(false)} />}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, margin: "16px 0" }}>
       <StatCard icon={Route} label={t.totalTrips} value={allMyTrips.length} color={colors.accent} />
       <StatCard icon={CheckCircle2} label={t.delivered} value={completed} color={colors.green} />
@@ -200,6 +205,8 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
         <div><div style={{ fontSize: 11, color: colors.textMuted }}>{t.netPay}</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.cyan }}>{fmt(totalNeto)}</div></div>
       </div>
     </Card>
+
+    <MyReceipts onNew={() => setShowReceipt(true)} />
 
     {showForm && <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowForm(false)}>
       <div onClick={e => e.stopPropagation()} style={{ background: colors.card, borderRadius: 14, padding: 24, width: "min(560px, calc(100vw - 24px))", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${colors.border}`, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>

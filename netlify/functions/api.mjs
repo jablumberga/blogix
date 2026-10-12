@@ -34,7 +34,7 @@ const ALLOWED_ORIGINS = new Set([
   "capacitor://localhost",
 ]);
 
-function corsFor(request) {
+export function corsFor(request) {
   const origin = request?.headers?.get?.("origin") || "";
   const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://blogix.do";
   return {

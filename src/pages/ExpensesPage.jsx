@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Plus, X, Pencil, Trash2, Landmark, ChevronDown, ChevronRight, Receipt, Clock, CheckCircle2, Truck, HandCoins } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Plus, X, Pencil, Trash2, Landmark, ChevronDown, ChevronRight, Receipt, Clock, CheckCircle2, Truck, HandCoins, Camera, AlertTriangle } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, expenseTruckId, getSupplierDueDate, today } from "../utils/helpers.js";
 import { normalizePartner, expenseChargedToPartner, PARTNER_MODELS } from "../utils/partnerModels.js";
@@ -7,6 +7,13 @@ import { fuelNeedsTruck } from "../utils/costPerKm.js";
 import { activeAyudantes } from "../utils/ayudantes.js";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td, Chk } from "../components/ui/index.jsx";
+import { receiptToExpenseForm, receiptDuplicates } from "../utils/receipts.js";
+import { listReceipts, rejectReceipt, approveReceipt, notifyReceiptsChanged } from "../utils/receiptsApi.js";
+import ReceiptPhoto from "../components/ReceiptPhoto.jsx";
+import ReceiptCapture from "../components/ReceiptCapture.jsx";
+
+const RC_CAT = { fuel: "Combustible", toll: "Peaje", tire: "Gomas", repair: "Reparación", maintenance: "Mantenimiento", other: "Otro" };
+const RC_FIELD = { category: "tipo", amount: "monto", date: "fecha", vendor: "negocio", gallons: "galones", ncf: "NCF" };
 
 // Métodos que se pagan en el momento: el gasto nace como pagado
 const INSTANT_METHODS = ["cash", "credit_card"];
@@ -27,6 +34,28 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   const [showTemplates, setShowTemplates] = useState(false);
   const [form, setForm] = useState({ date: today(), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "", truckId: null, supplierId: null, status: "pending", driverId: null });
   const [tplForm, setTplForm] = useState({ name: "", category: "loan", amount: "", paymentMethod: "transfer", truckId: null });
+
+  // ── Recibos por foto que mandan los choferes (por revisar) ──
+  const [receipts, setReceipts] = useState([]);
+  const [rcError, setRcError] = useState("");
+  const [rejecting, setRejecting] = useState(null); // { id, reason }
+  const [photoId, setPhotoId] = useState(null);     // foto de un gasto aprobado
+  const [showCapture, setShowCapture] = useState(false);
+  const loadReceipts = useCallback(() => { listReceipts().then(r => { setReceipts(r.receipts || []); setRcError(""); }).catch(e => setRcError(e.message)); }, []);
+  useEffect(() => { loadReceipts(); window.addEventListener("blogix:receipts-changed", loadReceipts); return () => window.removeEventListener("blogix:receipts-changed", loadReceipts); }, [loadReceipts]);
+  const approvedReceiptIds = useMemo(() => new Set((expenses || []).filter(e => e.receiptId).map(e => Number(e.receiptId))), [expenses]);
+  const pendingReceipts = receipts.filter(r => r.status === "pending" && !approvedReceiptIds.has(r.id));
+  const reviewing = form.receiptId ? receipts.find(r => r.id === form.receiptId) || null : null;
+  const driverNameOf = (r) => (drivers || []).find(d => d.id === r.driverId)?.name || r.createdByName || "Oficina";
+  const openReview = (r) => {
+    setForm({ date: today(), category: "fuel", amount: "", paymentMethod: "cash", description: "", tripId: "", truckId: null, supplierId: null, status: "pending", driverId: null, ...receiptToExpenseForm(r, { suppliers, driverName: driverNameOf(r) }) });
+    setEditId(null); setShowForm(true);
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* */ }
+  };
+  const doReject = async () => {
+    if (!rejecting?.reason?.trim()) { window.alert("Escribe el motivo para que el chofer sepa qué corregir."); return; }
+    try { await rejectReceipt(rejecting.id, rejecting.reason.trim()); setRejecting(null); notifyReceiptsChanged(); } catch (e) { window.alert(e.message); }
+  };
 
   const tripMap = useMemo(() => new Map((trips||[]).map(tr => [tr.id, tr])), [trips]);
   const truckMap = useMemo(() => new Map((trucks||[]).map(tk => [tk.id, tk])), [trucks]);
@@ -84,6 +113,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
     if (form.category === "adelanto_conductor" && !form.driverId) { alert("Selecciona el conductor para el adelanto."); return; }
     if (form.category === "adelanto_ayudante" && !form.ayudanteId) { alert("Selecciona el ayudante para el adelanto."); return; }
     if (fuelNeedsTruck(form)) { alert("Selecciona el camión (o el viaje) de este combustible. Sin camión no cuenta en el costo por km."); return; }
+    if (form.receiptId && editId === null && expenses.some(e => Number(e.receiptId) === Number(form.receiptId))) { alert("Este recibo ya se aprobó (ya tiene su gasto)."); setShowForm(false); return; }
     const instant = INSTANT_METHODS.includes(form.paymentMethod);
     const status = form.category === "adelanto_conductor" || form.category === "adelanto_ayudante" || instant ? "paid" : form.status;
     const supplierId = form.supplierId ? Number(form.supplierId) : null;
@@ -97,6 +127,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
       setExpenses(prev => prev.map(e => e.id === editId ? { ...e, ...data } : e));
     } else {
       setExpenses(prev => [...prev, { id: nxId(prev), ...data }]);
+      if (data.receiptId) approveReceipt(data.receiptId, nxId(expenses)).catch(() => {}).finally(notifyReceiptsChanged);
     }
     setShowForm(false); setEditId(null);
   };
@@ -129,7 +160,49 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   };
 
   return <div>
-    <PageHeader title={t.expenses} action={<Btn onClick={openNew}><Plus size={14} /> {t.addExpense}</Btn>} />
+    <PageHeader title={t.expenses} action={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Btn variant="ghost" onClick={() => setShowCapture(true)}><Camera size={14} /> Subir foto</Btn><Btn onClick={openNew}><Plus size={14} /> {t.addExpense}</Btn></div>} />
+    {showCapture && <ReceiptCapture trucks={(trucks || []).filter(tk => tk.status !== "inactive")} trips={trips || []} onClose={() => setShowCapture(false)} onSubmitted={() => loadReceipts()} />}
+    {photoId && <div onClick={() => setPhotoId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}><div onClick={e => e.stopPropagation()}><ReceiptPhoto id={photoId} height={Math.min(600, Math.round(window.innerHeight * 0.8))} /></div></div>}
+
+    {/* Recibos por foto por revisar */}
+    {(pendingReceipts.length > 0 || rcError) && <Card style={{ marginBottom: 16, border: `1px solid ${colors.orange}55` }}>
+      <h3 style={{ margin: "0 0 10px", fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}><Camera size={15} color={colors.orange} /> Recibos por revisar <span style={{ fontSize: 11, color: colors.textMuted, fontWeight: 400 }}>({pendingReceipts.length}) · al aprobar se crea el gasto con su foto</span></h3>
+      {rcError && <div style={{ fontSize: 12, color: colors.red, marginBottom: 6 }}>No se pudieron cargar los recibos: {rcError}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-review-list>
+        {pendingReceipts.map(r => {
+          const f = r.fields || {};
+          const dups = receiptDuplicates(r, { receipts, expenses });
+          const tk = (trucks || []).find(x => x.id === f.truckId);
+          const flags = [
+            ...dups.map(d => ["⚠ " + d, colors.red]),
+            ...(r.changes || []).map(c => [`El chofer cambió ${RC_FIELD[c.field] || c.field}: ${c.read} → ${c.sent ?? "—"}`, colors.orange]),
+            ...(r.ai?.failed ? [["Sin lectura automática (falló): compara con la foto", colors.orange]] : !r.read ? [["Sin lectura automática: compara con la foto", colors.textMuted]] : []),
+            ...(r.photoMetrics?.sharpness && r.photoMetrics.sharpness < 90 ? [["Foto algo borrosa", colors.textMuted]] : []),
+          ];
+          return <div key={r.id} data-review-row={r.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: 10, borderRadius: 8, background: colors.inputBg, border: `1px solid ${colors.border}`, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+            <ReceiptPhoto id={r.id} height={84} />
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ fontWeight: 700 }}>{fmt(f.amount)}</span>
+                <Badge label={RC_CAT[f.category] || f.category} color={colors.accent} />
+                <span style={{ fontSize: 11, color: colors.textMuted }}>{f.date} · {driverNameOf(r)}{tk ? ` · ${tk.plate}` : ""}{f.tripId ? ` · viaje #${f.tripId}` : ""}</span>
+              </div>
+              <div style={{ fontSize: 12, marginTop: 2 }}>{f.vendor}{f.gallons ? ` · ${f.gallons} gal` : ""}{f.ncf ? ` · NCF ${f.ncf}` : ""}{f.note ? ` — ${f.note}` : ""}</div>
+              {flags.map(([txt, c]) => <div key={txt} style={{ fontSize: 11, color: c, marginTop: 2 }}>{txt}</div>)}
+              {rejecting?.id === r.id && <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                <input autoFocus value={rejecting.reason} onChange={e => setRejecting({ ...rejecting, reason: e.target.value })} placeholder="Motivo (lo verá el chofer)" data-reject-reason style={{ flex: 1, minWidth: 160, padding: "8px 10px", borderRadius: 6, border: `1px solid ${colors.border}`, background: colors.card, color: colors.text, fontSize: 14 }} />
+                <Btn variant="danger" onClick={doReject} data-reject-confirm>Rechazar</Btn>
+                <Btn variant="ghost" onClick={() => setRejecting(null)}>Cancelar</Btn>
+              </div>}
+            </div>
+            {rejecting?.id !== r.id && <div style={{ display: "flex", gap: 6, flexDirection: isMobile ? "row" : "column" }}>
+              <Btn variant="success" onClick={() => openReview(r)} data-review-approve>Revisar y aprobar</Btn>
+              <Btn variant="ghost" onClick={() => setRejecting({ id: r.id, reason: "" })} data-review-reject>Rechazar</Btn>
+            </div>}
+          </div>;
+        })}
+      </div>
+    </Card>}
 
     {/* New expense form */}
     {showForm && <Card style={{ marginBottom: 16 }}>
@@ -137,6 +210,17 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{editId !== null ? "Editar Gasto" : t.addExpense}</h3>
         <button onClick={() => { setShowForm(false); setEditId(null); }} style={{ background: "none", border: "none", color: colors.textMuted, cursor: "pointer" }}><X size={16} /></button>
       </div>
+      {form.receiptId && <div style={{ display: "flex", gap: 12, marginBottom: 12, padding: 10, borderRadius: 8, background: colors.orange + "0d", border: `1px solid ${colors.orange}40`, flexWrap: "wrap" }} data-review-panel>
+        <ReceiptPhoto id={form.receiptId} height={220} />
+        <div style={{ flex: 1, minWidth: 200, fontSize: 12 }}>
+          <div style={{ fontWeight: 700, color: colors.orange, marginBottom: 4 }}>Recibo de {reviewing ? driverNameOf(reviewing) : "chofer"} — revisa contra la foto y guarda para aprobar</div>
+          {form.vendorName && <div>Negocio: <b>{form.vendorName}</b>{form.rnc ? ` · RNC ${form.rnc}` : ""}</div>}
+          {form.ncf && <div>NCF: <b>{form.ncf}</b>{form.itbis ? ` · ITBIS ${fmt(form.itbis)}` : ""}</div>}
+          {(reviewing?.changes || []).map(c => <div key={c.field} style={{ color: colors.orange }}>El chofer cambió {RC_FIELD[c.field] || c.field}: {String(c.read)} → {String(c.sent ?? "—")}</div>)}
+          {reviewing && receiptDuplicates(reviewing, { receipts, expenses }).map(d => <div key={d} style={{ color: colors.red, display: "flex", gap: 4, alignItems: "center" }}><AlertTriangle size={12} /> {d}</div>)}
+          <div style={{ color: colors.textMuted, marginTop: 4 }}>Pagado con dinero de la empresa (efectivo). Si fue a crédito en la bomba, cambia el método y el suplidor.</div>
+        </div>
+      </div>}
       {form.category === "adelanto_ayudante" && (
         <div style={{ marginBottom: 12, padding: "8px 12px", background: colors.orange + "12", border: `1px solid ${colors.orange}40`, borderRadius: 8, fontSize: 12, color: colors.orange, fontWeight: 600 }}>
           💵 Adelanto al Ayudante — se registra como pagado y se descuenta de su pago en la nómina de ayudantes del corte correspondiente.
@@ -347,7 +431,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
             return <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11`, opacity: isPaid ? 0.7 : 1 }}>
               <Td>{e.date||"—"}</Td>
               <Td><Badge label={t[e.category]||e.category} color={colors.textMuted}/></Td>
-              <Td>{e.description}</Td>
+              <Td>{e.receiptId ? <button onClick={() => setPhotoId(e.receiptId)} title="Ver foto del recibo" data-expense-photo={e.id} style={{ background: "none", border: "none", color: colors.orange, cursor: "pointer", padding: "0 4px 0 0", verticalAlign: "middle" }}><Camera size={13} /></button> : null}{e.description}</Td>
               <Td style={{ display: isMobile ? "none" : undefined }}><Badge label={t[e.paymentMethod]||e.paymentMethod} color={e.paymentMethod==="credit" ? colors.red : colors.green}/></Td>
               <Td>{e.tripId ? `#${e.tripId}` : "—"}</Td>
               <Td style={{ display: isMobile ? "none" : undefined }}>

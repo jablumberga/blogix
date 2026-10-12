@@ -9,11 +9,13 @@
  *   2. Imita la API REST de Supabase (PostgREST) bajo /rest/v1/* guardando
  *      los datos en local-db/db.json. Así las funciones corren sin tocar
  *      Supabase: en .env se pone SUPABASE_URL=http://localhost:8888.
+ *   3. Imita Supabase Storage bajo /storage/v1/object/* (fotos de recibos)
+ *      guardando los archivos en local-db/storage/.
  *
  * Vite (puerto 5173) ya tiene proxy de /api → 8888 en vite.config.js.
  */
 import http from "node:http";
-import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, unlinkSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -48,7 +50,7 @@ if (!existsSync(DB)) {
 let db = JSON.parse(readFileSync(DB, "utf8"));
 const TABLE_DEFAULTS = ["bl_trips","bl_expenses","bl_trucks","bl_drivers","bl_clients","bl_partners",
   "bl_brokers","bl_suppliers","bl_invoices","bl_cobros","bl_fixed_templates","bl_settlement_status",
-  "push_tokens","bl_rate_limits","appdata","bl_staff","bl_gps_km"];
+  "push_tokens","bl_rate_limits","appdata","bl_staff","bl_gps_km","bl_receipts"];
 for (const t of TABLE_DEFAULTS) db[t] ??= [];
 const save = () => writeFileSync(DB, JSON.stringify(db, null, 1));
 
@@ -153,6 +155,36 @@ async function restHandler(req, url) {
   return json({ message: "Method not allowed" }, 405);
 }
 
+// ── Mini Storage (fotos de recibos) ─────────────────────────────────────────
+// POST /storage/v1/object/<bucket>/<ruta> (subir) · GET igual (bajar) · DELETE /storage/v1/object/<bucket> {prefixes}
+const STORAGE_DIR = resolve(DB_DIR, "storage");
+const safePath = (bucket, key) => {
+  if (!/^[a-z0-9_-]+$/i.test(bucket) || !/^[A-Za-z0-9/_.-]+$/.test(key) || key.includes("..")) return null;
+  return resolve(STORAGE_DIR, bucket, key);
+};
+async function storageHandler(req, url) {
+  const [bucket, ...rest] = url.pathname.replace(/^\/storage\/v1\/object\//, "").split("/");
+  const key = rest.join("/");
+  if (req.method === "DELETE" && !key) {
+    const { prefixes = [] } = await req.json().catch(() => ({}));
+    for (const k of prefixes) { const f = safePath(bucket, k); if (f && existsSync(f)) unlinkSync(f); }
+    return Response.json(prefixes.map(name => ({ name })));
+  }
+  const file = safePath(bucket, key);
+  if (!file) return Response.json({ message: "ruta inválida" }, { status: 400 });
+  if (req.method === "POST" || req.method === "PUT") {
+    if (existsSync(file) && req.headers.get("x-upsert") !== "true") return Response.json({ message: "The resource already exists" }, { status: 409 });
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, Buffer.from(await req.arrayBuffer()));
+    return Response.json({ Key: `${bucket}/${key}` });
+  }
+  if (req.method === "GET") {
+    if (!existsSync(file)) return Response.json({ message: "Object not found" }, { status: 404 });
+    return new Response(readFileSync(file), { headers: { "Content-Type": "image/jpeg" } });
+  }
+  return Response.json({ message: "Method not allowed" }, { status: 405 });
+}
+
 // ── Netlify Functions ───────────────────────────────────────────────────────
 const FUNCTIONS = [
   ["api.mjs",        ["/api/data", "/api/data/export", "/api/data/check-ref"]],
@@ -160,6 +192,7 @@ const FUNCTIONS = [
   ["push-token.mjs", ["/api/push/token"]],
   ["send-push.mjs",  ["/api/push/send"]],
   ["gps.mjs",        ["/api/gps/sync"]],
+  ["receipts.mjs",   ["/api/receipts", "/api/receipts/scan", "/api/receipts/submit", "/api/receipts/photo", "/api/receipts/reject", "/api/receipts/approve", "/api/receipts/delete"]],
 ];
 const routes = new Map();
 for (const [file, paths] of FUNCTIONS) {
@@ -192,6 +225,8 @@ http.createServer(async (req, res) => {
     let response;
     if (url.pathname.startsWith("/rest/v1/")) {
       response = await restHandler(await toRequest(req, url), url);
+    } else if (url.pathname.startsWith("/storage/v1/object/")) {
+      response = await storageHandler(await toRequest(req, url), url);
     } else if (routes.has(url.pathname)) {
       response = await routes.get(url.pathname)(await toRequest(req, url), {});
     } else if (url.pathname === "/__db") {
@@ -200,7 +235,7 @@ http.createServer(async (req, res) => {
       response = Response.json({ error: `No existe ${url.pathname}` }, { status: 404 });
     }
     await send(res, response);
-    if (!url.pathname.startsWith("/rest/")) console.log(`${req.method} ${url.pathname} → ${response.status} (${Date.now() - t0} ms)`);
+    if (!url.pathname.startsWith("/rest/") && !url.pathname.startsWith("/storage/")) console.log(`${req.method} ${url.pathname} → ${response.status} (${Date.now() - t0} ms)`);
   } catch (e) {
     console.error(`[dev] ${req.method} ${url.pathname} falló:`, e);
     res.statusCode = 500; res.end(JSON.stringify({ error: String(e) }));

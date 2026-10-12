@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, Gauge, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark, HardHat } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, Gauge, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark, HardHat, Camera } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { getToken } from "./api.js";
+import { listReceipts } from "./utils/receiptsApi.js";
 import { colors } from "./constants/theme.js";
 import { Badge } from "./components/ui/index.jsx";
 import LoginPage from "./components/LoginPage.jsx";
@@ -122,6 +123,22 @@ export default function App() {
     return () => window.removeEventListener("resize", handle);
   }, []);
 
+  // Recibos por foto por revisar (contador en el menú y en Inicio del admin)
+  const [rcList, setRcList] = useState([]);
+  useEffect(() => {
+    if (user?.role !== "admin") { setRcList([]); return; }
+    let alive = true;
+    const load = () => listReceipts().then(r => { if (alive) setRcList(r.receipts || []); }).catch(() => {});
+    load();
+    const iv = setInterval(load, 120000);
+    window.addEventListener("blogix:receipts-changed", load);
+    return () => { alive = false; clearInterval(iv); window.removeEventListener("blogix:receipts-changed", load); };
+  }, [user?.role]);
+  const receiptsPending = useMemo(() => {
+    const done = new Set((expenses || []).filter(e => e.receiptId).map(e => Number(e.receiptId)));
+    return rcList.filter(r => r.status === "pending" && !done.has(r.id)).length;
+  }, [rcList, expenses]);
+
   if (window.location.pathname.startsWith("/privacy")) {
     return (
       <div style={{ fontFamily: "Arial, sans-serif", maxWidth: 800, margin: "40px auto", padding: "0 20px", color: "#333", lineHeight: 1.7 }}>
@@ -183,7 +200,7 @@ export default function App() {
     { id: "staff",       icon: UserCheck,        label: "Usuarios" },
     { id: "brokers",     icon: Briefcase,        label: t.brokers },
     { divider: true },
-    { id: "expenses",    icon: Receipt,          label: t.expenses },
+    { id: "expenses",    icon: Receipt,          label: t.expenses, badge: receiptsPending },
     { id: "cxp",         icon: CreditCard,       label: "Cuentas x Pagar" },
     { id: "nomina",      icon: Banknote,         label: "Nómina" },
     { id: "banco",       icon: Landmark,         label: "Banco" },
@@ -203,7 +220,7 @@ export default function App() {
   ];
   const navItems = isAdmin ? adminNav : isPartner ? partnerNav : isAssistant ? assistantNav : driverNav;
 
-  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, gpsKm, setGpsKm, distances, setDistances, ayudantes, setAyudantes, partner, partnerTruckIds, driverObj, alerts };
+  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, gpsKm, setGpsKm, distances, setDistances, ayudantes, setAyudantes, partner, partnerTruckIds, driverObj, alerts, receiptsPending };
 
   const pageTitles = {
     dashboard:   t.dashboard,
@@ -418,6 +435,10 @@ export default function App() {
           <button onClick={() => setPage("driverDash")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: colors.accent, cursor: "pointer", fontSize: 10, fontWeight: 600, padding: "6px 0", minWidth: 0 }}>
             <LayoutDashboard size={20} color={colors.accent} />
             <span style={{ lineHeight: 1 }}>{t.dashboard}</span>
+          </button>
+          <button onClick={() => { setPage("driverDash"); setTimeout(() => window.dispatchEvent(new CustomEvent("blogix:open-receipt")), 0); }} data-nav-receipt style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: colors.orange, cursor: "pointer", fontSize: 10, fontWeight: 600, padding: "6px 0", minWidth: 0 }}>
+            <Camera size={20} color={colors.orange} />
+            <span style={{ lineHeight: 1 }}>Foto gasto</span>
           </button>
           <button onClick={() => { logout(); setShowLanding(true); }} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 10, padding: "6px 0", minWidth: 0 }}>
             <LogOut size={20} color={colors.textMuted} />
