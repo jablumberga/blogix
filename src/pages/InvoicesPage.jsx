@@ -287,9 +287,10 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     const inv = invoices.find(x => x.id === id);
     if (!inv) return;
     const b = balanceOf(inv);
+    const ids = new Set(inv.tripIds || []);
     if (!window.confirm("¿Eliminar esta factura? Los viajes quedarán disponibles para facturar de nuevo" + (b.paid > 0 ? ` y se borrarán sus ${b.abonos.length} cobro(s) por ${fmt(b.paid)} (se revierte su reparto Profit First)` : "") + ".")) return;
     setInvoices(prev => prev.filter(x => x.id !== id));
-    setCobros(prev => prev.filter(c => c.invoiceId !== id));
+    setCobros(prev => prev.filter(c => c.invoiceId !== id).map(c => c.invoiceId ? c : { ...c, collectedTripIds: (c.collectedTripIds || []).filter(t => !ids.has(t)) }));
   };
 
   // Anular: la factura conserva su número (queda registrada como ANULADA), los viajes vuelven a estar
@@ -299,8 +300,9 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     if (!inv || inv.status === "cancelled") return;
     const b = balanceOf(inv);
     if (!window.confirm(`¿Anular la factura ${inv.invoiceNumber || "#" + inv.id}? Conserva su número como ANULADA; los viajes quedan disponibles para facturar de nuevo` + (b.paid > 0 ? ` y se borran sus cobros por ${fmt(b.paid)}` : "") + ".")) return;
+    const ids = new Set(inv.tripIds || []);
     setInvoices(prev => prev.map(x => x.id === id ? { ...x, status: "cancelled", cancelledAt: todayStr } : x));
-    setCobros(prev => prev.filter(c => c.invoiceId !== id));
+    setCobros(prev => prev.filter(c => c.invoiceId !== id).map(c => c.invoiceId ? c : { ...c, collectedTripIds: (c.collectedTripIds || []).filter(t => !ids.has(t)) }));
   };
 
   const setStatus = (id, status) => {

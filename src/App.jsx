@@ -95,7 +95,7 @@ export default function App() {
     cobros, setCobros, invoices, setInvoices,
     bankAccount, setBankAccount, bankReconciliation, setBankReconciliation,
     pfSettings, setPfSettings,
-    syncStatus, syncError, setSyncError, partner, partnerTruckIds, driverObj, alerts,
+    syncStatus, syncError, setSyncError, syncNotice, setSyncNotice, partner, partnerTruckIds, driverObj, alerts,
   } = useApp();
 
   const [page, setPage] = useState(() => {
@@ -347,6 +347,12 @@ export default function App() {
             <button onClick={() => window.location.reload()} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
               🔄 Reconectar
             </button>
+          </div>
+        )}
+        {syncNotice && !syncError && (
+          <div style={{ position: "sticky", top: 0, zIndex: 100, background: colors.orange, color: "#fff", padding: "8px 16px", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 8, marginBottom: 12 }}>
+            <span>ℹ {syncNotice}</span>
+            <button onClick={() => setSyncNotice(null)} style={{ background: "rgba(255,255,255,0.25)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontWeight: 700 }}>Entendido</button>
           </div>
         )}
         {syncError && (

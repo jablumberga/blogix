@@ -37,6 +37,44 @@ function applyData(data, setters) {
   if (data.pfSettings != null)            setPfSettings({ ...DEFAULT_PF_SETTINGS, ...data.pfSettings });
 }
 
+// ── Guardado por registro: se envía solo lo que cambió respecto a lo último conocido del servidor ──
+const TABLE_KEYS = ["clients", "partners", "trucks", "drivers", "trips", "expenses", "brokers", "suppliers", "fixedTemplates", "cobros", "invoices", "staff"];
+const SCALAR_KEYS = ["settlementStatus", "bankAccount", "bankReconciliation", "pfSettings"];
+const stripPw = (r) => { if (r && r.password) { const { password: _p, ...rest } = r; return rest; } return r; };
+export function snapshotOf(data) {
+  const tables = Object.fromEntries(TABLE_KEYS.map(k => [k, new Map((data?.[k] || []).filter(r => r && r.id != null).map(r => [r.id, JSON.stringify(stripPw(r))]))]));
+  const scalars = Object.fromEntries(SCALAR_KEYS.map(k => [k, JSON.stringify(data?.[k] ?? null)]));
+  return { tables, scalars };
+}
+export function diffAgainst(base, data) {
+  const tables = {}; let n = 0;
+  for (const k of TABLE_KEYS) {
+    const cur = (data[k] || []).filter(r => r && r.id != null);
+    const b = base?.tables?.[k] || new Map();
+    const upserts = cur.filter(r => b.get(r.id) !== JSON.stringify(stripPw(r)));
+    const ids = new Set(cur.map(r => r.id));
+    const deletes = [...b.keys()].filter(id => !ids.has(id));
+    if (upserts.length || deletes.length) { tables[k] = { upserts, deletes }; n += upserts.length + deletes.length; }
+  }
+  const patch = { patch: true, tables };
+  for (const k of SCALAR_KEYS) if (JSON.stringify(data[k] ?? null) !== base?.scalars?.[k]) { patch[k] = data[k]; n++; }
+  return { patch, changes: n };
+}
+/** Combina lo del servidor con mis cambios pendientes (mis registros editados/borrados mandan). */
+export function mergeOnConflict(serverData, base, mine) {
+  const { patch } = diffAgainst(base, mine);
+  const out = { ...serverData };
+  for (const k of TABLE_KEYS) {
+    const t = patch.tables[k]; if (!t) { out[k] = serverData[k] || []; continue; }
+    const dels = new Set(t.deletes); const ups = new Map(t.upserts.map(r => [r.id, r]));
+    const merged = (serverData[k] || []).filter(r => !dels.has(r.id)).map(r => ups.has(r.id) ? ups.get(r.id) : r);
+    for (const r of t.upserts) if (!merged.some(x => x.id === r.id)) merged.push(r);
+    out[k] = merged;
+  }
+  for (const k of SCALAR_KEYS) if (k in patch) out[k] = patch[k];
+  return out;
+}
+
 export function AppProvider({ children }) {
   const [lang, setLang] = useState("es");
   const [user, setUser] = useState(() => {
@@ -87,6 +125,9 @@ export function AppProvider({ children }) {
   const versionRef     = useRef(0);     // optimistic lock — 0 means "unknown / loaded from cache"
   const currentDataRef = useRef(null);  // latest state snapshot for pagehide flush
   const userRef        = useRef(user);  // tracks current user role for pagehide (avoids stale closure)
+  const baseRef        = useRef(null);  // último estado conocido del servidor (para guardar solo lo que cambió)
+  const conflictsRef   = useRef(0);     // conflictos seguidos (aviso tras el tercero)
+  const [syncNotice, setSyncNotice] = useState(null); // aviso informativo (p. ej. cambios de otro usuario combinados)
 
   const setters = {
     setClients, setPartners, setTrucks, setDrivers, setTrips,
@@ -104,6 +145,7 @@ export function AppProvider({ children }) {
         return;
       }
       applyData(data, setters);
+      baseRef.current = source === "api" ? snapshotOf(data) : null;
       versionRef.current = version; // 0 if from localStorage (offline) — skips server check
       dataLoadedRef.current = true;
       setSyncStatus(source === "api" ? "saved" : "offline");
@@ -148,28 +190,41 @@ export function AppProvider({ children }) {
         : { clients, partners, trucks, drivers, trips, expenses,
             brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff,
             bankAccount, bankReconciliation, pfSettings };
-      const result = await saveData(payload, versionRef.current);
+      let patch = null;
+      if (user?.role === "admin" && baseRef.current && versionRef.current) {
+        const d = diffAgainst(baseRef.current, payload);
+        if (d.changes === 0) { setSyncStatus("saved"); return; }   // nada cambió: no se envía nada
+        patch = d.patch;
+      }
+      const result = await saveData(payload, versionRef.current, patch);
       if (result.saved === "unauthorized") { setUser(null); return; }
       if (result.saved === "rejected") {
         // El servidor no aceptó un dato: se avisa y se recarga lo que sí está guardado
         setSyncError(result.error); setSyncStatus("rejected");
         isReloadingRef.current = true;
-        loadData().then(({ source, data, version = 0 }) => { applyData(data, setters); versionRef.current = version; isReloadingRef.current = false; setSyncStatus(source === "api" ? "saved" : "offline"); });
+        loadData().then(({ source, data, version = 0 }) => { applyData(data, setters); baseRef.current = source === "api" ? snapshotOf(data) : null; versionRef.current = version; isReloadingRef.current = false; setSyncStatus(source === "api" ? "saved" : "offline"); });
         return;
       }
       if (result.saved === "conflict") {
+        // Otro usuario guardó primero: se recarga lo suyo y se vuelven a aplicar mis cambios encima (reintento automático)
         setSyncStatus("conflict");
-        // Reload from server to get the winning version; user's unsaved changes are lost
+        conflictsRef.current += 1;
         isReloadingRef.current = true;
         loadData().then(({ source, data, version = 0 }) => {
-          applyData(data, setters);
-          versionRef.current = version;
+          if (source === "api" && data) {
+            const merged = patch && baseRef.current ? mergeOnConflict(data, baseRef.current, payload) : data;
+            applyData(merged, setters);
+            baseRef.current = snapshotOf(data);      // base = servidor; mis cambios quedan pendientes y se reenvían
+            versionRef.current = version;
+            if (conflictsRef.current >= 3) { setSyncError("Varios conflictos seguidos al guardar: otro usuario está cambiando los mismos datos. Revisa y pulsa «Sincronizar todo»."); conflictsRef.current = 0; }
+            else setSyncNotice("Otro usuario guardó cambios al mismo tiempo: se combinaron con los tuyos y se volvió a guardar.");
+          } else { applyData(data, setters); versionRef.current = version; }
           isReloadingRef.current = false;
           setSyncStatus(source === "api" ? "saved" : "offline");
         });
         return;
       }
-      if (result.saved === "api") versionRef.current = result.version || 0;
+      if (result.saved === "api") { versionRef.current = result.version || 0; conflictsRef.current = 0; if (user?.role === "admin") baseRef.current = snapshotOf(payload); }
       if (result.saved === "api" && user?.role === "admin") {
         // La contraseña de un registro nuevo viaja UNA sola vez (el servidor la guarda hasheada); después se quita del estado
         const strip = (arr, set) => { if (arr.some(r => r && r.password)) set(arr.map(({ password: _pw, ...r }) => r)); };
@@ -226,6 +281,7 @@ export function AppProvider({ children }) {
         return;
       }
       applyData(data, setters);
+      baseRef.current = source === "api" ? snapshotOf(data) : null;
       versionRef.current = version;
       dataLoadedRef.current = true;
       isReloadingRef.current = false;
@@ -390,7 +446,7 @@ export function AppProvider({ children }) {
     if (result.saved === "unauthorized") { setUser(null); return; }
     if (result.saved === "rejected") { setSyncError(result.error); setSyncStatus("rejected"); return result; }
     if (result.saved === "conflict") { setSyncStatus("conflict"); return result; }
-    if (result.saved === "api") versionRef.current = result.version || 0;
+    if (result.saved === "api") { versionRef.current = result.version || 0; baseRef.current = snapshotOf({ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, bankAccount, bankReconciliation, pfSettings }); conflictsRef.current = 0; }
     setSyncStatus(result.saved === "api" ? "saved" : "offline");
     return result;
   };
@@ -398,7 +454,7 @@ export function AppProvider({ children }) {
   const value = {
     // UI
     lang, setLang, t, user, login, logout, forceSync, syncAll,
-    sidebarOpen, setSidebarOpen, isMobile, syncStatus, syncError, setSyncError,
+    sidebarOpen, setSidebarOpen, isMobile, syncStatus, syncError, setSyncError, syncNotice, setSyncNotice,
     // Auth
     isAdmin, isPartner, isDriver, isAssistant, allUsers,
     // Data

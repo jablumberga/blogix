@@ -127,7 +127,7 @@ export async function loadData() {
   return { source: "default", data: null };
 }
 
-export async function saveData(data, version = 0) {
+export async function saveData(data, version = 0, patch = null) {
   const token = getToken();
   const key   = lsKey(token);
   localStorage.setItem(key, JSON.stringify(data));
@@ -145,7 +145,7 @@ export async function saveData(data, version = 0) {
     const res = await fetch(API_URL, {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ ...data, _version: version }),
+      body: JSON.stringify(patch ? { ...patch, _version: version } : { ...data, _version: version }),
     });
     if (res.ok) {
       _apiAvailable = true;

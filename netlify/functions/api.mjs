@@ -732,7 +732,7 @@ export default async (request) => {
     catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
 
     const knownKeys = ["trips", "drivers", "trucks", "clients", "expenses", "invoices"];
-    if (!knownKeys.some(k => k in body)) {
+    if (body.patch !== true && !knownKeys.some(k => k in body)) {
       return Response.json({ error: "Invalid data structure" }, { status: 400, headers: corsHeaders });
     }
 
@@ -762,6 +762,56 @@ export default async (request) => {
       }
       if (serverVersion !== 0 && clientVersion !== serverVersion) {
         return Response.json({ error: "conflict" }, { status: 409, headers: corsHeaders });
+      }
+    }
+
+    // ── Guardado por registro (patch): solo lo que cambió, con ids a borrar ───────────
+    // body.tables = { trips: { upserts:[...], deletes:[ids] }, ... } + settlementStatus/bankAccount/pfSettings
+    if (body.patch === true) {
+      if (!useRelational) return Response.json({ error: "patch solo en modo relacional" }, { status: 400, headers: corsHeaders });
+      const TABLES = { trips: "bl_trips", expenses: "bl_expenses", trucks: "bl_trucks", drivers: "bl_drivers", clients: "bl_clients", partners: "bl_partners",
+        brokers: "bl_brokers", suppliers: "bl_suppliers", invoices: "bl_invoices", cobros: "bl_cobros", fixedTemplates: "bl_fixed_templates", staff: "bl_staff" };
+      const tables = body.tables || {};
+      for (const k of Object.keys(tables)) if (!TABLES[k]) return Response.json({ error: `tabla desconocida: ${k}` }, { status: 400, headers: corsHeaders });
+      const up = (k) => Array.isArray(tables[k]?.upserts) ? tables[k].upserts : [];
+      const del = (k) => (Array.isArray(tables[k]?.deletes) ? tables[k].deletes : []).map(Number).filter(n => Number.isInteger(n) && n > 0);
+      try {
+        for (const k of ["partners", "drivers", "staff"]) if (up(k).length) tables[k].upserts = await restorePasswords(SUPABASE_URL, SUPABASE_SERVICE_KEY, up(k), TABLES[k]);
+        let extraTrips = [];
+        if (up("trips").length) {
+          const refs = await enforceTripRefs(SUPABASE_URL, SUPABASE_SERVICE_KEY, up("trips"));
+          if (refs.error) return Response.json({ error: refs.error, code: "duplicate_ref", tripId: refs.tripId }, { status: 422, headers: corsHeaders });
+          tables.trips.upserts = refs.trips; extraTrips = refs.extraUpserts || [];
+        }
+        let changed = 0;
+        for (const [k, table] of Object.entries(TABLES)) {
+          const rows = [...up(k), ...(k === "trips" ? extraTrips : [])].filter(r => r && r.id != null).map(r => ({ id: r.id, rec: r }));
+          if (rows.length) {
+            const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method: "POST", headers: { ...supabaseHeaders(SUPABASE_SERVICE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify(rows) });
+            if (!r.ok) throw new Error(`upsert ${table}: ${await r.text()}`);
+            changed += rows.length;
+          }
+          const ids = del(k);
+          if (ids.length) {
+            const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=in.(${ids.join(",")})`, { method: "DELETE", headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+            if (!r.ok) throw new Error(`delete ${table}: ${await r.text()}`);
+            changed += ids.length;
+          }
+        }
+        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_settlement_status?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
+        const cur = sRes.ok ? ((await sRes.json())[0]?.data || {}) : {};
+        const { _version: _v, __bankAccount, __bankReconciliation, __pfSettings, ...curStatus } = cur;
+        const newVersion = Date.now();
+        await syncSettlementStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+          ...(body.settlementStatus != null ? body.settlementStatus : curStatus),
+          _version: newVersion,
+          __bankAccount: body.bankAccount != null ? body.bankAccount : __bankAccount,
+          __bankReconciliation: body.bankReconciliation != null ? body.bankReconciliation : __bankReconciliation,
+          __pfSettings: body.pfSettings != null ? body.pfSettings : __pfSettings,
+        });
+        return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "patch", changed, _version: newVersion }, { headers: corsHeaders });
+      } catch (err) {
+        return Response.json({ error: String(err) }, { status: 500, headers: corsHeaders });
       }
     }
 
