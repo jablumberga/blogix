@@ -301,47 +301,10 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         </div>
       </Card>
 
-      {/* ── Hero KPI: Beneficio Real ── */}
-      <div style={{ background: `linear-gradient(135deg, ${colors.card}, ${colors.cardHover})`, borderRadius: 12, border: `1px solid ${realProfit >= 0 ? colors.green + "40" : colors.red + "40"}`, padding: "20px 24px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>Beneficio Real del Periodo</div>
-          <div style={{ fontSize: 36, fontWeight: 800, color: realProfit >= 0 ? colors.green : colors.red, lineHeight: 1 }}>{fmt(realProfit)}</div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
-            {realMargin.toFixed(1)}% margen · {mt.filter(tr => tr.status === "delivered").length} entregado{mt.filter(tr => tr.status === "delivered").length !== 1 ? "s" : ""}
-            {pipelineCount > 0 && <span style={{ color: colors.yellow }}> · {pipelineCount} en proceso ({fmt(pipelineAmt)})</span>}
-            {" · tras liquidaciones de socios"}
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
-          <div style={{ textAlign: "right" }}>
-            {passThruDeduction > 0 ? (
-              <>
-                <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 1 }}>Ingresos Brutos</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: colors.textMuted }}>{fmt(revenue)}</div>
-                <div style={{ fontSize: 10, color: colors.red }}>−{fmt(passThruDeduction)} broker</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: colors.green }}>{fmt(netRevenue)} <span style={{ fontSize: 9, fontWeight: 400 }}>neto</span></div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Ingresos Devengados</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: colors.green }}>{fmt(revenue)}</div>
-              </>
-            )}
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Gastos Totales</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: colors.red }}>{fmt(totalExp)}</div>
-          </div>
-          {totalPartnerComm > 0 && (
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>Liquidaciones Socios</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: colors.purple }}>−{fmt(totalPartnerComm)}</div>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* ── Profit First: las tres cuentas ── */}
+      <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} isMobile={isMobile} />
 
-      {/* ── CFO: Pipeline de Facturación ── */}
+      {/* ── Pipeline de Facturación ── */}
       <Card style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => setPage("invoices")}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -411,9 +374,6 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         )}
       </Card>
 
-      {/* ── Profit First: las tres cuentas ── */}
-      <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} isMobile={isMobile} />
-
       {/* ── Row 1: KPIs financieros ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 16 }}>
         <Stat label="CxC POR COBRAR" value={fmt(totalCxC)} color={colors.orange}
@@ -422,10 +382,6 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         <Stat label="CxP PENDIENTE" value={fmt(totalCxP)} color={colors.red}
           sub={`Nomina + suplidores + fijos`}
           onClick={() => setPage("cxp")} />
-        <Stat label="POSICION DE CAJA" value={fmt(cashPosition)} color={cashPosition >= 0 ? colors.cyan : colors.red}
-          sub={cashPosition >= 0 ? "CxC supera CxP ok" : "CxP supera CxC alerta"} />
-        <Stat label="MARGEN BRUTO" value={`${margin.toFixed(1)}%`} color={margin >= 20 ? colors.green : margin >= 10 ? colors.yellow : colors.red}
-          sub={`Antes de socios`} />
       </div>
 
       {/* ── Row 2: CxC · CxP · Brokers ── */}
@@ -484,7 +440,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
 
         {/* P&L desglose */}
         <Card>
-          <SectionTitle label="Desglose de Gastos del Periodo" color={colors.red} />
+          <SectionTitle label="Gastos del período (salen de OpEx)" color={colors.red} />
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
               { label: "Ingresos brutos", value: revenue, color: colors.green, icon: "up" },
@@ -498,13 +454,6 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
                 <span style={{ fontSize: 13, fontWeight: 700, color }}>{fmt(Math.abs(value))}</span>
               </div>
             ))}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0 0", marginTop: 4, borderTop: `2px solid ${colors.border}` }}>
-              <span style={{ fontSize: 13, fontWeight: 700 }}>Beneficio real admin</span>
-              <div style={{ textAlign: "right" }}>
-                <span style={{ fontSize: 18, fontWeight: 800, color: realProfit >= 0 ? colors.green : colors.red }}>{fmt(realProfit)}</span>
-                <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 8 }}>{realMargin.toFixed(1)}%</span>
-              </div>
-            </div>
           </div>
         </Card>
 

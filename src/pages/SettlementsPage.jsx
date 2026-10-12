@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { ChevronDown, ChevronRight, CheckCircle2, Printer, PiggyBank, FileText } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, genSettlementPeriods, today, nxId } from "../utils/helpers.js";
-import { computeSettlement, normalizePartner, PARTNER_MODELS } from "../utils/partnerModels.js";
+import { computeSettlementChain, normalizePartner, PARTNER_MODELS } from "../utils/partnerModels.js";
 import { settlementRelease, DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 import { companyHeaderHTML, openPrintWindow, esc } from "../utils/printReport.js";
 import { COMPANY } from "../constants/company.js";
@@ -50,6 +50,7 @@ export function settlementHTML({ s, partner, t, clients = [], trucks = [], statu
       r("Utilidad a repartir", fmt(s.net), "sep") + r(`Parte del socio (${s.partnerSharePct} %)`, fmt(s.partnerShare)) + r(`Parte de la empresa (${100 - s.partnerSharePct} %)`, fmt(s.companyShare))
     : r("Ingreso neto", fmt(s.netRevenue)) + r(`Comisión empresa (${s.commissionPct} % del bruto)`, "− " + fmt(s.commission)) +
       (s.reimbursement ? r("Gastos reembolsados a la empresa", "− " + fmt(s.reimbursement)) : "") + (s.fixedTotal ? r("Cargos fijos", "− " + fmt(s.fixedTotal)) : "");
+  const carryRows = (s.previousBalance > 0 ? r("Saldo quincena anterior (el socio debía)", "− " + fmt(s.previousBalance)) : "");
   return `${companyHeaderHTML("LIQUIDACIÓN DE SOCIO")}
     <div class="info">
       <div class="col"><div class="k">Socio</div><div class="v">${esc(partner.name)}</div><div class="k">Modelo</div><div class="v">${esc(model)}</div></div>
@@ -75,9 +76,9 @@ export function settlementHTML({ s, partner, t, clients = [], trucks = [], statu
       : `<div class="muted small" style="padding:6px 0 2px">Sin cargos en este período.</div>`}
 
     <div class="section">3 · Resumen de la liquidación</div>
-    <table class="sum"><tbody>${summary}
+    <table class="sum"><tbody>${summary}${carryRows}
       <tr class="total"><td class="lbl">A TRANSFERIR AL SOCIO</td><td class="right">${fmt(transfer)}</td></tr>
-      ${s.toTransfer < 0 ? r("Saldo que el socio debe a la empresa", fmt(-s.toTransfer)) : ""}
+      ${s.carryOut > 0 ? r("Saldo que el socio debe a la empresa (pasa a la siguiente quincena)", fmt(s.carryOut)) : ""}
     </tbody></table>
 
     <div class="sig"><div>Entregado por</div><div>Recibí conforme: ${esc(partner.name)}</div><div>Fecha</div></div>
@@ -94,7 +95,7 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
       <div>
         <div style={{ fontWeight: 700, fontSize: 16 }}>{isPartnerView ? "Mi liquidación" : partner.name} <Badge label={model.short || s.model} color={colors.accent} /></div>
-        <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{s.period.label} · {s.tripCount} viaje{s.tripCount !== 1 ? "s" : ""} entregado{s.tripCount !== 1 ? "s" : ""} · pago {s.payDate}{notDelivered > 0 && <span style={{ color: colors.orange }}> · {notDelivered} sin entregar (entran al entregarse)</span>}</div>
+        <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{s.period.label} · {s.tripCount} viaje{s.tripCount !== 1 ? "s" : ""} entregado{s.tripCount !== 1 ? "s" : ""} · pago {s.payDate}{s.previousBalance > 0 && <span style={{ color: colors.red }}> · arrastra {fmt(s.previousBalance)} de la quincena anterior</span>}{notDelivered > 0 && <span style={{ color: colors.orange }}> · {notDelivered} sin entregar (entran al entregarse)</span>}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         {!isPartnerView && <div style={{ textAlign: "right", fontSize: 11, color: colors.textMuted }}>
@@ -103,7 +104,7 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11, color: colors.textMuted }}>{isPartnerView ? "RECIBES" : "A TRANSFERIR"}</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: isPaid ? colors.green : s.toTransfer < 0 ? colors.red : colors.orange }}>{fmt(transfer)}</div>
-          {s.toTransfer < 0 && <div style={{ fontSize: 10, color: colors.red }}>el socio debe {fmt(-s.toTransfer)}</div>}
+          {s.carryOut > 0 && <div style={{ fontSize: 10, color: colors.red }}>el socio debe {fmt(s.carryOut)} · pasa a la siguiente quincena</div>}
         </div>
         {!isPartnerView && <>
           <button onClick={onPrint} style={{ padding: "7px 10px", borderRadius: 8, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Printer size={13} /> PDF</button>
@@ -135,7 +136,9 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
           <FRow label={`Socio ${s.partnerSharePct}%`} value={s.partnerShare} />
           <FRow label={`Empresa ${100 - s.partnerSharePct}%`} value={s.companyShare} valueColor={colors.cyan} />
         </>}
+        {s.previousBalance > 0 && <FRow label="Saldo quincena anterior (el socio debía)" value={s.previousBalance} minus valueColor={colors.red} />}
         <FRow label={isPartnerView ? "Recibes" : "A transferir al socio"} value={transfer} bold divider="double" valueColor={isPaid ? colors.green : colors.orange} size={18} />
+        {s.carryOut > 0 && <FRow label="Queda debiendo el socio → pasa a la siguiente quincena" value={s.carryOut} valueColor={colors.red} />}
         {!isPartnerView && <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, background: PURPLE + "14", fontSize: 11, color: colors.textMuted, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <PiggyBank size={12} color={PURPLE} /><b style={{ color: PURPLE }}>Profit First:</b> apartado para el socio al cobrar {fmt(rel.pool)} · se transfiere {fmt(rel.transfer)} · la empresa retiene {fmt(rel.released)} → <span style={{ color: PURPLE }}>Reserva {fmt(rel.releasedToReserve)}</span> · <span style={{ color: colors.cyan }}>OpEx {fmt(rel.releasedToOpex)}</span>.
         </div>}
@@ -173,18 +176,24 @@ export default function SettlementsPage({ t, trips = [], trucks = [], expenses =
   const periods = useMemo(() => genSettlementPeriods(trips.map(tr => tr.date)), [trips]);
   const list = isPartnerView ? [partner].filter(Boolean) : partners;
 
+  // Una cadena por socio: el saldo negativo de una quincena se arrastra a la siguiente
+  const chains = useMemo(() => new Map(list.map(raw => {
+    const p = normalizePartner(raw);
+    return [p.id, computeSettlementChain({ partner: p, periods, trips, expenses, trucks, clients, brokers, drivers })];
+  })), [periods, list, trips, expenses, trucks, clients, brokers, drivers]);
+
   const groups = useMemo(() => periods.map(pd => {
     const cards = list.map(raw => {
       const p = normalizePartner(raw);
-      const s = computeSettlement({ partner: p, period: pd, trips, expenses, trucks, clients, brokers, drivers });
+      const s = chains.get(p.id).get(`${pd.mStr}-${pd.half}`);
       const truckIds = new Set(trucks.filter(tk => tk.partnerId === p.id).map(tk => tk.id));
       const notDelivered = trips.filter(tr => truckIds.has(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo && tr.status !== "delivered" && tr.status !== "cancelled").length;
-      if (s.tripCount === 0 && s.fixedTotal === 0 && notDelivered === 0) return null;
+      if (s.tripCount === 0 && s.fixedTotal === 0 && notDelivered === 0 && !(s.previousBalance > 0)) return null;
       return { p, s, notDelivered, key: settlementKeyOf(p.id, pd), status: settlementStatus[settlementKeyOf(p.id, pd)] || "unpaid" };
     }).filter(Boolean);
     if (cards.length === 0) return null;
     return { pd, cards, total: cards.reduce((a, c) => a + Math.max(0, c.s.toTransfer), 0), pending: cards.filter(c => c.status !== "paid").reduce((a, c) => a + Math.max(0, c.s.toTransfer), 0) };
-  }).filter(Boolean), [periods, list, trips, expenses, trucks, clients, brokers, drivers, settlementStatus]);
+  }).filter(Boolean), [periods, list, chains, trips, trucks, settlementStatus]);
 
   const toggle = ({ p, s, key, status }) => {
     const paid = status === "paid";

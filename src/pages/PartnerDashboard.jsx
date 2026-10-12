@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
 import { Truck, Route, TrendingUp, TrendingDown, CircleDollarSign } from "lucide-react";
 import { colors } from "../constants/theme.js";
-import { fmt, pad, MONTHS_ES, today } from "../utils/helpers.js";
+import { fmt, pad, MONTHS_ES, today, genSettlementPeriods } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Sel, Badge, Th, Td, StatusBadge } from "../components/ui/index.jsx";
-import { computeSettlement, normalizePartner, PARTNER_MODELS } from "../utils/partnerModels.js";
+import { computeSettlement, computeSettlementChain, normalizePartner, PARTNER_MODELS } from "../utils/partnerModels.js";
 import { settlementHTML } from "./SettlementsPage.jsx";
 import { openPrintWindow } from "../utils/printReport.js";
 import { FileText } from "lucide-react";
@@ -90,7 +90,16 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
   const p = normalizePartner(partner || {});
   const myTruckList = trucks.filter(tk => activeTruckSet.has(tk.id) && pTruckSet.has(tk.id));
   const period = { dateFrom, dateTo, half: viewMode === "quincena" ? qHalf : null, label: periodLabel, mStr: dateFrom.slice(0, 7) };
-  const settle = computeSettlement({ partner: p, period, trips, expenses, trucks: myTruckList, clients, brokers, drivers });
+  // Quincena: misma cadena que Liquidaciones (el saldo que el socio quedó debiendo pasa a la siguiente)
+  const settle = (() => {
+    if (viewMode === "quincena" && truckFilter === "all") {
+      const pds = genSettlementPeriods([...trips.map(tr => tr.date), dateFrom]);
+      const chain = computeSettlementChain({ partner: p, periods: pds, trips, expenses, trucks: myTruckList, clients, brokers, drivers });
+      const hit = chain.get(`${period.mStr}-${period.half}`);
+      if (hit) return { ...hit, period: { ...hit.period, label: periodLabel } };
+    }
+    return computeSettlement({ partner: p, period, trips, expenses, trucks: myTruckList, clients, brokers, drivers });
+  })();
   const passThruDeduction = settle.brokerDeduction;
   const rev = settle.netRevenue;
   const totalDeducciones = settle.commission + settle.reimbursement + settle.fixedTotal + (settle.model === "profit_share" ? settle.companyShare : 0);
@@ -156,14 +165,14 @@ export default function PartnerDashboard({ t, trips, trucks, expenses, drivers, 
       <StatCard icon={Route}           label={t.totalTrips}  value={filtered.length}  color={colors.cyan} />
       <StatCard icon={TrendingUp}      label={passThruDeduction > 0 ? "Ingreso Neto" : "Ingreso Bruto"} value={fmt(rev)} color={colors.green} />
       <StatCard icon={TrendingDown}    label="Total Deducciones" value={fmt(totalDeducciones)} color={colors.orange} />
-      <StatCard icon={CircleDollarSign} label="A Recibir"   value={fmt(Math.max(0, toReceive))}   color={toReceive >= 0 ? colors.green : colors.red} sub={toReceive < 0 ? `debes ${fmt(-toReceive)}` : undefined} />
+      <StatCard icon={CircleDollarSign} label="A Recibir"   value={fmt(Math.max(0, toReceive))}   color={toReceive >= 0 ? colors.green : colors.red} sub={toReceive < 0 ? `debes ${fmt(-toReceive)} · pasa a la siguiente quincena` : settle.previousBalance > 0 ? `incluye ${fmt(settle.previousBalance)} que debías` : undefined} />
     </div>
 
     <Card style={{ marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 15 }}>Mi liquidación · {periodLabel} <Badge label={modelLabel} color={colors.accent} /></div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{settle.tripCount} viaje{settle.tripCount !== 1 ? "s" : ""} entregado{settle.tripCount !== 1 ? "s" : ""}{settle.expenseLines.length > 0 ? ` · ${settle.expenseLines.length} gasto(s) descontado(s)` : ""}{viewMode === "quincena" ? ` · pago ${settle.payDate}` : ""}</div>
+          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{settle.tripCount} viaje{settle.tripCount !== 1 ? "s" : ""} entregado{settle.tripCount !== 1 ? "s" : ""}{settle.expenseLines.length > 0 ? ` · ${settle.expenseLines.length} gasto(s) descontado(s)` : ""}{viewMode === "quincena" ? ` · pago ${settle.payDate}` : ""}{settle.previousBalance > 0 ? <span style={{ color: colors.red }}> · se descuentan {fmt(settle.previousBalance)} de la quincena anterior</span> : ""}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div style={{ textAlign: "right" }}>

@@ -87,7 +87,7 @@ export default function BancoPage({ expenses, cobros, clients, bankAccount, setB
   return (
     <div>
       <PageHeader title="Banco" />
-      <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} setPfSettings={setPfSettings} isMobile={isMobile} />
+      <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} setPfSettings={setPfSettings} setBankAccount={setBankAccount} isMobile={isMobile} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 12, marginBottom: 16 }}>
         <StatCard icon={Landmark}     label="Saldo Conciliado"    value={fmt(saldoConciliado)}   color={saldoConciliado >= 0 ? colors.green : colors.red} />

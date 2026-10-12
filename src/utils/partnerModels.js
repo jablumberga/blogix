@@ -108,7 +108,7 @@ export function tripNetRevenue(trip, clientMap, brokerMap) {
  * Devuelve las líneas y los totales; `toTransfer` es lo que recibe el socio
  * (negativo = el socio debe a la empresa).
  */
-export function computeSettlement({ partner, period, trips, expenses, trucks, clients = [], brokers = [], drivers = [] }) {
+export function computeSettlement({ partner, period, trips, expenses, trucks, clients = [], brokers = [], drivers = [], carryIn = 0 }) {
   const p = normalizePartner(partner);
   const clientMap = new Map(clients.map(c => [c.id, c]));
   const brokerMap = new Map(brokers.map(b => [b.id, b]));
@@ -159,8 +159,14 @@ export function computeSettlement({ partner, period, trips, expenses, trucks, cl
     companyShare = commission + fixedTotal;
     toTransfer = net;
   }
-  // Lo que la empresa retiene de esta quincena: reembolso + su parte (comisión/cargos o % de utilidad)
-  const companyReceives = reimbursement + companyShare;
+  // Saldo negativo de quincenas anteriores (el socio debía): se descuenta primero de lo que le toca
+  const previousBalance = Math.max(0, Number(carryIn) || 0);
+  toTransfer = toTransfer - previousBalance;
+  // Si vuelve a salir negativo, esa deuda pasa a la siguiente quincena
+  const carryOut = toTransfer < 0 ? -toTransfer : 0;
+  // Lo que la empresa retiene de esta quincena: lo que entró por el camión menos lo que se transfiere
+  // (nunca más de lo que entró: si no hubo ingreso, no se retiene nada y la deuda se arrastra)
+  const companyReceives = Math.max(0, netRevenue - Math.max(0, toTransfer));
 
   return {
     partnerId: p.id, model: p.model, period,
@@ -170,8 +176,25 @@ export function computeSettlement({ partner, period, trips, expenses, trucks, cl
     commission, commissionPct: Number(p.companyPct) || 0,
     expenseLines, expensesTotal,
     fixedLines, fixedTotal,
-    reimbursement,
+    reimbursement, previousBalance, carryOut,
     net, partnerSharePct: Number(p.partnerSharePct) || 0, partnerShare, companyShare, companyReceives,
     toTransfer,
   };
+}
+
+
+/**
+ * Liquidaciones encadenadas de un socio: de la quincena más vieja a la más nueva,
+ * arrastrando el saldo negativo (lo que el socio quedó debiendo) a la siguiente.
+ * `periods` en cualquier orden; devuelve un Map clave(mStr-half) → liquidación.
+ */
+export function computeSettlementChain({ partner, periods = [], trips, expenses, trucks, clients = [], brokers = [], drivers = [] }) {
+  const asc = [...periods].sort((a, b) => a.dateFrom.localeCompare(b.dateFrom));
+  const out = new Map(); let carry = 0;
+  for (const pd of asc) {
+    const s = computeSettlement({ partner, period: pd, trips, expenses, trucks, clients, brokers, drivers, carryIn: carry });
+    out.set(`${pd.mStr}-${pd.half}`, s);
+    carry = s.carryOut;
+  }
+  return out;
 }

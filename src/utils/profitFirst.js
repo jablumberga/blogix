@@ -13,7 +13,11 @@ import { today } from "./helpers.js";
  *   - lo que la empresa retiene en la liquidación (gastos reembolsados, cargos fijos)
  *     es ingreso real y se reparte 20/80 al transferir (Profit First siempre).
  */
-export const DEFAULT_PF_SETTINGS = { reservePct: 20, startDate: null };
+/**
+ * Ajustes: % a Reserva, fecha de arranque (todo lo anterior queda fuera de las cuentas)
+ * y balance inicial del banco ese día, repartido en Reserva y OpEx.
+ */
+export const DEFAULT_PF_SETTINGS = { reservePct: 20, startDate: null, openingReserve: 0, openingOpex: 0 };
 
 /** Categorías de gasto que son pass-through (no consumen OpEx). */
 export const PASS_THROUGH_CATEGORIES = ["partner_settlement", "broker_commission"];
@@ -121,7 +125,8 @@ const afterStart = (date, settings) => !settings?.startDate || !date || date >= 
  *  - opexCommitted: gastos pendientes que todavía deben salir de OpEx
  */
 export function accountBalances({ cobros = [], expenses = [], settings = DEFAULT_PF_SETTINGS }) {
-  let income = 0, reserve = 0, opexIn = 0, passThrough = 0, real = 0;
+  const openingReserve = Number(settings?.openingReserve) || 0, openingOpex = Number(settings?.openingOpex) || 0;
+  let income = 0, reserve = openingReserve, opexIn = openingOpex, passThrough = 0, real = 0;
   for (const c of cobros) {
     if (!COLLECTED.includes(c.status) || !afterStart(c.collectedDate || c.pf?.at, settings)) continue;
     const a = cobroAllocation(c, settings);
@@ -144,7 +149,8 @@ export function accountBalances({ cobros = [], expenses = [], settings = DEFAULT
     passThroughOut: round2(passThroughOut), passThroughReleased: round2(passThroughReleased),
     passThroughPending: round2(passThrough - passThroughOut - passThroughReleased),
     opexIn: round2(opexIn), opexOut: round2(opexOut), opexAvailable: round2(opexIn - opexOut), opexCommitted: round2(opexCommitted),
-    opexAfterCommitments: round2(opexIn - opexOut - opexCommitted), reservePct: Number(settings?.reservePct) || 0 };
+    opexAfterCommitments: round2(opexIn - opexOut - opexCommitted), reservePct: Number(settings?.reservePct) || 0,
+    opening: round2(openingReserve + openingOpex), openingReserve, openingOpex, startDate: settings?.startDate || null };
 }
 
 /** Asignaciones por mes (YYYY-MM) para gráficas y comparativos. */
