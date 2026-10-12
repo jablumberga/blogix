@@ -85,7 +85,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
     const supplierId = form.supplierId ? Number(form.supplierId) : null;
     const sup = supplierId ? (suppliers || []).find(s => s.id === supplierId) : null;
     const dueDate = getSupplierDueDate(form.date, sup);
-    const data = { ...form, amount: Number(form.amount), tripId: form.tripId ? Number(form.tripId) : null, truckId: form.truckId ? Number(form.truckId) : null, driverId: form.driverId || null, supplierId, dueDate, status,
+    const data = { ...form, amount: Number(form.amount), gallons: form.category === "fuel" ? (Number(form.gallons) || null) : null, tripId: form.tripId ? Number(form.tripId) : null, truckId: form.truckId ? Number(form.truckId) : null, driverId: form.driverId || null, supplierId, dueDate, status,
       ...(status === "paid" && !form.paidDate ? { paidDate: form.date } : {}) };
     // La casilla solo tiene sentido en camiones de socios; en los demás se limpia
     if (formPartner) data.chargeToPartner = formCharge; else delete data.chargeToPartner;
@@ -147,6 +147,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
           {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{t[c] || c}</option>)}
         </Sel>
         <Inp label={t.expenseAmount} type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+        {form.category === "fuel" && <Inp label="Galones (para km/gal)" type="number" value={form.gallons ?? ""} onChange={e => setForm({ ...form, gallons: e.target.value })} />}
         <Sel label={t.paymentMethod} value={form.paymentMethod} onChange={e => setForm({ ...form, paymentMethod: e.target.value })}>
           {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t[m] || m}</option>)}
         </Sel>

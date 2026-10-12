@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark } from "lucide-react";
+import { Truck, Route, Building2, Users, UserCog, Briefcase, Receipt, CreditCard, Banknote, Store, Handshake, Gauge, LayoutDashboard, Globe, LogOut, UserCheck, Menu, TrendingUp, RefreshCw, Home, DollarSign, FileText, Landmark } from "lucide-react";
 import { useApp } from "./context/AppContext.jsx";
 import { getToken } from "./api.js";
 import { colors } from "./constants/theme.js";
@@ -20,6 +20,7 @@ import CxPPage from "./pages/CxPPage.jsx";
 import NominaPage from "./pages/NominaPage.jsx";
 import SuppliersPage from "./pages/SuppliersPage.jsx";
 import SettlementsPage from "./pages/SettlementsPage.jsx";
+import CostPerKmPage from "./pages/CostPerKmPage.jsx";
 import CxCPage from "./pages/CxCPage.jsx";
 import InvoicesPage from "./pages/InvoicesPage.jsx";
 import BancoPage from "./pages/BancoPage.jsx";
@@ -87,7 +88,7 @@ export default function App() {
   const {
     lang, setLang, t, user, login, logout, forceSync, syncAll,
     isAdmin, isPartner, isDriver, isAssistant, allUsers,
-    staff, setStaff,
+    staff, setStaff, gpsKm, setGpsKm, distances, setDistances,
     clients, setClients, partners, setPartners, trucks, setTrucks,
     drivers, setDrivers, trips, setTrips, expenses, setExpenses,
     brokers, setBrokers, suppliers, setSuppliers,
@@ -184,6 +185,7 @@ export default function App() {
     { id: "cxp",         icon: CreditCard,       label: "Cuentas x Pagar" },
     { id: "nomina",      icon: Banknote,         label: "Nómina" },
     { id: "banco",       icon: Landmark,         label: "Banco" },
+    { id: "costkm",      icon: Gauge,            label: "Costo por km" },
     { id: "suppliers",   icon: Store,            label: t.suppliers },
     { id: "settlements", icon: Handshake,        label: t.settlements },
   ];
@@ -199,7 +201,7 @@ export default function App() {
   ];
   const navItems = isAdmin ? adminNav : isPartner ? partnerNav : isAssistant ? assistantNav : driverNav;
 
-  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, partner, partnerTruckIds, driverObj, alerts };
+  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, gpsKm, setGpsKm, distances, setDistances, partner, partnerTruckIds, driverObj, alerts };
 
   const pageTitles = {
     dashboard:   t.dashboard,
@@ -219,6 +221,7 @@ export default function App() {
     cxp:         "Cuentas x Pagar",
     nomina:      "Nómina",
     banco:       "Banco",
+    costkm:      "Costo por km",
     suppliers:   t.suppliers,
     settlements: t.settlements,
   };
@@ -384,6 +387,7 @@ export default function App() {
         {page === "cxp"         && isAdmin    && <CxPPage          {...ctx} />}
         {page === "nomina"      && isAdmin    && <NominaPage       {...ctx} />}
         {page === "banco"       && isAdmin    && <BancoPage        {...ctx} />}
+        {page === "costkm"      && isAdmin    && <CostPerKmPage    {...ctx} />}
         {page === "suppliers"   && isAdmin    && <SuppliersPage    {...ctx} />}
         {page === "settlements" && (isAdmin || isPartner) && <SettlementsPage  {...ctx} />}
       </div>

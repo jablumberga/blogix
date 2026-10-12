@@ -96,7 +96,7 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
 
   const save = () => {
     if (!form.plate) return;
-    const d = { ...form, partnerId: form.owner === "partner" ? Number(form.partnerId) || null : null };
+    const d = { ...form, partnerId: form.owner === "partner" ? Number(form.partnerId) || null : null, odometer: Number(form.odometer) || null, gpsImei: form.gpsImei || null };
     if (editId) {
       const prevTruck = trucks.find(t2 => t2.id === editId);
       const sizeChanged = prevTruck && (prevTruck.size || "T1") !== (form.size || "T1");
@@ -172,6 +172,11 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
         <Sel label={t.ownerType} value={form.owner} onChange={e => setForm({ ...form, owner: e.target.value })}>
           <option value="own">{t.ownTruck}</option><option value="partner">{t.partnerTruck}</option>
         </Sel>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 2fr", gap: 12, marginBottom: 12 }}>
+        <Inp label="Odómetro actual (km)" type="number" value={form.odometer ?? ""} onChange={e => setForm({ ...form, odometer: e.target.value })} />
+        <Inp label="IMEI del GPS (TrackSolid)" value={form.gpsImei ?? ""} onChange={e => setForm({ ...form, gpsImei: e.target.value.trim() })} placeholder="opcional" />
+        <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 8 }}>Con el IMEI, los km del camión se traen solos del GPS; sin GPS se usan odómetro o distancia de referencia.</div>
       </div>
       {form.owner === "partner" && <Sel label={t.partnerName} value={form.partnerId} onChange={e => setForm({ ...form, partnerId: e.target.value })} style={{ marginBottom: 12 }}>
         <option value="">{t.none}</option>{(partners||[]).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
