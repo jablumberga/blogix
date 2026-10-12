@@ -91,7 +91,7 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
     const numHelpers = form.numHelpers === null || form.numHelpers === "" ? (preH?.numHelpers ?? 0) : Number(form.numHelpers);
     const helpersPay = form.helperPayEach === "" ? (preH?.helperEach ?? 0) : Number(form.helperPayEach) || 0;
     const helpersArr = Array.from({ length: numHelpers }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
-    const data = { ...form, numHelpers, helperPayEach: helpersPay, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr,
+    const data = { ...form, numHelpers, helperPayEach: helpersPay, odoStart: Number(form.odoStart) || null, odoEnd: Number(form.odoEnd) || null, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr,
       jointDriverId: form.joint && form.jointDriverId ? Number(form.jointDriverId) : null, jointTruckId: form.joint && form.jointTruckId ? Number(form.jointTruckId) : null,
       createdAt: new Date().toISOString(), history: [{ at: new Date().toISOString(), by: driverObj?.name || "", action: "creado (panel chofer)" }] };
     const newId = nxId(trips);
@@ -245,6 +245,10 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
             {!refInfo?.checking && !f && refInfo && !refInfo.offline && <span style={{ color: colors.green }}>Referencia disponible ✓</span>}
             {refInfo?.offline && <span style={{ color: colors.orange }}>Sin conexión: se verificará al guardar.</span>}
           </div>; })()}
+        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <Inp label="Odómetro al salir (km)" type="number" value={form.odoStart ?? ""} onChange={e => setForm({ ...form, odoStart: e.target.value })} placeholder={String(trucks.find(t2 => t2.id === Number(form.truckId))?.odometer || "")} />
+          <Inp label={`Odómetro al llegar (km)${Number(form.odoEnd) > Number(form.odoStart) && Number(form.odoStart) > 0 ? ` · ${Number(form.odoEnd) - Number(form.odoStart)} km` : ""}`} type="number" value={form.odoEnd ?? ""} onChange={e => setForm({ ...form, odoEnd: e.target.value })} />
+        </div>
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22`, display: "grid", gridTemplateColumns: Number(form.numHelpers) > 0 ? "1fr 1fr" : "1fr", gap: 10 }}>
           <Sel label={t.numHelpers} value={form.numHelpers === null || form.numHelpers === undefined ? "" : form.numHelpers} onChange={e => setForm({ ...form, numHelpers: e.target.value === "" ? null : Number(e.target.value) })}>
             <option value="">Por defecto (1 en camión chico, 2 en grande)</option>

@@ -213,6 +213,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     const helperNames = (form.helperNames || []).slice(0, numHelpers);
     const helpersArr = Array.from({ length: numHelpers }, (_, i) => ({ name: helperNames[i] || `Ayudante ${i + 1}`, pay: helperPayEach }));
     const data = { ...form, truckId: Number(form.truckId), driverId: Number(form.driverId), clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null,
+      odoStart: Number(form.odoStart) || null, odoEnd: Number(form.odoEnd) || null,
       weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, numHelpers, helperPayEach, helperNames, helpers: helpersArr,
       discounts: (form.discounts || []).filter(d => Number(d.amount) > 0),
       jointDriverId: form.joint && form.jointDriverId ? Number(form.jointDriverId) : null, jointTruckId: form.joint && form.jointTruckId ? Number(form.jointTruckId) : null };
@@ -450,6 +451,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, marginTop: 10 }}>
           <Inp label={t.cargo} value={form.cargo} onChange={e => setForm({ ...form, cargo: e.target.value })} />
           <Inp label={t.weight} type="number" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} />
+          <Inp label="Odómetro salida (km)" type="number" value={form.odoStart ?? ""} onChange={e => setForm({ ...form, odoStart: e.target.value })} />
+          <Inp label={`Odómetro llegada (km)${Number(form.odoEnd) > Number(form.odoStart) && Number(form.odoStart) > 0 ? ` · ${Number(form.odoEnd) - Number(form.odoStart)} km` : ""}`} type="number" value={form.odoEnd ?? ""} onChange={e => setForm({ ...form, odoEnd: e.target.value })} />
           <Inp label={t.invoiceRef + (selectedClient?.rules?.requiresInvoiceRef ? " *" : "")} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: selectedClient?.rules?.requiresInvoiceRef && !form.invoiceRef ? colors.red : colors.border }} />
         </div>
         {form.invoiceRef && (() => {

@@ -256,7 +256,7 @@ async function readSettlementStatus(url, key) {
 async function readAllTables(url, key) {
   const [
     trips, expenses, trucks, drivers, clients, partners,
-    brokers, suppliers, invoices, cobros, fixedTemplates, settlementStatus, staff,
+    brokers, suppliers, invoices, cobros, fixedTemplates, settlementStatus, staff, gpsKm,
   ] = await Promise.all([
     readTable(url, key, "bl_trips"),
     readTable(url, key, "bl_expenses"),
@@ -271,16 +271,18 @@ async function readAllTables(url, key) {
     readTable(url, key, "bl_fixed_templates"),
     readSettlementStatus(url, key),
     readTable(url, key, "bl_staff").catch(() => []), // tabla nueva: puede no existir aún
+    readTable(url, key, "bl_gps_km").catch(() => []), // km diarios por GPS (TrackSolid); puede no existir aún
   ]);
   // Extract bank config stored in the settlement_status blob under __ keys
-  const { __bankAccount, __bankReconciliation, __pfSettings, ...cleanSettlementStatus } = settlementStatus;
+  const { __bankAccount, __bankReconciliation, __pfSettings, __distances, ...cleanSettlementStatus } = settlementStatus;
   return {
     trips, expenses, trucks, drivers, clients, partners, brokers, suppliers,
-    invoices, cobros, fixedTemplates, staff,
+    invoices, cobros, fixedTemplates, staff, gpsKm,
     settlementStatus: cleanSettlementStatus,
     bankAccount: __bankAccount || null,
     bankReconciliation: __bankReconciliation || null,
     pfSettings: __pfSettings || null,
+    distances: __distances || null,
   };
 }
 
@@ -351,6 +353,7 @@ async function syncAllTables(url, key, body) {
   await run("bl_cobros",           () => syncTable(url, key, "bl_cobros",          body.cobros));
   await run("bl_fixed_templates",  () => syncTable(url, key, "bl_fixed_templates", body.fixedTemplates));
   await run("bl_staff",            () => syncTable(url, key, "bl_staff",           body.staff));
+  if (Array.isArray(body.gpsKm)) await run("bl_gps_km", () => syncTable(url, key, "bl_gps_km", body.gpsKm));
   if (errors.length > 0) throw new Error(errors.join("; "));
   // syncSettlementStatus is intentionally NOT called here — the POST handler is the sole writer
   // of the version stamp so _version is always set atomically after all tables confirm success.
@@ -773,7 +776,7 @@ export default async (request) => {
     if (body.patch === true) {
       if (!useRelational) return Response.json({ error: "patch solo en modo relacional" }, { status: 400, headers: corsHeaders });
       const TABLES = { trips: "bl_trips", expenses: "bl_expenses", trucks: "bl_trucks", drivers: "bl_drivers", clients: "bl_clients", partners: "bl_partners",
-        brokers: "bl_brokers", suppliers: "bl_suppliers", invoices: "bl_invoices", cobros: "bl_cobros", fixedTemplates: "bl_fixed_templates", staff: "bl_staff" };
+        brokers: "bl_brokers", suppliers: "bl_suppliers", invoices: "bl_invoices", cobros: "bl_cobros", fixedTemplates: "bl_fixed_templates", staff: "bl_staff", gpsKm: "bl_gps_km" };
       const tables = body.tables || {};
       for (const k of Object.keys(tables)) if (!TABLES[k]) return Response.json({ error: `tabla desconocida: ${k}` }, { status: 400, headers: corsHeaders });
       const up = (k) => Array.isArray(tables[k]?.upserts) ? tables[k].upserts : [];
@@ -803,7 +806,7 @@ export default async (request) => {
         }
         const sRes = await fetch(`${SUPABASE_URL}/rest/v1/bl_settlement_status?id=eq.1&select=data`, { headers: supabaseHeaders(SUPABASE_SERVICE_KEY) });
         const cur = sRes.ok ? ((await sRes.json())[0]?.data || {}) : {};
-        const { _version: _v, __bankAccount, __bankReconciliation, __pfSettings, ...curStatus } = cur;
+        const { _version: _v, __bankAccount, __bankReconciliation, __pfSettings, __distances, ...curStatus } = cur;
         const newVersion = Date.now();
         await syncSettlementStatus(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
           ...(body.settlementStatus != null ? body.settlementStatus : curStatus),
@@ -811,6 +814,7 @@ export default async (request) => {
           __bankAccount: body.bankAccount != null ? body.bankAccount : __bankAccount,
           __bankReconciliation: body.bankReconciliation != null ? body.bankReconciliation : __bankReconciliation,
           __pfSettings: body.pfSettings != null ? body.pfSettings : __pfSettings,
+          __distances: body.distances != null ? body.distances : __distances,
         });
         return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "patch", changed, _version: newVersion }, { headers: corsHeaders });
       } catch (err) {
@@ -850,6 +854,7 @@ export default async (request) => {
           ...(body.bankAccount != null           ? { __bankAccount: body.bankAccount }           : {}),
           ...(body.bankReconciliation != null     ? { __bankReconciliation: body.bankReconciliation } : {}),
           ...(body.pfSettings != null             ? { __pfSettings: body.pfSettings }             : {}),
+          ...(body.distances != null              ? { __distances: body.distances }               : {}),
         });
         return Response.json({ ok: true, savedAt: new Date().toISOString(), mode: "relational", _version: newVersion }, { headers: corsHeaders });
       } catch (err) {

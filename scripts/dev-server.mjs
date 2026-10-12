@@ -48,7 +48,7 @@ if (!existsSync(DB)) {
 let db = JSON.parse(readFileSync(DB, "utf8"));
 const TABLE_DEFAULTS = ["bl_trips","bl_expenses","bl_trucks","bl_drivers","bl_clients","bl_partners",
   "bl_brokers","bl_suppliers","bl_invoices","bl_cobros","bl_fixed_templates","bl_settlement_status",
-  "push_tokens","bl_rate_limits","appdata","bl_staff"];
+  "push_tokens","bl_rate_limits","appdata","bl_staff","bl_gps_km"];
 for (const t of TABLE_DEFAULTS) db[t] ??= [];
 const save = () => writeFileSync(DB, JSON.stringify(db, null, 1));
 
@@ -159,6 +159,7 @@ const FUNCTIONS = [
   ["auth.mjs",       ["/api/auth/login", "/api/auth/logout", "/api/auth/password"]],
   ["push-token.mjs", ["/api/push/token"]],
   ["send-push.mjs",  ["/api/push/send"]],
+  ["gps.mjs",        ["/api/gps/sync"]],
 ];
 const routes = new Map();
 for (const [file, paths] of FUNCTIONS) {
