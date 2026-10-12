@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, UserCheck } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { nxId } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
+import PasswordButton from "../components/PasswordButton.jsx";
 
 const ROLES = { assistant: "Asistente administrativa (oficina)", admin: "Administrador (todo, como el dueño)" };
 const emptyForm = () => ({ name: "", phone: "", role: "assistant", status: "active", username: "", newPassword: "" });
@@ -58,7 +59,7 @@ export default function StaffPage({ t, user, staff = [], setStaff, drivers = [],
       </div>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 2fr", gap: 12, marginBottom: 12 }}>
         <Inp label={t.username} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} autoComplete="off" />
-        <Inp label={editId ? "Nueva contraseña (vacío = no cambia)" : t.password} type="password" value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} autoComplete="new-password" />
+        {!editId ? <Inp label={t.password} type="password" value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} autoComplete="new-password" /> : <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 8 }}>La contraseña se cambia con el botón 🔑 de la lista.</div>}
       </div>
       {error && <div style={{ color: colors.red, fontSize: 12, marginBottom: 8 }}>{error}</div>}
       <div style={{ display: "flex", gap: 8 }}><Btn onClick={save}>{t.save}</Btn><Btn variant="ghost" onClick={() => setShowForm(false)}>{t.cancel}</Btn></div>
@@ -71,7 +72,7 @@ export default function StaffPage({ t, user, staff = [], setStaff, drivers = [],
           <Td>{s.phone}</Td><Td>{s.role === "admin" ? <Badge label="Administrador" color={colors.accent} /> : "Oficina"}</Td><Td>{s.username}</Td>
           <Td align="center"><Badge label={s.status === "inactive" ? t.inactive : t.active} color={s.status === "inactive" ? colors.red : colors.green} />{isSelf(s) && <span style={{ fontSize: 9, color: colors.textMuted, marginLeft: 6 }}>(tú)</span>}</Td>
           <Td align="right">
-            <button onClick={() => openEdit(s)} style={{ padding: 10, minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
+            <PasswordButton table="staff" id={s.id} name={s.name} /><button onClick={() => openEdit(s)} style={{ padding: 10, minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
             <button onClick={() => remove(s)} style={{ padding: 10, minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
           </Td>
         </tr>)}</tbody>

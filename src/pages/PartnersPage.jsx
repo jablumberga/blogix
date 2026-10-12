@@ -4,6 +4,7 @@ import { colors } from "../constants/theme.js";
 import { nxId, fmt } from "../utils/helpers.js";
 import { PARTNER_MODELS, CHARGE_FREQUENCIES, normalizePartner } from "../utils/partnerModels.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
+import PasswordButton from "../components/PasswordButton.jsx";
 
 const emptyForm = () => ({
   name: "", phone: "", email: "", notes: "", status: "active",
@@ -139,7 +140,7 @@ export default function PartnersPage({ t, partners, setPartners, trucks, drivers
       {/* ── Acceso ── */}
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 2fr", gap: 12, marginBottom: 12 }}>
         <Inp label={t.username} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="Usuario para entrar al app" autoComplete="off" />
-        <Inp label={editId ? "Nueva contraseña (vacío = no cambia)" : t.password} type="password" value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} autoComplete="new-password" />
+        {!editId ? <Inp label={t.password} type="password" value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} autoComplete="new-password" /> : <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 8 }}>La contraseña se cambia con el botón 🔑 de la lista.</div>}
         <Inp label={t.notes} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
       </div>
 
@@ -168,7 +169,7 @@ export default function PartnersPage({ t, partners, setPartners, trucks, drivers
             <Td>{p.username}</Td>
             <Td align="center"><Badge label={inactive ? t.inactive : t.active} color={inactive ? colors.red : colors.green} /></Td>
             <Td align="right">
-              <button onClick={() => openEdit(raw)} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
+              <PasswordButton table="partners" id={p.id} name={p.name} /><button onClick={() => openEdit(raw)} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
               <button onClick={() => remove(p)} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
             </Td>
           </tr>;

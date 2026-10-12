@@ -173,6 +173,17 @@ export async function saveData(data, version = 0) {
 
 
 /** Consulta al servidor si una referencia de factura ya existe para el cliente (viaje conjunto). */
+/** Cambia la contraseña de un chofer/socio/usuario (solo admin). Acción dedicada, fuera del autoguardado. */
+export async function setPassword({ table, id, password }) {
+  const token = getToken();
+  if (!token) return { ok: false, error: "Sin sesión" };
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/password`, { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ table, id, password }) });
+    const j = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true } : { ok: false, error: j.error || `Error ${res.status}` };
+  } catch { return { ok: false, error: "Sin conexión con el servidor" }; }
+}
+
 export async function checkRef({ clientId, ref, truckId, tripId }) {
   const token = getToken();
   if (!token || !clientId || !String(ref || "").trim()) return { found: null, canJoin: false, error: null };

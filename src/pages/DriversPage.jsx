@@ -6,6 +6,7 @@ import { DR_PROVINCES } from "../constants/destinations.js";
 import { parseRateRows, mergeRates, DRIVER_TEMPLATE_HEADERS, DRIVER_TEMPLATE_EXAMPLE_ROWS } from "../utils/rateImport.js";
 import { PAY_TYPES, normalizeDriver } from "../utils/driverPay.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
+import PasswordButton from "../components/PasswordButton.jsx";
 
 const emptyForm = () => ({ name: "", phone: "", license: "", truckId: "", status: "active", payType: "perTrip", fixedAmount: 0, percentageAmount: 0, username: "", newPassword: "", rateSheets: [] });
 const emptyRate = () => ({ province: "", municipality: "", priceT1: "", dietaT1: "", helperT1: "", priceT2: "", dietaT2: "", helperT2: "" });
@@ -166,7 +167,7 @@ export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks,
         {form.payType === "percentage" && <Inp label="% del ingreso del viaje" type="number" min="0" max="100" value={form.percentageAmount} onChange={e => setForm({ ...form, percentageAmount: e.target.value })} />}
         {form.payType === "perTrip" && <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 6 }}>Se paga según el tarifario del destino. T1: chofer + 1 ayudante; T2: chofer + 2 ayudantes. En cada viaje se puede cambiar la cantidad de ayudantes.</div>}
         <Inp label={t.username} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} autoComplete="off" />
-        <Inp label={editId ? "Nueva contraseña (vacío = no cambia)" : t.password} type="password" value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} autoComplete="new-password" />
+        {!editId ? <Inp label={t.password} type="password" value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} autoComplete="new-password" /> : <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 8 }}>La contraseña se cambia con el botón 🔑 de la lista.</div>}
       </div>
 
       {form.payType === "perTrip" && <div style={{ background: colors.inputBg, borderRadius: 8, padding: 12, marginBottom: 10, border: `1px solid ${colors.border}` }}>
@@ -263,7 +264,7 @@ export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks,
             <Td align="right" bold color={sm.pendingPay > 0 ? colors.orange : colors.textMuted}>{fmt(sm.pendingPay)}</Td>
             <Td align="center"><Badge label={inactive ? t.inactive : t.active} color={inactive ? colors.red : colors.green} /></Td>
             <Td align="right">
-              <button onClick={() => openEdit(raw)} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
+              <PasswordButton table="drivers" id={d.id} name={d.name} /><button onClick={() => openEdit(raw)} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer" }}><Pencil size={12} /></button>
               <button onClick={() => remove(d)} style={{ padding: "10px", minHeight: 44, minWidth: 44, border: "none", background: "transparent", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button>
             </Td>
           </tr>;

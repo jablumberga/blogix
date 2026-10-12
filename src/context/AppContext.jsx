@@ -170,6 +170,11 @@ export function AppProvider({ children }) {
         return;
       }
       if (result.saved === "api") versionRef.current = result.version || 0;
+      if (result.saved === "api" && user?.role === "admin") {
+        // La contraseña de un registro nuevo viaja UNA sola vez (el servidor la guarda hasheada); después se quita del estado
+        const strip = (arr, set) => { if (arr.some(r => r && r.password)) set(arr.map(({ password: _pw, ...r }) => r)); };
+        strip(drivers, setDrivers); strip(partners, setPartners); strip(staff, setStaff);
+      }
       if (result.remap) applyRemap(result.remap);
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);

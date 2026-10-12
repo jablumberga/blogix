@@ -17,6 +17,7 @@
  *   BLOGIX_RELATIONAL=true  → use relational bl_* tables instead of JSON blob
  */
 import { validateTripWrites, linkJoint, checkTripRef, sameRefTrips, sanitizeDriverTrips } from "../../src/utils/tripRef.js";
+import bcrypt from "bcryptjs";
 import { buildCompanionTrip } from "../../src/utils/jointTrip.js";
 
 const ALLOWED_ORIGINS = new Set([
@@ -361,6 +362,8 @@ async function syncAllTables(url, key, body) {
 // password from Supabase and restore it so the sync doesn't wipe it.
 async function restorePasswords(url, key, records, table) {
   if (!Array.isArray(records) || records.length === 0) return records;
+  // Una contraseña en texto plano (registro nuevo creado desde la app) se guarda ya hasheada
+  records = await Promise.all(records.map(async r => (typeof r.password === "string" && r.password && !r.password.startsWith("$2")) ? { ...r, password: await bcrypt.hash(r.password, 10) } : r));
   if (records.every(r => r.password)) return records; // all have new passwords — skip fetch
   const res = await fetch(`${url}/rest/v1/${table}?select=id,rec`, {
     headers: supabaseHeaders(key),

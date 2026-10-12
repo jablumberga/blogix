@@ -11,7 +11,7 @@
 
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { signToken } from "./api.mjs";
+import { signToken, verifyToken } from "./api.mjs";
 
 const ALLOWED_ORIGINS = new Set([
   "https://blogix.do",
@@ -132,6 +132,31 @@ export default async (request) => {
   const action = url.pathname.split("/").pop();
 
   if (action === "logout") {
+    return Response.json({ ok: true }, { headers: corsHeaders });
+  }
+
+  // ── POST /api/auth/password — el admin cambia la contraseña de un chofer / socio / usuario ──
+  // Acción dedicada: la contraseña nunca viaja en el autoguardado ni se guarda en texto plano.
+  if (action === "password") {
+    const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const session = token ? await verifyToken(token, BLOGIX_SECRET) : null;
+    if (!session || session.role !== "admin") return Response.json({ error: "Solo el administrador puede cambiar contraseñas" }, { status: 403, headers: corsHeaders });
+    let body;
+    try { body = await request.json(); } catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
+    const TABLES = { drivers: "bl_drivers", partners: "bl_partners", staff: "bl_staff" };
+    const table = TABLES[body?.table];
+    const id = Number(body?.id);
+    const pw = typeof body?.password === "string" ? body.password : "";
+    if (!table || !(id > 0)) return Response.json({ error: "table/id inválidos" }, { status: 400, headers: corsHeaders });
+    if (pw.length < 4 || pw.length > 256) return Response.json({ error: "La contraseña debe tener al menos 4 caracteres" }, { status: 400, headers: corsHeaders });
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || BLOGIX_RELATIONAL !== "true") return Response.json({ error: "Cambio de contraseña solo disponible en modo relacional" }, { status: 501, headers: corsHeaders });
+    const h = { "Content-Type": "application/json", "apikey": SUPABASE_SERVICE_KEY, "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}` };
+    const getRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}&select=rec`, { headers: h });
+    const rows = getRes.ok ? await getRes.json() : [];
+    if (!rows[0]?.rec) return Response.json({ error: "Registro no encontrado (guarda primero el registro y vuelve a intentar)" }, { status: 404, headers: corsHeaders });
+    const newHash = await bcrypt.hash(pw, 10);
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, { method: "PATCH", headers: { ...h, "Prefer": "return=minimal" }, body: JSON.stringify({ rec: { ...rows[0].rec, password: newHash } }) });
+    if (!patchRes.ok) return Response.json({ error: `No se pudo guardar (${patchRes.status})` }, { status: 502, headers: corsHeaders });
     return Response.json({ ok: true }, { headers: corsHeaders });
   }
 
