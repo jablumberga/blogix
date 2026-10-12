@@ -3,8 +3,9 @@ import { Plus, Pencil, Trash2, X, ChevronRight, TrendingUp, TrendingDown } from 
 import { colors } from "../constants/theme.js";
 import { nxId, fmt, expenseTruckId, today } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
+import { activeAyudantes } from "../utils/ayudantes.js";
 
-export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTrips, clients, setExpenses, drivers, expenses, isMobile }) {
+export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTrips, clients, setExpenses, drivers, expenses, ayudantes = [], isMobile }) {
 
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -97,10 +98,14 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
   const save = () => {
     if (!form.plate) return;
     const d = { ...form, partnerId: form.owner === "partner" ? Number(form.partnerId) || null : null, odometer: Number(form.odometer) || null, gpsImei: form.gpsImei || null };
+    // Tripulación fija: ids únicos y en orden; si no se tocó, el camión queda como estaba
+    if (Array.isArray(form.helperIds)) d.helperIds = [...new Set(form.helperIds.map(Number).filter(Boolean))];
     if (editId) {
       const prevTruck = trucks.find(t2 => t2.id === editId);
       const sizeChanged = prevTruck && (prevTruck.size || "T1") !== (form.size || "T1");
-      setTrucks(trucks.map(t2 => t2.id === editId ? { ...d, id: editId } : t2));
+      // Un ayudante fijo va en un solo camión: si se puso aquí, sale de la tripulación del otro
+      const mine = new Set(d.helperIds || []);
+      setTrucks(trucks.map(t2 => t2.id === editId ? { ...d, id: editId } : (mine.size && (t2.helperIds || []).some(x => mine.has(Number(x))) ? { ...t2, helperIds: t2.helperIds.map(Number).filter(x => !mine.has(x)) } : t2)));
       if (sizeChanged && trips && setTrips && clients) {
         const newSize = form.size || "T1";
         const updatedRevenues = {};
@@ -145,7 +150,8 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
         }
       }
     } else {
-      setTrucks([...trucks, { ...d, id: nxId(trucks) }]);
+      const mineNew = new Set(d.helperIds || []);
+      setTrucks([...trucks.map(t2 => (mineNew.size && (t2.helperIds || []).some(x => mineNew.has(Number(x))) ? { ...t2, helperIds: t2.helperIds.map(Number).filter(x => !mineNew.has(x)) } : t2)), { ...d, id: nxId(trucks) }]);
     }
     setShowForm(false); setRecalcInfo(null);
   };
@@ -178,6 +184,22 @@ export default function FleetPage({ t, trucks, setTrucks, partners, trips, setTr
         <Inp label="IMEI del GPS (TrackSolid)" value={form.gpsImei ?? ""} onChange={e => setForm({ ...form, gpsImei: e.target.value.trim() })} placeholder="opcional" />
         <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 8 }}>Con el IMEI, los km del camión se traen solos del GPS; sin GPS se usan odómetro o distancia de referencia.</div>
       </div>
+      {activeAyudantes(ayudantes).length > 0 && (() => {
+        const crew = form.helperIds || [];
+        const opts = activeAyudantes(ayudantes);
+        const slots = Array.from({ length: Math.max(3, crew.filter(Boolean).length) }, (_, j) => j);
+        const setSlot = (i, v) => { const next = slots.map(j => (j === i ? (v ? Number(v) : null) : (crew[j] ?? null))); setForm({ ...form, helperIds: next }); };
+        const otherTruck = (id) => trucks.find(tk => tk.id !== editId && (tk.helperIds || []).map(Number).includes(id));
+        return <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Tripulación fija (ayudantes que salen puestos en los viajes de este camión; en cada viaje se pueden cambiar)</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 10 }}>
+            {slots.map(i => <Sel key={i} label={`Ayudante ${i + 1}`} value={crew[i] || ""} onChange={e => setSlot(i, e.target.value)}>
+              <option value="">— Ninguno —</option>
+              {opts.filter(a => a.id === Number(crew[i]) || !crew.map(Number).includes(a.id)).map(a => { const ot = otherTruck(a.id); return <option key={a.id} value={a.id}>{a.name}{a.payMode === "driver" ? " (por el chofer)" : ""}{ot ? ` · ahora en ${ot.plate}` : ""}</option>; })}
+            </Sel>)}
+          </div>
+        </div>;
+      })()}
       {form.owner === "partner" && <Sel label={t.partnerName} value={form.partnerId} onChange={e => setForm({ ...form, partnerId: e.target.value })} style={{ marginBottom: 12 }}>
         <option value="">{t.none}</option>{(partners||[]).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
       </Sel>}

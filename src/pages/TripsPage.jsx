@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
+import HelperSlots from "../components/HelperSlots.jsx";
+import { normalizeAyudante, crewSlots, buildHelperLines, helperExpensePlan, applyHelperPlan, isDirectLine, clientHelpersMode, clientSkipsHelpers, tripHelpersPaid, linesUseList } from "../utils/ayudantes.js";
 import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2, Calendar, FileCheck, FileText, Handshake, Hash, Zap, RotateCw } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today } from "../utils/helpers.js";
@@ -12,7 +14,7 @@ import { checkRef } from "../api.js";
 import { generateConduce } from "../utils/generateConduce.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td, StatusBadge, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, invoices, cobros = [], partners = [], settlementStatus = {}, isMobile }) {
+export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, invoices, cobros = [], partners = [], settlementStatus = {}, ayudantes = [], isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({});
@@ -89,7 +91,13 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       : { ...obj, updatedBy: user?.name, updatedAt: at, history };
   };
   const openNew = () => { setForm({ ...emptyForm, createdBy: user.name }); setEditId(null); setShowForm(true); setRateMsg(""); setFormError(""); };
-  const openEdit = (tr) => { setForm({ ...tr }); setEditId(tr.id); setShowForm(true); setRateMsg(""); setFormError(""); };
+  const openEdit = (tr) => {
+    // Casillas de ayudantes desde las líneas guardadas; un viaje sin ayudantes de la lista queda exactamente como estaba
+    const usesList = linesUseList(tr.helpers);
+    setForm({ ...tr, helperIds: usesList ? (tr.helpers || []).map(h => (h?.ayudanteId != null ? Number(h.ayudanteId) : null)) : [],
+      ...(usesList && !tr.helperNames ? { helperNames: (tr.helpers || []).map(h => (h?.ayudanteId != null ? h.name : "")) } : {}) });
+    setEditId(tr.id); setShowForm(true); setRateMsg(""); setFormError("");
+  };
 
   const handleClientChange = (cid) => {
     const cl = clients.find(c => c.id === Number(cid));
@@ -99,6 +107,10 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       if (cl.rules?.defaultBrokerId) f.brokerId = cl.rules.defaultBrokerId;
       tryApplyRate(f, cl);
     }
+    // Ayudantes según el cliente: si no lleva o los paga él → 0; al volver a un cliente normal, por defecto otra vez
+    const prevCl = clients.find(c => c.id === Number(form.clientId));
+    if (clientSkipsHelpers(cl)) f.numHelpers = 0;
+    else if (clientSkipsHelpers(prevCl) && Number(form.numHelpers) === 0) f.numHelpers = null;
     setForm(f);
   };
 
@@ -144,6 +156,9 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
 
   const handleTruckChange = (tid) => {
     const f = { ...form, truckId: tid };
+    // Tripulación fija del camión: sale puesta (se puede cambiar abajo)
+    const crew = crewSlots(trucks.find(tk => tk.id === Number(tid)), ayudantes);
+    if (crew.helperIds.length || (form.helperIds || []).some(Boolean)) { f.helperIds = crew.helperIds; f.helperNames = crew.helperNames; }
     tryApplyRate(f, null);
     setForm(f);
   };
@@ -164,7 +179,6 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     const calc = driver ? calcDriverPay({ driver, trip: data, truck, clientId: data.clientId }) : null;
     const cancelled = data.status === "cancelled";
     const driverAmt = !calc || cancelled || normalizeDriver(driver).payType === "fixed" ? 0 : calc.driverNet;
-    const helperAmt = !calc || cancelled ? 0 : calc.helpersTotal;
     setExpenses(prevExp => {
       let next = [...prevExp];
       const upsert = (category, amount, description, extra) => {
@@ -177,7 +191,10 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         }
       };
       upsert("driverPay", driverAmt, calc ? describeDriverPay(calc, driver) : "", { driverId: data.driverId });
-      upsert("helper", helperAmt, calc ? `Ayudantes (${calc.numHelpers} × ${fmt(calc.helperEach)}): ${(data.helperNames || []).filter(Boolean).join(", ") || driver?.name || ""}` : "", { driverId: data.driverId });
+      // Ayudantes: lo que va por el chofer (gasto sin ayudanteId, como siempre) + un gasto por cada ayudante directo
+      const viaNames = (data.helperNames || []).filter((_, i) => !isDirectLine(data.helpers?.[i])).filter(Boolean).join(", ");
+      const plan = helperExpensePlan({ trip: { ...data, driverId: data.driverId }, calc, driverDescription: (n) => calc ? `Ayudantes (${n} × ${fmt(calc.helperEach)}): ${viaNames || driver?.name || ""}` : "" });
+      next = applyHelperPlan(next, { tripId, date: data.date, plan });
       // Comisión de broker (solo clientes que NO son pass-through)
       const cl = clients.find(c => c.id === data.clientId);
       const broker = data.brokerId ? brokers.find(b => b.id === data.brokerId) : null;
@@ -210,9 +227,21 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     }
     const numHelpers = form.numHelpers === null || form.numHelpers === "" ? (payPreview?.numHelpers ?? 0) : Number(form.numHelpers);
     const helperPayEach = form.helperPayEach === "" ? (payPreview?.helperEach ?? 0) : Number(form.helperPayEach);
-    const helperNames = (form.helperNames || []).slice(0, numHelpers);
-    const helpersArr = Array.from({ length: numHelpers }, (_, i) => ({ name: helperNames[i] || `Ayudante ${i + 1}`, pay: helperPayEach }));
-    const data = { ...form, truckId: Number(form.truckId), driverId: Number(form.driverId), clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null,
+    // Con ayudantes de la lista: líneas con su id (directo o por el chofer); sin ellos, exactamente como antes
+    const usesList = (form.helperIds || []).slice(0, numHelpers).some(Boolean);
+    const prevSaved = editId ? trips.find(tr => tr.id === editId) : null;
+    // Candado: si ya se pagó algo de ayudantes en este viaje, no se puede pasar a (ni sacar de) la lista: movería dinero ya pagado
+    if (prevSaved && tripHelpersPaid(expenses, editId) && (usesList || linesUseList(prevSaved.helpers))) {
+      const money = (ls) => JSON.stringify((ls || []).map(l => [l.ayudanteId ?? null, !!l.direct, Number(l.pay) || 0])); // el nombre no mueve dinero
+      const sameLines = money(buildHelperLines({ count: numHelpers, pay: helperPayEach, helperIds: form.helperIds, helperNames: form.helperNames, ayudantes, prevLines: prevSaved.helpers })) === money(prevSaved.helpers);
+      if (!sameLines) { setFormError("Los ayudantes de este viaje ya se pagaron en Nómina: no se pueden cambiar. Desmarca ese pago en Nómina si hay que corregirlo."); return; }
+    }
+    const helpersArr = usesList
+      ? buildHelperLines({ count: numHelpers, pay: helperPayEach, helperIds: form.helperIds, helperNames: form.helperNames, ayudantes, prevLines: prevSaved?.helpers })
+      : Array.from({ length: numHelpers }, (_, i) => ({ name: (form.helperNames || []).slice(0, numHelpers)[i] || `Ayudante ${i + 1}`, pay: helperPayEach }));
+    const helperNames = usesList ? helpersArr.map((h, i) => (form.helperIds?.[i] ? h.name : (form.helperNames?.[i] || ""))) : (form.helperNames || []).slice(0, numHelpers);
+    const { helperIds: _hIds, ...formData } = form; // las casillas no se guardan: el viaje guarda sus líneas
+    const data = { ...formData, truckId: Number(form.truckId), driverId: Number(form.driverId), clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null,
       odoStart: Number(form.odoStart) || null, odoEnd: Number(form.odoEnd) || null,
       weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, numHelpers, helperPayEach, helperNames, helpers: helpersArr,
       discounts: (form.discounts || []).filter(d => Number(d.amount) > 0),
@@ -220,7 +249,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     // Viaje conjunto registrado aquí: se crea el viaje del compañero y sus gastos
     const makeCompanion = (saved, list) => {
       if (!wantsCompanion) return { saved, list };
-      const built = buildCompanionTrip({ trip: saved, companionDriverId: saved.jointDriverId, companionTruckId: saved.jointTruckId, drivers, trucks, clients, nextTripId: nxId(list), nextExpenseId: nxId(expenses), createdBy: user?.name });
+      const built = buildCompanionTrip({ trip: saved, companionDriverId: saved.jointDriverId, companionTruckId: saved.jointTruckId, drivers, trucks, clients, ayudantes, nextTripId: nxId(list), nextExpenseId: nxId(expenses), createdBy: user?.name });
       if (!built) return { saved, list };
       if (built.revenueEstimated) window.alert(`El cliente no tiene tarifa para ese destino con el camión del compañero: se usó la misma tarifa (${fmt(saved.revenue)}). Ajústala en el viaje #${built.trip.id} si hace falta.`);
       if (built.expenses.length) setExpenses(prev => [...prev, ...built.expenses.map((e, i) => ({ ...e, id: nxId(prev) + i }))]);
@@ -298,7 +327,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const clientMap = new Map(clients.map(c => [c.id, c]));
   const driverMap = new Map(drivers.map(d => [d.id, d]));
   const truckMap  = new Map(trucks.map(tk => [tk.id, tk]));
-  const tripExpMap = expenses.reduce((m, e) => { if (e.tripId && !["adelanto_conductor", "nominaTotalOverride", "partner_settlement"].includes(e.category)) m.set(e.tripId, (m.get(e.tripId) || 0) + e.amount); return m; }, new Map());
+  const tripExpMap = expenses.reduce((m, e) => { if (e.tripId && !["adelanto_conductor", "adelanto_ayudante", "nominaTotalOverride", "partner_settlement"].includes(e.category)) m.set(e.tripId, (m.get(e.tripId) || 0) + e.amount); return m; }, new Map());
   if (filterExtra === "nodocs") filtered = filtered.filter(tr => tr.status !== "cancelled" && !docsComplete(tr, clientMap.get(tr.clientId)));
   if (filterExtra === "uninvoiced") filtered = filtered.filter(tr => tr.status !== "cancelled" && (tr.revenue || 0) > 0 && !invoicedTripMap.has(tr.id));
   // Margen por viaje: tarifa − chofer − ayudantes − gastos del viaje; en camión de socio, lo que le toca al socio
@@ -497,15 +526,15 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                 </Sel>
                 {n > 0 && <Inp label={`Pago por ayudante${payPreview && form.helperPayEach === "" ? " (tarifario)" : ""}`} type="number" placeholder={payPreview ? String(payPreview.helperEach) : "RD$"} value={form.helperPayEach} onChange={e => setForm({ ...form, helperPayEach: e.target.value })} />}
               </div>
-              {n > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, marginTop: 8 }}>
-                {Array.from({ length: n }, (_, i) => <Inp key={i} label={`Nombre ayudante ${i + 1} (opcional)`} value={form.helperNames?.[i] || ""} onChange={e => { const names = [...(form.helperNames || [])]; names[i] = e.target.value; setForm({ ...form, helperNames: names }); }} style={{ fontSize: 11 }} />)}
-              </div>}
+              {n > 0 && <HelperSlots n={n} helperIds={form.helperIds} helperNames={form.helperNames} ayudantes={ayudantes} prevLines={editId ? trips.find(tr => tr.id === editId)?.helpers : []} onChange={({ helperIds, helperNames }) => setForm({ ...form, helperIds, helperNames })} />}
+              {editId && tripHelpersPaid(expenses, editId) && (linesUseList(trips.find(tr => tr.id === editId)?.helpers) || (form.helperIds || []).some(Boolean)) && <div style={{ marginTop: 6, fontSize: 11, color: colors.orange }}>🔒 Los ayudantes de este viaje ya se pagaron en Nómina: no se pueden cambiar (desmarca ese pago primero si hay que corregirlo).</div>}
+              {clientHelpersMode(selectedClient) !== "normal" && <div style={{ marginTop: 6, fontSize: 11, color: colors.cyan }}>{clientHelpersMode(selectedClient) === "none" ? "Este cliente no lleva ayudantes" : "A los ayudantes de este cliente los paga el cliente"}: el viaje sale con 0 ayudantes a tu cargo. Si en este viaje sí van por tu cuenta, cambia la cantidad arriba.</div>}
               {payPreview && <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, fontSize: 12, background: payPreview.rateFound ? colors.green + "10" : colors.orange + "12", border: `1px solid ${payPreview.rateFound ? colors.green : colors.orange}40` }}>
                 {payPreview.payType === "perTrip" && !payPreview.rateFound
                   ? <span style={{ color: colors.orange }}>⚠️ El chofer no tiene tarifa para este destino{payPreview.sheetName ? ` en el tarifario «${payPreview.sheetName}»` : ""}. Agrégala en Choferes.</span>
                   : <span>
                       <b>Chofer</b> {fmt(payPreview.base)}{payPreview.dieta ? ` + dieta ${fmt(payPreview.dieta)}` : ""}{payPreview.discounts ? ` − desc. ${fmt(payPreview.discounts)}` : ""} = <b>{fmt(payPreview.driverNet)}</b>
-                      {payPreview.numHelpers > 0 && <> · <b>Ayudantes</b> {payPreview.numHelpers} × {fmt(payPreview.helperEach)} = <b>{fmt(payPreview.helpersTotal)}</b></>}
+                      {payPreview.numHelpers > 0 && <> · <b>Ayudantes</b> {payPreview.numHelpers} × {fmt(payPreview.helperEach)} = <b>{fmt(payPreview.helpersTotal)}</b>{(() => { const dn = (form.helperIds || []).slice(0, payPreview.numHelpers).some(Boolean) ? buildHelperLines({ count: payPreview.numHelpers, pay: payPreview.helperEach, helperIds: form.helperIds, helperNames: form.helperNames, ayudantes, prevLines: editId ? trips.find(tr => tr.id === editId)?.helpers : [] }).filter(isDirectLine).length : 0; return dn > 0 ? <span style={{ color: colors.cyan }}> ({dn} directo{dn > 1 ? "s" : ""}: {fmt(dn * payPreview.helperEach)} no van al chofer)</span> : null; })()}</>}
                       {" "}· Total nómina del viaje <b>{fmt(payPreview.total)}</b>
                       {payPreview.sheetName && <span style={{ color: colors.textMuted }}> · tarifario «{payPreview.sheetName}»</span>}
                     </span>}

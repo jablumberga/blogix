@@ -113,7 +113,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       return false;
     }).reduce((s,e) => s + e.amount, 0);
     const brokerFees = periodExpenses.filter(e => e.category === "broker_commission").reduce((s,e) => s + e.amount, 0);
-    const operExp    = periodExpenses.filter(e => !["driverPay","nominaTotalOverride","broker_commission","adelanto_conductor","partner_settlement","cash_withdrawal","reserve_withdrawal"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
+    const operExp    = periodExpenses.filter(e => !["driverPay","nominaTotalOverride","broker_commission","adelanto_conductor","adelanto_ayudante","partner_settlement","cash_withdrawal","reserve_withdrawal"].includes(e.category)).reduce((s,e) => s + e.amount, 0);
     const totalExp   = nomina + brokerFees + operExp;
     // grossProfit uses netRevenue: broker pass-through deductions are contra-revenue,
     // and since syncAll doesn't generate broker_commission expenses for pass-through clients,

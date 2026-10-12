@@ -5,6 +5,7 @@ import { fmt, nxId } from "../utils/helpers.js";
 import { DR_PROVINCES } from "../constants/destinations.js";
 import { parseRateRows, mergeRates, TEMPLATE_HEADERS, TEMPLATE_EXAMPLE_ROWS } from "../utils/rateImport.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Chk, Th, Td } from "../components/ui/index.jsx";
+import { CLIENT_HELPER_MODES } from "../utils/ayudantes.js";
 
 export default function ClientsPage({ t, clients, setClients, brokers, setTrips, trips = [], invoices = [], isMobile }) {
   const [showForm, setShowForm] = useState(false);
@@ -119,6 +120,16 @@ export default function ClientsPage({ t, clients, setClients, brokers, setTrips,
           <Chk label={t.requiresInvoiceRef} checked={form.rules.requiresInvoiceRef} onChange={() => setForm({ ...form, rules: { ...form.rules, requiresInvoiceRef: !form.rules.requiresInvoiceRef } })} />
           <Chk label={t.requiresDocuments} checked={form.rules.requiresDocuments} onChange={() => setForm({ ...form, rules: { ...form.rules, requiresDocuments: !form.rules.requiresDocuments } })} />
         </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr", gap: 12, marginTop: 10, alignItems: "end" }}>
+          <Sel label="Ayudantes en los viajes de este cliente" value={form.rules.helpersMode || "normal"} onChange={e => setForm({ ...form, rules: { ...form.rules, helpersMode: e.target.value === "normal" ? undefined : e.target.value } })}>
+            {Object.entries(CLIENT_HELPER_MODES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </Sel>
+          <div style={{ fontSize: 11, color: colors.textMuted, paddingBottom: 8 }}>
+            {(form.rules.helpersMode || "normal") === "normal" ? "Los viajes llevan los ayudantes de siempre (1 en T1, 2 en T2, o la tripulación del camión)."
+              : form.rules.helpersMode === "none" ? "Los viajes de este cliente salen con 0 ayudantes. Se puede cambiar en un viaje puntual."
+              : "El cliente les paga directo a los ayudantes: los viajes salen con 0 ayudantes a tu cargo (sin gasto). Se puede cambiar en un viaje puntual."}
+          </div>
+        </div>
       </div>
 
       <div style={{ background: colors.inputBg, borderRadius: 8, padding: 12, marginBottom: 12, border: `1px solid ${colors.border}` }}>
@@ -182,6 +193,8 @@ export default function ClientsPage({ t, clients, setClients, brokers, setTrips,
               {c.rules?.requiresPOD && <Badge label="POD" color={colors.orange} />}
               {c.rules?.requiresInvoiceRef && <Badge label="Ref" color={colors.red} />}
               {c.rules?.requiresDocuments && <Badge label="Doc" color={colors.purple} />}
+              {c.rules?.helpersMode === "none" && <Badge label="Sin ayud." color={colors.textMuted} />}
+              {c.rules?.helpersMode === "client" && <Badge label="Ayud. cliente" color={colors.cyan} />}
               {c.rules?.defaultBrokerId && <Badge label={`B ${brokers.find(b => b.id === c.rules.defaultBrokerId)?.commissionPct || ""}%`} color={colors.yellow} />}
             </div>
           </Td>

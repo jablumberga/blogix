@@ -3,6 +3,7 @@
  * los PDF, el Excel para contabilidad y (más adelante) la pantalla de Nómina.
  */
 import { calcDriverPay, normalizeDriver } from "./driverPay.js";
+import { splitTripHelpers, isDirectLine, normalizeAyudante } from "./ayudantes.js";
 
 /** Documentos físicos que la oficina recibe por cada viaje. */
 export const TRIP_DOCS = [
@@ -59,7 +60,9 @@ export function buildPayroll({ period, drivers = [], trips = [], trucks = [], cl
       const truck = truckMap.get(trip.truckId);
       const client = clientMap.get(trip.clientId);
       const calc = calcDriverPay({ driver, trip, truck, clientId: trip.clientId });
-      return { trip, calc, client, truck, docsOk: docsComplete(trip, client), payDate: payrollDate(trip, client) };
+      // Ayudantes: los directos se pagan aparte (nómina de ayudantes); al chofer solo los que van por él
+      const split = splitTripHelpers(trip, calc);
+      return { trip, calc, split, client, truck, docsOk: docsComplete(trip, client), payDate: payrollDate(trip, client) };
     };
     const byDate = (a, b) => (a.trip.date || "").localeCompare(b.trip.date || "");
     // Recibidos cuya fecha de recepción cae en el período → se pagan aquí
@@ -71,17 +74,18 @@ export function buildPayroll({ period, drivers = [], trips = [], trucks = [], cl
     const base      = dTrips.reduce((s, x) => s + x.calc.base, 0);
     const dieta     = dTrips.reduce((s, x) => s + x.calc.dieta, 0);
     const discounts = dTrips.reduce((s, x) => s + x.calc.discounts, 0);
-    const helpers   = dTrips.reduce((s, x) => s + x.calc.helpersTotal, 0);
-    const helperCount = dTrips.reduce((s, x) => s + x.calc.numHelpers, 0);
+    const helpers   = dTrips.reduce((s, x) => s + x.split.viaDriver.amount, 0);
+    const helperCount = dTrips.reduce((s, x) => s + x.split.viaDriver.count, 0);
+    const directHelpers = dTrips.reduce((s, x) => s + x.split.directTotal, 0);
     const fixed = driver.payType === "fixed" ? (Number(driver.fixedAmount) || 0) : 0;
     const gross = driver.payType === "fixed" ? fixed : base + dieta;
     const net = Math.max(0, gross - discounts - advances);
-    const helperNames = [...new Set(dTrips.flatMap(x => (x.trip.helpers || []).map(h => h.name).filter(Boolean)))];
+    const helperNames = [...new Set(dTrips.flatMap(x => (x.trip.helpers || []).filter(h => !isDirectLine(h)).map(h => h.name).filter(Boolean)))];
     const missingRates = dTrips.filter(x => driver.payType === "perTrip" && !x.calc.rateFound).length;
     if (allTrips.length === 0 && driver.payType !== "fixed") continue;
     rows.push({ driver, payType: driver.payType, fixedAmount: fixed, trips: dTrips, tripCount: dTrips.length,
       pendingTrips, pendingCount: pendingTrips.length, allTrips,
-      base, dieta, discounts, advances, helpers, helperCount, helperNames, gross, net, missingRates,
+      base, dieta, discounts, advances, helpers, helperCount, helperNames, directHelpers, gross, net, missingRates,
       docsPending: pendingTrips.length });
   }
 
@@ -109,7 +113,8 @@ export function payrollPayment({ row, period, expenses = [] }) {
   const tripIds = new Set(row.trips.map(x => x.trip.id));
   const payExps = expenses.filter(e => e.category === "driverPay" && (
     (e.tripId && tripIds.has(e.tripId)) || (!e.tripId && e.driverId === row.driver.id && e.payrollKey === key)));
-  const helperExps = expenses.filter(e => e.category === "helper" && tripIds.has(e.tripId));
+  // Solo el gasto de ayudantes que va por el chofer (los directos tienen ayudanteId y su propia nómina)
+  const helperExps = expenses.filter(e => e.category === "helper" && tripIds.has(e.tripId) && (e.ayudanteId == null || e.ayudanteId === ""));
   const override = expenses.find(e => e.category === "nominaTotalOverride" && e.driverId === row.driver.id && e.payrollKey === key) || null;
   const fixedExp = payExps.find(e => !e.tripId) || null;
   const lines = row.trips.map(x => {
@@ -137,4 +142,68 @@ export function partnerTripsInPeriod({ partner, period, trips, trucks, clients =
     .filter(tr => truckIds.has(tr.truckId) && tr.status !== "cancelled" && inPeriod(tr.date, period))
     .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
     .map(trip => ({ trip, client: clientMap.get(trip.clientId), truck: trucks.find(tk => tk.id === trip.truckId), driver: drivers.find(d => d.id === trip.driverId), docsOk: docsComplete(trip, clientMap.get(trip.clientId)) }));
+}
+
+/**
+ * Nómina de ayudantes directos de un período (misma regla que los choferes: un viaje se paga en la
+ * quincena en que la oficina recibió sus documentos; sin documentos, espera).
+ * Monto por viaje = pago por ayudante del tarifario del chofer de ese viaje (calcDriverPay).
+ * Adelantos: gastos «adelanto_ayudante» del ayudante con fecha en el período.
+ * Devuelve { period, rows: [{ ayudante, trips:[{trip, calc, client, truck, driver, amount}], pendingTrips,
+ *   tripCount, pendingCount, gross, advances, net }], totals }
+ */
+export function buildHelperPayroll({ period, ayudantes = [], drivers = [], trips = [], trucks = [], clients = [], expenses = [] }) {
+  const truckMap = new Map(trucks.map(tk => [tk.id, tk]));
+  const clientMap = new Map(clients.map(c => [c.id, c]));
+  const driverMap = new Map(drivers.map(d => [d.id, d]));
+  const byHelper = new Map(); // ayudanteId → { lines, pending }
+  for (const trip of trips) {
+    if (trip.status === "cancelled" || !Array.isArray(trip.helpers) || !trip.helpers.some(isDirectLine)) continue;
+    const driver = driverMap.get(trip.driverId);
+    if (!driver) continue;
+    const truck = truckMap.get(trip.truckId), client = clientMap.get(trip.clientId);
+    const calc = calcDriverPay({ driver, trip, truck, clientId: trip.clientId });
+    const split = splitTripHelpers(trip, calc);
+    if (split.direct.length === 0) continue;
+    const docsOk = docsComplete(trip, client), payDate = payrollDate(trip, client);
+    for (const d of split.direct) {
+      if (!byHelper.has(d.ayudanteId)) byHelper.set(d.ayudanteId, { lines: [], pending: [] });
+      const item = { trip, calc, client, truck, driver: normalizeDriver(driver), amount: d.amount, docsOk, payDate };
+      if (docsOk && inPeriod(payDate, period)) byHelper.get(d.ayudanteId).lines.push(item);
+      else if (!docsOk && inPeriod(trip.date, period)) byHelper.get(d.ayudanteId).pending.push(item);
+    }
+  }
+  const byDate = (a, b) => (a.trip.date || "").localeCompare(b.trip.date || "");
+  const rows = [];
+  // Un directo que ya no está en la lista (borrado, o lista vieja en un teléfono) igual sale aquí para pagarse
+  const known = new Set((ayudantes || []).filter(Boolean).map(a => Number(a.id)));
+  const orphans = [...byHelper.keys()].filter(id => !known.has(id)).map(id => {
+    const any = byHelper.get(id).lines[0] || byHelper.get(id).pending[0];
+    const line = (any?.trip.helpers || []).find(h => Number(h?.ayudanteId) === id);
+    return { id, name: `${line?.name || "Ayudante #" + id} (no está en la lista)`, payMode: "direct", status: "inactive", orphan: true };
+  });
+  for (const raw of [...(ayudantes || []).filter(Boolean), ...orphans]) {
+    const ayudante = normalizeAyudante(raw);
+    const got = byHelper.get(ayudante.id) || { lines: [], pending: [] };
+    const advances = expenses.filter(e => e.category === "adelanto_ayudante" && Number(e.ayudanteId) === ayudante.id && inPeriod(e.date, period)).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    if (got.lines.length === 0 && got.pending.length === 0 && advances === 0) continue;
+    const tripsPaid = got.lines.sort(byDate), pendingTrips = got.pending.sort(byDate);
+    const gross = tripsPaid.reduce((s, x) => s + x.amount, 0);
+    rows.push({ ayudante, trips: tripsPaid, tripCount: tripsPaid.length, pendingTrips, pendingCount: pendingTrips.length,
+      gross, advances, net: Math.max(0, gross - advances) });
+  }
+  rows.sort((a, b) => (a.ayudante.name || "").localeCompare(b.ayudante.name || ""));
+  const totals = rows.reduce((t, r) => ({ trips: t.trips + r.tripCount, gross: t.gross + r.gross, advances: t.advances + r.advances, net: t.net + r.net }), { trips: 0, gross: 0, advances: 0, net: 0 });
+  return { period, rows, totals };
+}
+
+/** Estado de pago de un ayudante en el período según sus gastos «helper» con su ayudanteId. */
+export function helperPayrollPayment({ row, period, expenses = [] }) {
+  const key = payrollKey(period);
+  const id = row.ayudante.id;
+  const exps = expenses.filter(e => e.category === "helper" && Number(e.ayudanteId) === id);
+  const lines = row.trips.map(x => { const exp = exps.find(e => e.tripId === x.trip.id) || null; return { ...x, exp, paid: exp?.status === "paid" }; });
+  const paidCount = lines.filter(l => l.paid).length;
+  const paid = lines.length > 0 && paidCount === lines.length;
+  return { key, lines, paid, partial: !paid && paidCount > 0, paidCount, exps: lines.map(l => l.exp).filter(Boolean) };
 }

@@ -86,3 +86,45 @@ test("sanitizeDriverTrips: un viaje viejo sin cambios no se bloquea por la fecha
   const edited = sanitizeDriverTrips({ incoming: [{ ...old, revenue: 9 }], existing: [old], driverId: 5, clients, trucks, today });
   assert.equal(edited.errors.length, 1, "editar un viaje de hace meses sí se rechaza");
 });
+
+// ── Ayudantes en viajes del chofer ────────────────────────────────────────────
+const lista = [{ id: 1, name: "Pedro", payMode: "direct", status: "active" }, { id: 2, name: "Juan", payMode: "driver", status: "active" }, { id: 3, name: "Luis", payMode: "direct", status: "inactive" }];
+test("sanitizeDriverTrips: viaje nuevo con ayudantes de la lista válidos pasa", () => {
+  const helpers = [{ name: "Pedro", pay: 500, ayudanteId: 1, direct: true }, { name: "Juan", pay: 500, ayudanteId: 2, direct: false }, { name: "Chichí", pay: 500 }];
+  const r = sanitizeDriverTrips({ incoming: [{ ...good, id: 30, helpers }], existing: [], driverId: 5, clients, trucks, today, ayudantes: lista });
+  assert.equal(r.errors.length, 0); assert.deepEqual(r.trips[0].helpers, helpers);
+});
+test("lista vieja en el teléfono: el servidor corrige las líneas (no rechaza el viaje) y rehace sus gastos de ayudantes", async () => {
+  const { normalizeDriverHelpers, normalizeHelperLines } = await import("../src/utils/ayudantes.js");
+  const lista2 = [...lista, { id: 4, name: "Borrado", status: "deleted" }];
+  const helpers = [{ name: "X", pay: 500, ayudanteId: 9, direct: true }, { name: "Luis", pay: 500, ayudanteId: 3, direct: true },
+                   { name: "Juan", pay: 500, ayudanteId: 2, direct: true }, { name: "Y", pay: 500, direct: true }, { name: "Pedro", pay: 500, ayudanteId: 1, direct: true },
+                   { name: "Pedro", pay: 500, ayudanteId: 1, direct: true }, { name: "Borrado", pay: 500, ayudanteId: 4, direct: true }];
+  const n = normalizeHelperLines(helpers, lista2);
+  assert.equal(n.changed, true);
+  assert.deepEqual(n.lines.map(l => [l.ayudanteId ?? null, !!l.direct]), [[null, false], [null, false], [2, false], [null, false], [1, true], [null, false], [null, false]]);
+  // viaje válido: no cambia nada
+  const ok = [{ name: "Pedro", pay: 500, ayudanteId: 1, direct: true }, { name: "Juan", pay: 500, ayudanteId: 2, direct: false }, { name: "Chichí", pay: 500 }];
+  assert.equal(normalizeHelperLines(ok, lista).changed, false);
+  // gastos rehechos: Pedro directo 500 y el resto (6 × 500) por el chofer
+  const trip = { ...good, id: 60, driverId: 5, numHelpers: 7, helperPayEach: 500, helpers };
+  const exps = [{ id: 1, tripId: 60, category: "helper", amount: 2500, ayudanteId: 9 }, { id: 2, tripId: 60, category: "fuel", amount: 100 }];
+  const r = normalizeDriverHelpers({ trips: [trip], expenses: exps, ayudantes: lista2, nextExpenseId: 10 });
+  assert.deepEqual(r.fixedTripIds, [60]);
+  const h = r.expenses.filter(e => e.category === "helper").map(e => [e.ayudanteId ?? null, e.driverId ?? null, e.amount, e.id]);
+  assert.deepEqual(h, [[null, 5, 3000, 10], [1, null, 500, 11]]);
+  assert.ok(r.expenses.some(e => e.category === "fuel"), "los demás gastos quedan");
+  // un viaje sin cambios no toca sus gastos
+  const r2 = normalizeDriverHelpers({ trips: [{ ...good, id: 61, helpers: ok }], expenses: exps, ayudantes: lista, nextExpenseId: 10 });
+  assert.deepEqual(r2.fixedTripIds, []); assert.equal(r2.expenses, exps.length ? r2.expenses : r2.expenses); assert.deepEqual(r2.expenses, exps);
+});
+test("sanitizeDriverTrips: en un viaje ya registrado el chofer no cambia los ayudantes (los pone la oficina)", () => {
+  const prev = { ...good, id: 40, numHelpers: 2, helpers: [{ name: "Pedro", pay: 500, ayudanteId: 1, direct: true }, { name: "Juan", pay: 500, ayudanteId: 2, direct: false }] };
+  const stale = { ...good, id: 40, status: "delivered", numHelpers: 1, helpers: [{ name: "Ayudante 1", pay: 500 }] };
+  const r = sanitizeDriverTrips({ incoming: [stale], existing: [prev], driverId: 5, clients, trucks, today, ayudantes: lista });
+  assert.equal(r.errors.length, 0); assert.equal(r.trips[0].status, "delivered");
+  assert.deepEqual(r.trips[0].helpers, prev.helpers); assert.equal(r.trips[0].numHelpers, 2);
+  // sin lista (llamadas viejas): igual que antes
+  const r2 = sanitizeDriverTrips({ incoming: [stale], existing: [prev], driverId: 5, clients, trucks, today });
+  assert.equal(r2.trips[0].numHelpers, 1);
+});

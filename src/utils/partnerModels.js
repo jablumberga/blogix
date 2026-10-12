@@ -126,7 +126,7 @@ export function computeSettlement({ partner, period, trips, expenses, trucks, cl
   // Gastos atribuibles a los camiones del socio en la quincena
   const tripMap = new Map(trips.map(tr => [tr.id, tr]));
   const candidate = expenses.filter(e => {
-    if (["nominaTotalOverride", "adelanto_conductor", "broker_commission", "partner_settlement"].includes(e.category)) return false;
+    if (["nominaTotalOverride", "adelanto_conductor", "adelanto_ayudante", "broker_commission", "partner_settlement"].includes(e.category)) return false;
     if (e.tripId) return tripIds.has(e.tripId);
     if (!e.truckId || !truckIds.has(e.truckId)) return false;
     return e.date >= period.dateFrom && e.date <= period.dateTo;
