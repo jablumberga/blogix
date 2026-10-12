@@ -32,7 +32,8 @@ export default function ClientsPage({ t, clients, setClients, brokers, setTrips,
       } else {
         const { rates: merged, updated, added } = mergeRates(form.rates || [], rates);
         setForm(f => ({ ...f, rates: merged }));
-        setImportMsg({ ok: true, text: `${added} destino(s) nuevo(s), ${updated} actualizado(s), ${rates.length - added - updated} sin cambios.` + (errors.length ? ` ${errors.length} fila(s) con error:` : ""), errors });
+        const customs = rates.filter(r => r.custom).map(r => r.municipality);
+        setImportMsg({ ok: true, text: `${added} destino(s) nuevo(s), ${updated} actualizado(s), ${rates.length - added - updated} sin cambios.` + (customs.length ? ` ${customs.length} destino(s) con nombre propio del cliente (se aceptan tal cual y aparecen al registrar viajes de este cliente): ${customs.join(", ")}.` : "") + (errors.length ? ` ${errors.length} fila(s) con error:` : ""), errors });
       }
     } catch (err) {
       setImportMsg({ ok: false, text: `No se pudo leer el archivo: ${err.message}`, errors: [] });

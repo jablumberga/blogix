@@ -402,7 +402,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
             <option value="pending">{t.pending}</option>{form.status === "in_transit" && <option value="in_transit">{t.inTransit}</option>}<option value="delivered">{t.delivered}</option><option value="cancelled">{t.cancelled}</option>
           </Sel>
         </div>
-        <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} />
+        <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} extra={(form.clientId ? clients.filter(c => c.id === Number(form.clientId)) : clients).flatMap(c => c.rates || [])} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginTop: 10 }}>
           <div>
             <Sel label={t.truck} value={form.truckId} onChange={e => handleTruckChange(e.target.value)}>
