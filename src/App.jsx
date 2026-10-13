@@ -28,6 +28,7 @@ import BancoPage from "./pages/BancoPage.jsx";
 import AssistantDashboard from "./pages/AssistantDashboard.jsx";
 import StaffPage from "./pages/StaffPage.jsx";
 import AyudantesPage from "./pages/AyudantesPage.jsx";
+import { pendingInfoTrips } from "./utils/tripPending.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -134,6 +135,8 @@ export default function App() {
     window.addEventListener("blogix:receipts-changed", load);
     return () => { alive = false; clearInterval(iv); window.removeEventListener("blogix:receipts-changed", load); };
   }, [user?.role]);
+  // Viajes que el chofer registró sin tarifa del cliente: la oficina los completa
+  const tripsPendingInfo = useMemo(() => user?.role === "admin" ? pendingInfoTrips(trips || []).length : 0, [trips, user?.role]);
   const receiptsPending = useMemo(() => {
     const done = new Set((expenses || []).filter(e => e.receiptId).map(e => Number(e.receiptId)));
     return rcList.filter(r => r.status === "pending" && !done.has(r.id)).length;
@@ -192,7 +195,7 @@ export default function App() {
     { id: "clients",     icon: Building2,        label: t.clients },
     { id: "invoices",    icon: FileText,         label: "Facturas" },
     { id: "cxc",         icon: TrendingUp,       label: "Cuentas x Cobrar" },
-    { id: "trips",       icon: Route,            label: t.trips },
+    { id: "trips",       icon: Route,            label: t.trips, badge: tripsPendingInfo },
     { id: "fleet",       icon: Truck,            label: t.fleet },
     { id: "drivers",     icon: Users,            label: t.drivers },
     { id: "ayudantes",   icon: HardHat,          label: "Ayudantes" },
@@ -249,7 +252,7 @@ export default function App() {
 
   const bottomNavTabs = [
     { id: "dashboard", icon: Home,         label: "Dashboard", badge: alertCount },
-    { id: "trips",     icon: Truck,        label: "Viajes"    },
+    { id: "trips",     icon: Truck,        label: "Viajes", badge: tripsPendingInfo },
     { id: "expenses",  icon: DollarSign,   label: "Gastos"    },
     { id: "__mas__",   icon: Menu,         label: "Más"       },
   ];
@@ -461,7 +464,10 @@ export default function App() {
                 onClick={() => isMas ? setSidebarOpen(true) : setPage(tab.id)}
                 style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: "none", background: "transparent", color: isActive ? colors.accent : colors.textMuted, cursor: "pointer", fontSize: 10, fontWeight: isActive ? 600 : 400, padding: "6px 0", minWidth: 0 }}
               >
-                <Icon size={20} color={isActive ? colors.accent : colors.textMuted} />
+                <span style={{ position: "relative", display: "flex" }}>
+                  <Icon size={20} color={isActive ? colors.accent : colors.textMuted} />
+                  {tab.id === "trips" && tab.badge > 0 && <span data-nav-badge="trips" style={{ position: "absolute", top: -5, right: -8, background: colors.orange, color: "white", borderRadius: 10, fontSize: 9, fontWeight: 700, minWidth: 14, height: 14, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{tab.badge > 99 ? "99+" : tab.badge}</span>}
+                </span>
                 <span style={{ lineHeight: 1 }}>{tab.label}</span>
               </button>
             );

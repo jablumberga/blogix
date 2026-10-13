@@ -8,6 +8,7 @@ import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js"
 import { calcDriverPay, describeDriverPay, normalizeDriver, tripSize, DEFAULT_HELPERS } from "../utils/driverPay.js";
 import { TRIP_DOCS, docsComplete } from "../utils/payroll.js";
 import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
+import { needsRate, takeTripsFilter } from "../utils/tripPending.js";
 import { buildCompanionTrip, applyReceived, jointIds } from "../utils/jointTrip.js";
 import { tripPassThrough } from "../utils/profitFirst.js";
 import { checkRef } from "../api.js";
@@ -22,7 +23,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const [expForm, setExpForm] = useState({ date: today(), category: "fuel", amount: "", gallons: "", paymentMethod: "cash", description: "" });
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [filterExtra, setFilterExtra] = useState("all");   // all | nodocs | uninvoiced
+  const [filterExtra, setFilterExtra] = useState(() => takeTripsFilter() === "pending" ? "pending" : "all");   // all | nodocs | uninvoiced | pending
   const [refInfo, setRefInfo] = useState(null);           // verificación de referencia en vivo (servidor)
   const [filterClient, setFilterClient] = useState("all");
   const [filterDriver, setFilterDriver] = useState("all");
@@ -97,6 +98,13 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     setForm({ ...tr, helperIds: usesList ? (tr.helpers || []).map(h => (h?.ayudanteId != null ? Number(h.ayudanteId) : null)) : [],
       ...(usesList && !tr.helperNames ? { helperNames: (tr.helpers || []).map(h => (h?.ayudanteId != null ? h.name : "")) } : {}) });
     setEditId(tr.id); setShowForm(true); setRateMsg(""); setFormError("");
+    if (needsRate(tr)) {
+      const f = { ...tr, helperIds: usesList ? (tr.helpers || []).map(h => (h?.ayudanteId != null ? Number(h.ayudanteId) : null)) : [],
+        ...(usesList && !tr.helperNames ? { helperNames: (tr.helpers || []).map(h => (h?.ayudanteId != null ? h.name : "")) } : {}) };
+      tryApplyRate(f, null);
+      setForm(f);
+      if (!(Number(f.revenue) > 0)) setFormError("Este viaje se registró sin tarifa: agrégala en Clientes (y vuelve a abrirlo) o escribe el monto con «Custom».");
+    }
   };
 
   const handleClientChange = (cid) => {
@@ -330,6 +338,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const tripExpMap = expenses.reduce((m, e) => { if (e.tripId && !["adelanto_conductor", "adelanto_ayudante", "nominaTotalOverride", "partner_settlement"].includes(e.category)) m.set(e.tripId, (m.get(e.tripId) || 0) + e.amount); return m; }, new Map());
   if (filterExtra === "nodocs") filtered = filtered.filter(tr => tr.status !== "cancelled" && !docsComplete(tr, clientMap.get(tr.clientId)));
   if (filterExtra === "uninvoiced") filtered = filtered.filter(tr => tr.status !== "cancelled" && (tr.revenue || 0) > 0 && !invoicedTripMap.has(tr.id));
+  if (filterExtra === "pending") filtered = filtered.filter(needsRate);
+  const pendingCount = trips.filter(needsRate).length;
   // Margen por viaje: tarifa − chofer − ayudantes − gastos del viaje; en camión de socio, lo que le toca al socio
   const partnerMap = new Map(partners.map(p => [p.id, p]));
   const brokerMap = new Map((brokers || []).map(b => [b.id, b]));
@@ -381,7 +391,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         </button>
       ))}
       <span style={{ width: 1, height: 22, background: colors.border }} />
-      {[["all", "Todos"], ["nodocs", "Sin documentos"], ["uninvoiced", "Sin facturar"]].map(([k, label]) => (
+      {[["all", "Todos"], ["nodocs", "Sin documentos"], ["uninvoiced", "Sin facturar"], ...(pendingCount > 0 || filterExtra === "pending" ? [["pending", `⚠ Por completar (${pendingCount})`]] : [])].map(([k, label]) => (
         <button key={k} onClick={() => setFilterExtra(k)} style={{ padding: "5px 12px", borderRadius: 16, border: `1px solid ${filterExtra === k ? colors.orange : colors.border}`, background: filterExtra === k ? colors.orange + "18" : "transparent", color: filterExtra === k ? colors.orange : colors.textMuted, cursor: "pointer", fontSize: 11, fontWeight: filterExtra === k ? 700 : 400 }}>{label}</button>
       ))}
       <Sel value={filterClient} onChange={e => setFilterClient(e.target.value)} style={{ fontSize: 11 }}>
@@ -617,7 +627,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                     <StatusBadge status={tr.status} t={t} />
-                    <div style={{ fontSize: 16, fontWeight: 800, color: colors.green }}>{fmt(tr.revenue)}</div>
+                    {needsRate(tr) ? <span data-trip-pending={tr.id} style={{ fontSize: 11, fontWeight: 700, color: colors.orange, background: colors.orange + "18", padding: "2px 8px", borderRadius: 8 }}>⚠ falta tarifa</span> : <div style={{ fontSize: 16, fontWeight: 800, color: colors.green }}>{fmt(tr.revenue)}</div>}
                     {(() => {
                       const inv = invoicedTripMap.get(tr.id);
                       if (inv) return <span style={{ fontSize: 9, fontWeight: 600, color: colors.green, background: colors.green+"18", padding: "1px 7px", borderRadius: 8, display: "inline-flex", alignItems: "center", gap: 2 }}><FileText size={8} /> {inv.invoiceNumber}</span>;
@@ -684,7 +694,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                       </button>
                     </Td>
                     <Td align="right" bold color={colors.green}>
-                      {fmt(tr.revenue)}
+                      {needsRate(tr) ? <span data-trip-pending={tr.id} style={{ fontSize: 10, fontWeight: 700, color: colors.orange, background: colors.orange + "18", padding: "2px 7px", borderRadius: 8, whiteSpace: "nowrap" }}>⚠ falta tarifa</span> : fmt(tr.revenue)}
                       {tr.tarifaOverride && <><br /><span style={{ fontSize: 11, fontWeight: 700, color: colors.orange, background: colors.orange+"15", padding: "1px 6px", borderRadius: 5, display: "inline-flex", alignItems: "center", gap: 2 }}><Zap size={9} /> {tr.tarifaOverride}</span></>}
                       <br />
                       {(() => {
