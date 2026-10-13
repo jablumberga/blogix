@@ -16,3 +16,4 @@ local-db/db.json
 local-db/ACCESO-LOCAL.txt
 npm-*.log
 local-db/*.log
+local-db/storage/

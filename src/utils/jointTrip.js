@@ -18,7 +18,7 @@ export function clientRateFor(client, trip, truck) {
 }
 
 /** Campos que el compañero hereda del viaje original. */
-const COPY_FIELDS = ["date", "province", "municipality", "clientId", "brokerId", "cargo", "weight", "status", "invoiceRef", "docStatus", "podDelivered", "docs", "docsReceivedAt", "docsReceivedBy"];
+const COPY_FIELDS = ["date", "province", "municipality", "clientId", "brokerId", "cargo", "weight", "status", "invoiceRef", "docStatus", "podDelivered", "docs", "docsReceivedAt", "docsReceivedBy", "docsReceivedTs"];
 
 /**
  * Construye el viaje del compañero y sus gastos (pago chofer + ayudantes).
@@ -66,8 +66,11 @@ export function jointIds(tripId, trips = []) {
   return [...ids];
 }
 
-/** Marca (o desmarca) documentos recibidos en un viaje y en su pareja de viaje conjunto. */
-export function applyReceived(trips, tripId, value, { docKeys, today, by }) {
+/**
+ * Marca (o desmarca) documentos recibidos en un viaje y en su pareja de viaje conjunto.
+ * docsReceivedTs = momento exacto de la recepción: agrupa la «entrega» (visita) para la constancia de entrega.
+ */
+export function applyReceived(trips, tripId, value, { docKeys, today, by, now = new Date().toISOString() }) {
   const ids = new Set(jointIds(tripId, trips));
   return trips.map(tr => {
     if (!ids.has(tr.id)) return tr;
@@ -75,6 +78,7 @@ export function applyReceived(trips, tripId, value, { docKeys, today, by }) {
     // Documentos recibidos = el viaje se entregó (cuenta para nómina, factura y liquidación del socio)
     const status = value && (tr.status === "pending" || tr.status === "in_transit") ? "delivered" : tr.status;
     return { ...tr, status, docs, docStatus: value ? "delivered" : "pending", podDelivered: value,
-      docsReceivedAt: value ? (tr.docsReceivedAt || today) : null, docsReceivedBy: value ? (tr.docsReceivedBy || by || "") : "" };
+      docsReceivedAt: value ? (tr.docsReceivedAt || today) : null, docsReceivedBy: value ? (tr.docsReceivedBy || by || "") : "",
+      docsReceivedTs: value ? (tr.docsReceivedAt ? (tr.docsReceivedTs ?? null) : now) : null };
   });
 }

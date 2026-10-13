@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote, FileText, ChevronRight } from "lucide-react";
+import { AlertCircle, AlertTriangle, Bell, CheckCircle2, Calendar, Banknote, FileText, ChevronRight, Camera } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, monthStr, expenseTruckId, today } from "../utils/helpers.js";
 import { invoiceBalance } from "../utils/cobros.js";
@@ -42,7 +42,7 @@ function SectionTitle({ label, color }) {
   );
 }
 
-export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, pfSettings, isMobile }) {
+export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, pfSettings, isMobile, receiptsPending = 0 }) {
   // brokers is used in the revenue useMemo for pass-through deduction
   const cm = monthStr();
   const todayStr = today();
@@ -263,6 +263,12 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   return (
     <div>
       <PageHeader title="Dashboard — B-Logix" />
+
+      {receiptsPending > 0 && <button onClick={() => setPage?.("expenses")} data-dash-receipts style={{ width: "100%", marginBottom: 16, display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10, border: `1px solid ${colors.orange}55`, background: colors.orange + "14", color: colors.text, cursor: "pointer", textAlign: "left", fontSize: 14 }}>
+        <Camera size={18} color={colors.orange} />
+        <span style={{ flex: 1 }}><b>{receiptsPending}</b> recibo{receiptsPending > 1 ? "s" : ""} por foto por revisar</span>
+        <span style={{ color: colors.orange, fontSize: 12, display: "flex", alignItems: "center", gap: 2 }}>Revisar <ChevronRight size={14} /></span>
+      </button>}
 
       {/* ── Date filter ── */}
       <Card style={{ marginBottom: 16, padding: "10px 14px" }}>

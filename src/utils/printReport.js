@@ -80,6 +80,51 @@ export function driverPeriodReportHTML({ row, period, generatedBy, minRows = 14 
     <div class="sig"><div>Entregado por: ${esc(generatedBy || "")}</div><div>Recibí conforme: ${esc(d.name)}</div><div>Fecha</div></div>`;
 }
 
+/**
+ * Constancia de entrega de documentos (sin montos), acumulada por quincena: lo de entregas anteriores de la quincena
+ * + lo nuevo de esta entrega (marcado), y lo que falta por entregar. r = deliveryReceipt(...).
+ */
+export function deliveryReceiptHTML({ r, kind, person, generatedBy, fmtTime = () => "", payNote = "" }) {
+  const isPartner = kind === "partner";
+  const d = (x) => { const [y, m, dd] = String(x || "").split("-"); return y ? `${dd}/${m}/${y}` : ""; };
+  const lines = r.items.map((x, i) => `
+    <tr style="${x.isNew ? "background:#fff7f2" : ""}">
+      <td style="text-align:center">${i + 1}</td>
+      <td>${esc(d(x.trip.date))}</td>
+      <td>${esc(x.client?.companyName || "—")}</td>
+      <td>${esc(x.trip.invoiceRef || "")}</td>
+      <td>${esc(x.trip.municipality || "")}${x.trip.province ? `, ${esc(x.trip.province)}` : ""}</td>
+      <td>${esc(x.truck?.plate || "")}</td>
+      ${isPartner ? `<td>${esc(x.driver?.name || "")}</td>` : ""}
+      <td style="text-align:center">${x.isNew ? `<span class="pill no">NUEVO · esta entrega</span>` : `<span class="small muted">entrega ${x.visitNo} · ${esc(d(x.receivedDate))}</span>`}</td>
+    </tr>`).join("");
+  const pend = r.pending.map(x => `<tr><td>${esc(d(x.trip.date))}</td><td>${esc(x.client?.companyName || "—")}</td><td>${esc(x.trip.invoiceRef || "")}</td><td>${esc(x.trip.municipality || "")}</td><td>${esc(x.truck?.plate || "")}</td>${isPartner ? `<td>${esc(x.driver?.name || "")}</td>` : ""}</tr>`).join("");
+  const cols = isPartner ? 8 : 7;
+  return `
+    ${companyHeaderHTML("CONSTANCIA DE ENTREGA DE DOCUMENTOS")}
+    <table class="fields">
+      <tr><td>${isPartner ? "Socio" : "Chofer"}:</td><td>${esc(person.name)}</td></tr>
+      <tr><td>Quincena:</td><td>${esc(r.period.label)}</td></tr>
+      <tr><td>Entrega:</td><td>N.º ${r.visit.no} de la quincena · ${esc(d(r.visit.date))}${r.visit.legacy ? "" : ` · ${esc(fmtTime(r.visit.endTs))}`}</td></tr>
+      <tr><td>Recibió:</td><td>${esc(r.visit.by || generatedBy || "")}</td></tr>
+    </table>
+    <div class="kpis">
+      <div class="kpi hi"><div class="k">Entregados en esta visita</div><div class="v">${r.newCount}</div></div>
+      <div class="kpi"><div class="k">Acumulado de la quincena</div><div class="v">${r.totalCount}</div></div>
+      <div class="kpi"><div class="k">Pendientes por entregar</div><div class="v">${r.pending.length}</div></div>
+    </div>
+    <div class="section">Documentos recibidos en la quincena</div>
+    <table class="grid">
+      <thead><tr><th>#</th><th>Fecha viaje</th><th>Cliente</th><th>Referencia</th><th>Destino</th><th>Camión</th>${isPartner ? "<th>Chofer</th>" : ""}<th>Recibido</th></tr></thead>
+      <tbody>${lines}</tbody>
+      <tfoot><tr><td colspan="${cols - 1}" class="right"><b>Total recibido en la quincena:</b></td><td style="text-align:center"><b>${r.totalCount}</b></td></tr></tfoot>
+    </table>
+    ${r.pending.length ? `<div class="section">Pendientes por entregar</div>
+    <table><thead><tr><th>Fecha viaje</th><th>Cliente</th><th>Referencia</th><th>Destino</th><th>Camión</th>${isPartner ? "<th>Chofer</th>" : ""}</tr></thead><tbody>${pend}</tbody></table>` : `<div class="small ok" style="margin-top:10px">No tiene documentos pendientes hasta esta fecha.</div>`}
+    <div class="small muted" style="margin-top:10px">${esc(payNote || `Los viajes recibidos se pagan en la quincena ${r.period.label}.`)} Este documento no incluye montos.</div>
+    <div class="sig"><div>Entregó: ${esc(person.name)}</div><div>Recibió: ${esc(r.visit.by || generatedBy || "")}</div><div>Fecha: ${esc(d(r.visit.date))}</div></div>`;
+}
+
 /** Relación de pago de un ayudante directo en un período (con montos: es lo que se le entrega a él). */
 export function helperPeriodReportHTML({ row, period, generatedBy, minRows = 10 }) {
   const a = row.ayudante;
