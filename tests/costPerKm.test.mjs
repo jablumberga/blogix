@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { costPerKm, tripKm, fuelNeedsTruck } from "../src/utils/costPerKm.js";
+import { costPerKm, tripKm, fuelNeedsTruck, gpsPeriodKm } from "../src/utils/costPerKm.js";
 
 const distances = [{ province: "Santiago", municipality: "Santiago de los Caballeros", km: 300 }];
 const trucks = [{ id: 1, plate: "A", partnerId: null }, { id: 3, plate: "B", partnerId: 2 }];
@@ -38,17 +38,15 @@ test("costo por km: camión propio vs camión de socio", () => {
   assert.equal(r.byRoute[0].trips, 2);
 });
 
-import { signParams, summarize, assignTripKm, kmOf, localDate, utcRange } from "../netlify/functions/gps.mjs";
-test("GPS: firma Jimi, km diarios y asignación a viajes", () => {
+import { signParams, summarize, kmOf, localDate, utcRange, daysOf } from "../netlify/functions/gps.mjs";
+test("GPS: firma Jimi y km diarios", () => {
   // firma: MD5(secret + "app_key"+"k" + "method"+"m" + secret) en mayúsculas
   const sig = signParams({ method: "m", app_key: "k", sign: "x" }, "s");
   assert.match(sig, /^[0-9A-F]{32}$/);
   const items = [{ imei: "1", startTime: "2026-10-05 07:00:00", totalMileage: "120.4" }, { imei: "1", startTime: "2026-10-05 13:00:00", totalMileage: "200" }, { imei: "2", startTime: "2026-10-06 08:00:00", totalMileage: "50" }];
   const daily = summarize(items);
   assert.deepEqual(daily, [{ imei: "1", date: "2026-10-05", km: 320.4 }, { imei: "2", date: "2026-10-06", km: 50 }]);
-  const trucks = [{ id: 1, gpsImei: "1" }, { id: 2, gpsImei: "2" }, { id: 3 }];
-  const trips = [{ id: 10, truckId: 1, date: "2026-10-05" }, { id: 11, truckId: 1, date: "2026-10-05" }, { id: 12, truckId: 3, date: "2026-10-06" }, { id: 13, truckId: 2, date: "2026-10-07" }];
-  assert.deepEqual(assignTripKm(daily, trips, trucks), [{ tripId: 10, km: 160.2 }, { tripId: 11, km: 160.2 }]);
+  assert.deepEqual(daysOf("2026-09-29", "2026-10-02"), ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"]);
 });
 
 test("GPS real (Open API de TrackSolid): «distance» en metros y hora UTC → km del día en hora de RD", () => {
@@ -73,9 +71,55 @@ test("GPS real (Open API de TrackSolid): «distance» en metros y hora UTC → k
   ];
   const daily = summarize(items);
   assert.deepEqual(daily, [{ imei: "8288", date: "2026-10-12", km: 306.2 }, { imei: "8288", date: "2026-10-13", km: 0 }]);
-  const trucks = [{ id: 1, gpsImei: "8288" }];
-  // viaje bien fechado (12) recibe los km; un viaje en un día de 0 km no recibe nada (no tapa odómetro ni distancia de referencia)
-  assert.deepEqual(assignTripKm(daily, [{ id: 1, truckId: 1, date: "2026-10-12" }, { id: 2, truckId: 1, date: "2026-10-13" }], trucks), [{ tripId: 1, km: 306.2 }]);
+});
+
+// ── Km del GPS: todos los km del camión en el período, haya viaje o no ──────────
+const gTrucks = [{ id: 1, plate: "International", gpsImei: "A" }, { id: 2, plate: "Freightliner", gpsImei: "B" }, { id: 3, plate: "Ford" }, { id: 4, plate: "Hino", gpsImei: "C" }, { id: 5, plate: "Mack", gpsImei: "D" }];
+const gRow = (imei, date, km) => ({ imei, date, km, syncedAt: "2026-10-20T00:00:00Z" });
+const gDist = [{ province: "P", municipality: "Lejos", km: 600 }, { province: "P", municipality: "Cerca", km: 200 }];
+const gTrip = (id, truckId, date, municipality, extra = {}) => ({ id, truckId, date, status: "delivered", revenue: 10000, clientId: 1, driverId: id, province: "P", municipality, ...extra });
+const gGps = [gRow("A", "2026-09-30", 500), gRow("A", "2026-10-01", 300), gRow("A", "2026-10-02", 320), gRow("A", "2026-10-03", 0), gRow("A", "2026-10-04", 80),
+  gRow("B", "2026-10-02", 315.5), gRow("B", "2026-10-03", 0.8), gRow("C", "2026-10-04", 109)];
+
+test("GPS por período: suma todos los días del camión dentro del período y dice qué días faltan", () => {
+  const m = gpsPeriodKm({ trucks: gTrucks, gpsKm: gGps, dateFrom: "2026-10-01", dateTo: "2026-10-15", today: "2026-10-04" });
+  assert.deepEqual(m.get(1), { imei: "A", km: 700, synced: true, daysWithData: 4, daysExpected: 4, missing: [] }, "el 30/09 es de otro período");
+  assert.deepEqual(m.get(2).missing, ["2026-10-01", "2026-10-04"]);
+  assert.equal(m.get(4).km, 109);
+  assert.deepEqual(m.get(5), { imei: "D", km: 0, synced: false, daysWithData: 0, daysExpected: 4, missing: ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"] });
+  assert.equal(m.has(3), false, "camión sin GPS no aparece");
+  assert.equal(gpsPeriodKm({ trucks: gTrucks, gpsKm: gGps, dateFrom: "2026-11-01", dateTo: "2026-11-15", today: "2026-10-04" }).get(1).daysExpected, 0, "período futuro: no falta nada");
+});
+
+test("costo por km con GPS: el camión cuenta todos sus km; la fecha del viaje no importa; por destino se reparte por distancia", () => {
+  const trips = [
+    gTrip(1, 1, "2026-10-01", "Lejos"),
+    gTrip(2, 1, "2026-10-02", "Cerca"),
+    gTrip(3, 1, "2026-10-04", "SinDistancia", { km: 80, kmSource: "gps" }), // km viejo de un solo día: no cuenta
+    gTrip(4, 2, "2026-10-04", "Lejos"),            // cargado el 02, registrado el 04: igual se lleva todos los km del camión
+    gTrip(5, 3, "2026-10-02", "Cerca"),            // sin GPS: distancia de referencia
+    gTrip(6, 1, "2026-10-03", "Lejos", { status: "cancelled" }),
+  ];
+  const expenses = [{ id: 1, truckId: 4, date: "2026-10-04", category: "fuel", amount: 3000, gallons: 10 }, { id: 2, tripId: 1, category: "fuel", amount: 7000, gallons: 30 }];
+  const r = costPerKm({ dateFrom: "2026-10-01", dateTo: "2026-10-15", today: "2026-10-04", trips, expenses, trucks: gTrucks, clients: [{ id: 1, rules: {} }], distances: gDist, gpsKm: gGps });
+  const by = (p) => r.byTruck.find(t => t.plate === p);
+  assert.equal(by("International").km, 700); assert.equal(by("International").trips, 3); assert.equal(by("International").kmBySource.gps, 3);
+  assert.equal(by("International").costPerKm, 7000 / 700);
+  assert.equal(by("Freightliner").km, 316.3); assert.equal(by("Freightliner").gpsDaysMissing, 2);
+  assert.equal(by("Ford").km, 200); assert.equal(by("Ford").kmBySource.estimated, 1);
+  assert.equal(by("Hino").km, 109, "con km y sin viajes: entra igual"); assert.equal(by("Hino").trips, 0); assert.equal(by("Hino").costPerKm, 3000 / 109);
+  assert.equal(by("Mack"), undefined, "sin traer y sin gastos: no aparece");
+  assert.equal(r.totals.km, 700 + 316.3 + 200 + 109);
+  // International: Lejos 600, Cerca 200, sin distancia = promedio (400) → 700 × 600/1200, 200/1200, 400/1200
+  const route = (m) => r.byRoute.find(x => x.municipality === m).km;
+  assert.ok(Math.abs(route("Lejos") - (350 + 316.3)) < 1e-9);
+  assert.ok(Math.abs(route("Cerca") - (700 / 6 + 200)) < 1e-9);
+  assert.ok(Math.abs(route("SinDistancia") - 700 / 3) < 1e-9);
+  assert.deepEqual(r.quality.gpsMissing, [{ truckId: 2, plate: "Freightliner", days: 2 }, { truckId: 4, plate: "Hino", days: 3 }]);
+  assert.deepEqual(r.quality.gpsNotSynced, ["Mack"]);
+  // sin días del GPS el resultado es el de siempre
+  const plain = costPerKm({ dateFrom: "2026-10-01", dateTo: "2026-10-15", trips, expenses, trucks: gTrucks, clients: [{ id: 1, rules: {} }], distances: gDist });
+  assert.equal(plain.byTruck.find(t => t.plate === "International").km, 600 + 200 + 80);
 });
 
 // ── Combustible registrado solo al camión (sin viaje) ─────────────────────────

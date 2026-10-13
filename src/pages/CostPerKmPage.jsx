@@ -3,17 +3,23 @@ import { Gauge, Route, Fuel, Users, AlertTriangle, Satellite, Plus, Trash2, Refr
 import { colors } from "../constants/theme.js";
 import { fmt, pad, MONTHS_ES, today } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Th, Td, Inp, Btn, Badge } from "../components/ui/index.jsx";
-import { costPerKm, KM_SOURCE_LABEL } from "../utils/costPerKm.js";
+import { costPerKm, gpsPeriodKm, KM_SOURCE_LABEL } from "../utils/costPerKm.js";
 import { syncGps } from "../api.js";
 
 const PURPLE = "#9b7fe8";
 const fmtKm = (n) => n == null ? "—" : `${Math.round(n).toLocaleString("en-US")} km`;
 const fmtPerKm = (n) => n == null ? "—" : `RD$${n.toFixed(1)}`;
 const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
+const shiftDay = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const dayList = (from, to) => { const out = []; for (let d = from; d <= to && out.length < 400; d = shiftDay(d, 1)) out.push(d); return out; };
+const dm = (d) => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "";
+const fmt1 = (n) => (Number(n) || 0).toLocaleString("es-DO", { maximumFractionDigits: 1 });
+/** Un día del GPS está completo si se trajo después de terminado ese día en RD (00:00 RD = 04:00 UTC; 2 h de margen). */
+const dayComplete = (g, d) => !!g && !!g.syncedAt && g.syncedAt >= `${shiftDay(d, 1)}T06:00:00`;
 
 /**
  * Costo por kilómetro (solo admin): por camión, por destino y por chofer.
- * Km: GPS (TrackSolid) → odómetro del chofer → distancia de referencia por destino.
+ * Km: GPS (TrackSolid, todos los km del camión en el período) → odómetro del chofer → distancia de referencia por destino.
  */
 export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], drivers = [], clients = [], brokers = [], partners = [], fixedTemplates = [], distances = [], setDistances, gpsKm = [], setTrips, setGpsKm, isMobile }) {
   const now = new Date();
@@ -25,6 +31,8 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
   const [tab, setTab] = useState("trucks");
   const [newDist, setNewDist] = useState({ province: "", municipality: "", km: "" });
   const [gpsMsg, setGpsMsg] = useState("");
+  const [gpsBusy, setGpsBusy] = useState(false);
+  const [gpsTruck, setGpsTruck] = useState("all");
 
   const { dateFrom, dateTo, label } = useMemo(() => {
     const ms = `${y}-${pad(m)}`, last = lastDayOf(y, m);
@@ -35,10 +43,12 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
   const prev = () => { if (mode === "ano") return setY(v => v - 1); if (mode === "quincena" && half === 2) return setHalf(1); if (mode === "quincena") setHalf(2); if (m === 1) { setM(12); setY(v => v - 1); } else setM(v => v - 1); };
   const next = () => { if (mode === "ano") return setY(v => v + 1); if (mode === "quincena" && half === 1) return setHalf(2); if (mode === "quincena") setHalf(1); if (m === 12) { setM(1); setY(v => v + 1); } else setM(v => v + 1); };
 
-  const r = useMemo(() => costPerKm({ dateFrom, dateTo, trips, expenses, trucks, drivers, clients, brokers, partners, fixedTemplates, distances, targetMarginPerKm: target }),
-    [dateFrom, dateTo, trips, expenses, trucks, drivers, clients, brokers, partners, fixedTemplates, distances, target]);
+  const todayStr = today();
+  const r = useMemo(() => costPerKm({ dateFrom, dateTo, trips, expenses, trucks, drivers, clients, brokers, partners, fixedTemplates, distances, gpsKm, today: todayStr, targetMarginPerKm: target }),
+    [dateFrom, dateTo, trips, expenses, trucks, drivers, clients, brokers, partners, fixedTemplates, distances, gpsKm, todayStr, target]);
   const gpsTrucks = trucks.filter(t => t.gpsImei).length;
-  const gpsPeriodKm = gpsKm.filter(g => g.date >= dateFrom && g.date <= dateTo).reduce((s, g) => s + (Number(g.km) || 0), 0);
+  const gpsByTruck = useMemo(() => gpsPeriodKm({ trucks, gpsKm, dateFrom, dateTo, today: todayStr }), [trucks, gpsKm, dateFrom, dateTo, todayStr]);
+  const gpsTotalKm = [...gpsByTruck.values()].reduce((s, g) => s + g.km, 0);
 
   const saveTarget = (v) => { setTarget(v); try { localStorage.setItem("bl_target_margin_km", String(v)); } catch {} };
   const addDist = () => {
@@ -49,15 +59,34 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
   // Destinos usados en viajes sin distancia de referencia → sugerencias
   const missing = useMemo(() => { const seen = new Set((distances || []).map(d => `${d.province}|${d.municipality}`)); const out = new Map(); for (const t of trips) { const k = `${t.province}|${t.municipality}`; if (t.province && !seen.has(k) && !out.has(k)) out.set(k, { province: t.province, municipality: t.municipality }); } return [...out.values()]; }, [trips, distances]);
 
-  const runGps = async () => {
-    setGpsMsg("Consultando TrackSolid…");
-    const res = await syncGps({ dateFrom, dateTo });
-    if (!res.ok) { setGpsMsg(`No se pudo: ${res.error}`); return; }
-    if (Array.isArray(res.gpsKm) && setGpsKm) setGpsKm(prev => { const key = g => `${g.imei}|${g.date}`; const map = new Map(prev.map(g => [key(g), g])); for (const g of res.gpsKm) map.set(key(g), { ...(map.get(key(g)) || {}), ...g, id: map.get(key(g))?.id || g.id }); return [...map.values()]; });
-    if (Array.isArray(res.tripKm) && setTrips) setTrips(prev => prev.map(t => { const k = res.tripKm.find(x => x.tripId === t.id); return k ? { ...t, km: k.km, kmSource: "gps" } : t; }));
-    const fmt1 = (n) => (Number(n) || 0).toLocaleString("es-DO", { maximumFractionDigits: 1 });
-    if (res.items > 0 && !(res.totalKm > 0)) { setGpsMsg(`No: el GPS mandó ${res.items} trayecto(s) pero sin kilómetros (datos recibidos: ${(res.fields || []).join(", ") || "—"}). Envíale este mensaje a soporte.`); return; }
-    setGpsMsg(res.note ? `Listo: ${res.note}.` : `Listo: ${res.devices || 0} GPS · ${fmt1(res.totalKm)} km en ${(res.gpsKm || []).length} día(s) · ${(res.tripKm || []).length} viaje(s) con km del GPS.${(res.gpsKm || []).length && !(res.tripKm || []).length ? " Ningún viaje coincide con un día con km: revisa que la fecha del viaje sea el día que salió el camión." : ""}`);
+  // Trae del GPS todos los días del período hasta hoy, de 7 en 7 (la API corta rangos largos). Salta los días ya
+  // traídos completos; «force» los vuelve a pedir todos.
+  const runGps = async (force = false) => {
+    const end = dateTo < todayStr ? dateTo : todayStr;
+    if (end < dateFrom) { setGpsMsg("No: ese período todavía no ha empezado."); return; }
+    const imeis = trucks.filter(t => t.gpsImei).map(t => String(t.gpsImei));
+    if (!imeis.length) { setGpsMsg("No: ningún camión tiene IMEI de GPS (se pone en Flota)."); return; }
+    const have = new Map(gpsKm.map(g => [`${g.imei}|${g.date}`, g]));
+    const need = dayList(dateFrom, end).filter(d => force || !imeis.every(i => dayComplete(have.get(`${i}|${d}`), d)));
+    if (!need.length) { setGpsMsg(`Listo: ya estaban todos los días traídos (del ${dm(dateFrom)} al ${dm(end)}).`); return; }
+    const chunks = []; let cur = [];
+    for (const d of need) { if (cur.length && (cur.length >= 7 || shiftDay(cur[cur.length - 1], 1) !== d)) { chunks.push(cur); cur = []; } cur.push(d); }
+    if (cur.length) chunks.push(cur);
+    setGpsBusy(true);
+    let km = 0, items = 0, devices = 0, fields = [], done = 0, error = ""; const failed = [];
+    try {
+      for (const c of chunks) {
+        setGpsMsg(`Consultando TrackSolid… ${done} de ${need.length} día(s)`);
+        const res = await syncGps({ dateFrom: c[0], dateTo: c[c.length - 1] });
+        if (!res.ok) { error = res.error; break; }
+        if (Array.isArray(res.gpsKm) && res.gpsKm.length && setGpsKm) setGpsKm(prev => { const key = g => `${g.imei}|${g.date}`; const map = new Map(prev.map(g => [key(g), g])); for (const g of res.gpsKm) map.set(key(g), { ...(map.get(key(g)) || {}), ...g, id: map.get(key(g))?.id || g.id }); return [...map.values()]; });
+        km += Number(res.totalKm) || 0; items += Number(res.items) || 0; devices = res.devices || devices; if (res.fields?.length) fields = res.fields;
+        done += (res.days || []).length; failed.push(...(res.failed || []));
+      }
+    } finally { setGpsBusy(false); }
+    if (error) { setGpsMsg(`No se pudo: ${error}${done ? ` (se guardaron ${done} día(s) antes del error; dale otra vez para seguir)` : ""}`); return; }
+    if (items > 0 && !(km > 0)) { setGpsMsg(`No: el GPS mandó ${items} trayecto(s) pero sin kilómetros (datos recibidos: ${fields.join(", ") || "—"}). Envíale este mensaje a soporte.`); return; }
+    setGpsMsg(`Listo: ${devices} GPS · ${fmt1(km)} km en ${done} día(s) traído(s) (del ${dm(need[0])} al ${dm(need[need.length - 1])}).${failed.length ? ` No respondieron ${failed.length} día(s) (${failed.map(f => dm(f.date)).join(", ")}): dale otra vez para traerlos.` : ""}`);
   };
 
   const st = (s) => s === "ok" ? colors.green : s === "bad" ? colors.red : colors.textMuted;
@@ -65,7 +94,7 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
 
   return <div>
     <PageHeader title="Costo por kilómetro" />
-    <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 12 }}>Qué cuesta mover cada camión un kilómetro y qué deja. Km del GPS (TrackSolid) cuando hay; si no, odómetro del chofer; si no, distancia de referencia del destino.</div>
+    <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 12 }}>Qué cuesta mover cada camión un kilómetro y qué deja. Km del GPS (TrackSolid): todos los km del camión en el período, haya viaje o no; si el camión no tiene GPS, odómetro del chofer o distancia de referencia del destino.</div>
 
     <Card style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -86,6 +115,10 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
     {(r.quality.none > 0 || r.quality.fuelWithoutGallons > 0) && <div style={{ marginBottom: 14, background: colors.orange + "15", border: `1px solid ${colors.orange}40`, borderRadius: 10, padding: "8px 12px", fontSize: 12, display: "flex", gap: 8, alignItems: "center" }}>
       <AlertTriangle size={14} color={colors.orange} /><span><b style={{ color: colors.orange }}>Calidad del dato:</b> {r.quality.none > 0 ? `${r.quality.none} viaje(s) sin km (sin GPS, sin odómetro y sin distancia de referencia). ` : ""}{r.quality.fuelWithoutGallons > 0 ? `${r.quality.fuelWithoutGallons} carga(s) de combustible sin galones.` : ""} Km reales: GPS {r.quality.gps} · odómetro {r.quality.odometer} · estimados {r.quality.estimated}.</span>
     </div>}
+    {(r.quality.gpsMissing.length > 0 || r.quality.gpsNotSynced.length > 0) && <div data-gps-missing style={{ marginBottom: 14, background: colors.orange + "15", border: `1px solid ${colors.orange}40`, borderRadius: 10, padding: "8px 12px", fontSize: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <Satellite size={14} color={colors.orange} /><span><b style={{ color: colors.orange }}>GPS incompleto:</b> {[...r.quality.gpsMissing.map(g => `${g.plate} (faltan ${g.days} día${g.days === 1 ? "" : "s"})`), ...r.quality.gpsNotSynced.map(p => `${p} (sin traer)`)].join(" · ")}. Hasta traerlos, esos km se quedan cortos y el costo por km sale más alto.</span>
+      <button data-gps-fetch-missing onClick={() => { setTab("gps"); runGps(); }} disabled={gpsBusy} style={{ ...btn(false), marginLeft: "auto" }}>Traer los días que faltan</button>
+    </div>}
 
     <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
       {[["trucks", "Por camión"], ["routes", "Por destino"], ["drivers", "Por chofer"], ["distances", "Distancias de referencia"], ["gps", "GPS"]].map(([k, l]) => <button key={k} onClick={() => setTab(k)} style={btn(tab === k)}>{l}</button>)}
@@ -97,7 +130,7 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
         <tbody>{r.byTruck.length === 0 && <tr><Td colSpan={13}><span style={{ color: colors.textMuted }}>Sin viajes en el período.</span></Td></tr>}
           {r.byTruck.map(tk => <tr key={tk.truckId} style={{ borderBottom: `1px solid ${colors.border}11` }}>
             <Td bold><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: st(tk.status), marginRight: 6 }} />{tk.plate} <Badge label={tk.size} color={tk.size === "T2" ? colors.orange : colors.accent} />{tk.partnerName && <div style={{ fontSize: 10, color: colors.textMuted }}>socio {tk.partnerName}{tk.partnerRecovered > 0 ? ` · le descuentas ${fmt(tk.partnerRecovered)}` : ""}</div>}
-              <div style={{ fontSize: 9, color: colors.textMuted }}>{Object.entries(tk.kmBySource).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${KM_SOURCE_LABEL[k].toLowerCase()}`).join(" · ")}</div></Td>
+              <div style={{ fontSize: 9, color: colors.textMuted }}>{tk.gpsKm != null ? <span data-truck-gps>GPS: todos los km del período{tk.gpsDaysMissing > 0 ? <b style={{ color: colors.orange }}> · faltan {tk.gpsDaysMissing} día(s)</b> : ""}{tk.trips === 0 ? " · sin viajes" : ""}</span> : Object.entries(tk.kmBySource).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${KM_SOURCE_LABEL[k].toLowerCase()}`).join(" · ")}</div></Td>
             <Td align="right">{fmtKm(tk.km)}</Td><Td align="right">{tk.trips}</Td><Td align="right" color={colors.green}>{fmt(tk.companyRevenue)}</Td>
             <Td align="right">{fmt(tk.fuel)}</Td><Td align="right">{fmt(tk.driver + tk.helpers)}</Td><Td align="right">{fmt(tk.maintenance + tk.other)}</Td><Td align="right">{fmt(tk.fixed)}</Td>
             <Td align="right" bold color={colors.orange}>{fmt(tk.cost)}</Td>
@@ -105,7 +138,7 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
             <Td align="right" bold color={st(tk.status)}>{fmtPerKm(tk.marginPerKm)}</Td><Td align="right">{tk.kmPerGallon ? tk.kmPerGallon.toFixed(1) : "—"}</Td>
           </tr>)}</tbody>
       </table></div>
-      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>Ingreso empresa: en camión propio el flete neto; en camión de socio solo lo que retiene la empresa (comisión o su parte). Costo: lo que paga la empresa y NO recupera del socio. Fijos: plantillas de gastos fijos con camión, prorrateadas por días.</div>
+      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>Ingreso empresa: en camión propio el flete neto; en camión de socio solo lo que retiene la empresa (comisión o su parte). Costo: lo que paga la empresa y NO recupera del socio. Fijos: plantillas de gastos fijos con camión, prorrateadas por días. Km de camiones con GPS: todos los del período (viajes, regresos y movimientos sin viaje).</div>
     </Card>}
 
     {tab === "routes" && <Card>
@@ -116,7 +149,7 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
           <Td align="right">{fmtPerKm(x.revenuePerKm)}</Td><Td align="right">{fmtPerKm(x.costPerKm)}</Td><Td align="right" bold color={x.marginPerKm == null ? colors.textMuted : x.marginPerKm >= target ? colors.green : colors.red}>{fmtPerKm(x.marginPerKm)}</Td>
         </tr>)}</tbody>
       </table></div>
-      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>Costo directo = gastos ligados a los viajes de ese destino (combustible, chofer, ayudantes, peajes…) más el combustible registrado solo al camión, repartido entre los viajes de ese camión en el período según sus km. Un destino con margen/km bajo está mal tarifado o consume de más.</div>
+      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>Costo directo = gastos ligados a los viajes de ese destino (combustible, chofer, ayudantes, peajes…) más el combustible registrado solo al camión, repartido entre los viajes de ese camión en el período según sus km. En camiones con GPS, los km del período se reparten entre sus viajes según la distancia de referencia de cada destino (sin distancias, por igual). Un destino con margen/km bajo está mal tarifado o consume de más.</div>
     </Card>}
 
     {tab === "drivers" && <Card>
@@ -151,15 +184,34 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
     {tab === "gps" && <Card>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <div><div style={{ fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}><Satellite size={15} color={PURPLE} /> TrackSolid Pro</div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>{gpsTrucks} camión(es) con IMEI configurado (se pone en Flota). Km del GPS en el período: <b style={{ color: colors.text }}>{fmtKm(gpsPeriodKm)}</b>.</div></div>
-        <Btn onClick={runGps}><RefreshCw size={13} /> Traer km del GPS</Btn>
+          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>{gpsTrucks} camión(es) con IMEI configurado (se pone en Flota). Km del GPS en el período: <b data-gps-period-km style={{ color: colors.text }}>{fmtKm(gpsTotalKm)}</b>.</div></div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <Btn data-gps-sync onClick={() => runGps()} disabled={gpsBusy}><RefreshCw size={13} /> {gpsBusy ? "Trayendo…" : "Traer km del GPS"}</Btn>
+          <button data-gps-force onClick={() => runGps(true)} disabled={gpsBusy} title="Vuelve a pedir todos los días del período, aunque ya estén traídos" style={{ ...btn(false), fontSize: 11 }}>Volver a traer todo</button>
+        </div>
       </div>
-      {gpsMsg && <div style={{ marginTop: 10, fontSize: 12, color: gpsMsg.startsWith("No") ? colors.red : colors.green }}>{gpsMsg}</div>}
-      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 10 }}>Requiere appKey/appSecret de la Open API de TrackSolid configurados en el servidor (variables TRACKSOLID_*). La sincronización trae el kilometraje diario por dispositivo y, cuando el GPS detecta un trayecto en la fecha de un viaje, le asigna los km al viaje (fuente «GPS»).</div>
-      {gpsKm.length > 0 && <div style={{ marginTop: 12, overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>Fecha</Th><Th>Camión</Th><Th>IMEI</Th><Th align="right">Km</Th></tr></thead>
-        <tbody>{gpsKm.filter(g => g.date >= dateFrom && g.date <= dateTo).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 60).map(g => <tr key={`${g.imei}|${g.date}`} style={{ borderBottom: `1px solid ${colors.border}11` }}><Td>{g.date}</Td><Td bold>{trucks.find(t => t.gpsImei === g.imei)?.plate || "—"}</Td><Td>{g.imei}</Td><Td align="right">{fmtKm(g.km)}</Td></tr>)}</tbody>
+      {gpsMsg && <div data-gps-msg style={{ marginTop: 10, fontSize: 12, color: gpsMsg.startsWith("No") ? colors.red : gpsMsg.startsWith("Listo") ? colors.green : colors.textMuted }}>{gpsMsg}</div>}
+      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 10 }}>Se trae el kilometraje de cada día del período (hasta hoy) y se suman TODOS los km de cada camión, haya viaje o no: así no importa si un viaje se cargó un día y se entregó al otro. Para ver por destino y por chofer, los km del camión se reparten entre sus viajes del período según la distancia de referencia de cada destino. Requiere la Open API de TrackSolid configurada en el servidor (variables TRACKSOLID_*).</div>
+      {gpsTrucks > 0 && <div style={{ marginTop: 12, overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>Camión</Th><Th align="right">Km del período</Th><Th align="right">Días traídos</Th><Th align="right">Viajes</Th><Th align="right">Km por viaje</Th></tr></thead>
+        <tbody>{trucks.filter(t => t.gpsImei).map(t => { const g = gpsByTruck.get(t.id) || { km: 0, daysWithData: 0, daysExpected: 0, missing: [] }; const n = trips.filter(x => x.truckId === t.id && x.status !== "cancelled" && x.date >= dateFrom && x.date <= dateTo).length;
+          return <tr key={t.id} data-gps-truck={t.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+            <Td bold>{t.plate}<div style={{ fontSize: 10, color: colors.textMuted }}>{t.gpsImei}</div></Td>
+            <Td align="right" bold>{fmtKm(g.km)}</Td>
+            <Td align="right" color={g.missing.length ? colors.orange : colors.green}>{g.daysExpected - g.missing.length}/{g.daysExpected}{g.missing.length ? <div style={{ fontSize: 10 }}>faltan {g.missing.length > 4 ? `${g.missing.length} días` : g.missing.map(dm).join(", ")}</div> : ""}</Td>
+            <Td align="right">{n}</Td><Td align="right">{n ? fmtKm(g.km / n) : <span style={{ color: colors.textMuted, fontSize: 11 }}>sin viajes</span>}</Td>
+          </tr>; })}</tbody>
       </table></div>}
+      {gpsKm.some(g => g.date >= dateFrom && g.date <= dateTo) && <div style={{ marginTop: 14 }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}><b style={{ fontSize: 12 }}>Km por día</b>
+          {[["all", "Todos"], ...trucks.filter(t => t.gpsImei).map(t => [String(t.gpsImei), t.plate])].map(([k, l]) => <button key={k} onClick={() => setGpsTruck(k)} style={{ ...btn(gpsTruck === k), padding: "2px 10px", fontSize: 11 }}>{l}</button>)}</div>
+        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>Fecha</Th><Th>Camión</Th><Th align="right">Km</Th><Th>Viajes registrados ese día</Th></tr></thead>
+          <tbody>{gpsKm.filter(g => g.date >= dateFrom && g.date <= dateTo && (gpsTruck === "all" || String(g.imei) === gpsTruck)).sort((a, b) => b.date.localeCompare(a.date) || String(a.imei).localeCompare(String(b.imei))).slice(0, 150).map(g => { const tk = trucks.find(t => String(t.gpsImei) === String(g.imei)); const dayTrips = tk ? trips.filter(x => x.truckId === tk.id && x.date === g.date && x.status !== "cancelled") : [];
+            return <tr key={`${g.imei}|${g.date}`} data-gps-day={`${g.imei}|${g.date}`} style={{ borderBottom: `1px solid ${colors.border}11` }}><Td>{dm(g.date)}</Td><Td bold>{tk?.plate || g.imei}</Td><Td align="right" color={Number(g.km) > 0 ? undefined : colors.textMuted}>{Number(g.km) > 0 ? fmtKm(g.km) : "parado"}</Td>
+              <Td><span style={{ fontSize: 11, color: colors.textMuted }}>{dayTrips.map(x => [x.invoiceRef || `#${x.id}`, x.municipality].filter(Boolean).join(" → ")).join(" · ")}</span></Td></tr>; })}</tbody>
+        </table></div>
+      </div>}
     </Card>}
   </div>;
 }
