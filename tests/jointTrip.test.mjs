@@ -36,3 +36,12 @@ test("recibido en uno marca los dos; desmarcar también; sin pareja solo uno", (
   const u = applyReceived(r, 10, false, { docKeys: ["factura", "conduce", "pod"], today: "2026-10-10", by: "Ana" });
   assert.equal(u[0].docsReceivedAt, null); assert.equal(u[1].docsReceivedAt, null); assert.equal(u[1].docStatus, "pending");
 });
+
+import { setReceivedDate as _srd } from "../src/utils/jointTrip.js";
+test("setReceivedDate cambia la fecha de recepción del viaje y su pareja (y marca recibido si no lo estaba)", () => {
+  const trips = [{ id: 1, status: "pending", jointWith: 2 }, { id: 2, status: "delivered", jointWith: 1, docsReceivedAt: "2026-10-13", docsReceivedBy: "Nicole", docsReceivedTs: "T0" }, { id: 3, status: "pending" }];
+  const out = _srd(trips, 1, "2026-09-20", { docKeys: ["factura", "pod"], by: "Alexander", now: "T1" });
+  assert.equal(out[0].docsReceivedAt, "2026-09-20"); assert.equal(out[0].status, "delivered"); assert.deepEqual(out[0].docs, { factura: true, pod: true }); assert.equal(out[0].docsReceivedBy, "Alexander"); assert.equal(out[0].docsReceivedTs, "T1");
+  assert.equal(out[1].docsReceivedAt, "2026-09-20"); assert.equal(out[1].docsReceivedBy, "Nicole"); assert.equal(out[1].docsReceivedTs, "T0");
+  assert.equal(out[2].docsReceivedAt, undefined);
+});

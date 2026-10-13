@@ -4,7 +4,7 @@ import { colors } from "../constants/theme.js";
 import { genBillingPeriods, today } from "../utils/helpers.js";
 import { buildPayroll, buildHelperPayroll, partnerTripsInPeriod, TRIP_DOCS } from "../utils/payroll.js";
 import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow, helperPeriodReportHTML } from "../utils/printReport.js";
-import { applyReceived } from "../utils/jointTrip.js";
+import { applyReceived, setReceivedDate } from "../utils/jointTrip.js";
 import { Card, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 import DeliveryReceiptPanel from "../components/DeliveryReceiptPanel.jsx";
 
@@ -39,6 +39,12 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
   // ── Documentos físicos recibidos (una sola marca por viaje) ────────────
   // Viaje conjunto: una sola entrega de la factura marca los dos viajes
   const setReceived = (tripId, value) => setTrips(prev => applyReceived(prev, tripId, value, { docKeys: TRIP_DOCS.map(d => d.key), today: today(), by: user?.name }));
+  const paidInPayroll = (tripId) => (expenses || []).some(e => e.tripId === tripId && (e.category === "driverPay" || e.category === "helper") && e.status === "paid");
+  const changeReceivedDate = (tripId, date) => {
+    if (!date) return;
+    if (paidInPayroll(tripId)) { window.alert("Este viaje ya se pagó en nómina con esa fecha. Pide al administrador que desmarque el pago antes de cambiarla."); return; }
+    setTrips(prev => setReceivedDate(prev, tripId, date, { docKeys: TRIP_DOCS.map(d => d.key), by: user?.name }));
+  };
   const setAllReceived = (items, value) => items.forEach(({ trip }) => setReceived(trip.id, value));
 
   // ── Reportes ────────────────────────────────────────────────────────────
@@ -152,8 +158,10 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
                 <Td align="center">
                   <label title={trip.docsReceivedAt ? `Recibido el ${trip.docsReceivedAt}${trip.docsReceivedBy ? ` por ${trip.docsReceivedBy}` : ""} · se paga en la quincena de esa fecha` : "Marcar cuando llegue la factura física: se pagará en la quincena en que se marque"} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11, color: docsOk ? colors.green : colors.textMuted }}>
                     <input type="checkbox" checked={docsOk} onChange={e => setReceived(trip.id, e.target.checked)} style={{ width: 16, height: 16, cursor: "pointer" }} />
-                    {docsOk ? (trip.docsReceivedAt && trip.docsReceivedAt > period.dateTo ? `Sí (${trip.docsReceivedAt})` : "Sí") : "Pendiente"}
+                    {docsOk ? "Sí" : "Pendiente"}
                   </label>
+                  {docsOk && <div><input type="date" value={trip.docsReceivedAt || ""} onChange={e => changeReceivedDate(trip.id, e.target.value)} disabled={paidInPayroll(trip.id)} title="Fecha en que llegaron los documentos: decide en qué quincena se paga"
+                    style={{ fontSize: 10, padding: "1px 4px", borderRadius: 5, border: `1px solid ${colors.border}`, background: colors.inputBg, color: paidInPayroll(trip.id) ? colors.textMuted : colors.text, width: 112, marginTop: 2 }} />{trip.docsReceivedAt && trip.docsReceivedAt > period.dateTo && <div style={{ fontSize: 9, color: colors.orange }}>se paga en otra quincena</div>}</div>}
                 </Td>
               </tr>
             )}</tbody>

@@ -9,7 +9,7 @@ import { calcDriverPay, describeDriverPay, normalizeDriver, tripSize, DEFAULT_HE
 import { TRIP_DOCS, docsComplete } from "../utils/payroll.js";
 import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
 import { needsRate, takeTripsFilter } from "../utils/tripPending.js";
-import { buildCompanionTrip, applyReceived, jointIds } from "../utils/jointTrip.js";
+import { buildCompanionTrip, applyReceived, setReceivedDate, jointIds } from "../utils/jointTrip.js";
 import { tripPassThrough } from "../utils/profitFirst.js";
 import { checkRef } from "../api.js";
 import { generateConduce } from "../utils/generateConduce.js";
@@ -283,7 +283,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       saved = stamp(saved, "editado");
       const pairIds = cancelPair ? jointIds(editId, trips).filter(id => id !== editId) : [];
       const c = makeCompanion(saved, trips.map(tr => tr.id === editId ? saved : (linked && tr.id === linked.id ? linked : (pairIds.includes(tr.id) ? stamp({ ...tr, status: "cancelled" }, "cancelado (pareja)") : tr))));
-      setTrips(c.list.map(tr => tr.id === editId ? c.saved : tr));
+      const recvDate = data.docsReceivedAt && data.docsReceivedAt !== prevTrip?.docsReceivedAt && !(prevTrip && paidInPayroll(editId)) ? data.docsReceivedAt : null;
+      setTrips(recvDate ? setReceivedDate(c.list.map(tr => tr.id === editId ? c.saved : tr), editId, recvDate, { docKeys: TRIP_DOCS.map(d => d.key), by: user?.name }) : c.list.map(tr => tr.id === editId ? c.saved : tr));
       syncTripExpenses(editId, data, prevTrip);
       pairIds.forEach(id => { const o = trips.find(x => x.id === id); if (o) syncTripExpenses(id, { ...o, status: "cancelled" }, o); });
     } else {
@@ -291,7 +292,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       let saved = stamp({ ...data, id: newId }, "creado"), linked = null;
       if (refCheck.linkWith) { const l = linkJoint(saved, refCheck.linkWith); saved = l.trip; linked = l.other; }
       const c = makeCompanion(saved, [...trips.map(tr => linked && tr.id === linked.id ? linked : tr), saved]);
-      setTrips(c.list.map(tr => tr.id === newId ? c.saved : tr));
+      setTrips(data.docsReceivedAt ? setReceivedDate(c.list.map(tr => tr.id === newId ? c.saved : tr), newId, data.docsReceivedAt, { docKeys: TRIP_DOCS.map(d => d.key), by: user?.name }) : c.list.map(tr => tr.id === newId ? c.saved : tr));
       syncTripExpenses(newId, data, null);
     }
     setShowForm(false);
@@ -317,6 +318,13 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
 
   // Documentos recibidos (misma lógica que el panel de Oficina)
   const setReceived = (tripId, value) => setTrips(prev => applyReceived(prev, tripId, value, { docKeys: TRIP_DOCS.map(d => d.key), today: today(), by: user?.name }));
+  // ¿El pago de chofer de este viaje ya salió en una nómina? Entonces la fecha de recepción no se mueve (cambiaría la quincena pagada)
+  const paidInPayroll = (tripId) => expenses.some(e => e.tripId === tripId && (e.category === "driverPay" || e.category === "helper") && e.status === "paid");
+  const changeReceivedDate = (tripId, date) => {
+    if (!date) return;
+    if (paidInPayroll(tripId)) { window.alert("Este viaje ya se pagó en nómina con la fecha de recepción actual. Para moverlo de quincena, primero desmarca el pago en Nómina."); return; }
+    setTrips(prev => setReceivedDate(prev, tripId, date, { docKeys: TRIP_DOCS.map(d => d.key), by: user?.name }));
+  };
 
   const addExpense = () => {
     if (!expForm.amount || !expModal) return;
@@ -490,6 +498,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, marginTop: 10 }}>
           <Inp label={t.cargo} value={form.cargo} onChange={e => setForm({ ...form, cargo: e.target.value })} />
           <Inp label={t.weight} type="number" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} />
+          <Inp label="Documentos recibidos el (quincena de nómina)" type="date" value={form.docsReceivedAt || ""} onChange={e => setForm({ ...form, docsReceivedAt: e.target.value || null })} disabled={!!editId && paidInPayroll(editId)} />
           <Inp label="Odómetro salida (km)" type="number" value={form.odoStart ?? ""} onChange={e => setForm({ ...form, odoStart: e.target.value })} />
           <Inp label={`Odómetro llegada (km)${Number(form.odoEnd) > Number(form.odoStart) && Number(form.odoStart) > 0 ? ` · ${Number(form.odoEnd) - Number(form.odoStart)} km` : ""}`} type="number" value={form.odoEnd ?? ""} onChange={e => setForm({ ...form, odoEnd: e.target.value })} />
           <Inp label={t.invoiceRef + (selectedClient?.rules?.requiresInvoiceRef ? " *" : "")} value={form.invoiceRef} onChange={e => setForm({ ...form, invoiceRef: e.target.value })} style={{ borderColor: selectedClient?.rules?.requiresInvoiceRef && !form.invoiceRef ? colors.red : colors.border }} />
@@ -683,10 +692,14 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                       </button>
                     </Td>
                     <Td align="center">
-                      {(() => { const ok = docsComplete(tr, cl); return <button onClick={() => setReceived(tr.id, !ok)} title={ok ? `Recibido el ${tr.docsReceivedAt || "—"}${tr.docsReceivedBy ? ` por ${tr.docsReceivedBy}` : ""}` : "Documentos físicos pendientes (no entra en nómina)"}
-                        style={{ padding: "3px 8px", borderRadius: 10, border: "none", fontSize: 10, fontWeight: 600, cursor: "pointer", background: ok ? colors.green + "18" : colors.orange + "18", color: ok ? colors.green : colors.orange }}>
-                        {ok ? `Recibido ${tr.docsReceivedAt ? tr.docsReceivedAt.slice(5) : ""}` : "Pendiente"}
-                      </button>; })()}
+                      {(() => { const ok = docsComplete(tr, cl); return <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                        <button onClick={() => setReceived(tr.id, !ok)} title={ok ? `Recibido el ${tr.docsReceivedAt || "—"}${tr.docsReceivedBy ? ` por ${tr.docsReceivedBy}` : ""} · se paga en la quincena de esa fecha` : "Documentos físicos pendientes (no entra en nómina). Clic = recibido hoy; luego puedes cambiar la fecha."}
+                          style={{ padding: "3px 8px", borderRadius: 10, border: "none", fontSize: 10, fontWeight: 600, cursor: "pointer", background: ok ? colors.green + "18" : colors.orange + "18", color: ok ? colors.green : colors.orange }}>
+                          {ok ? "Recibido" : "Pendiente"}
+                        </button>
+                        {ok && <input type="date" value={tr.docsReceivedAt || ""} onChange={e => changeReceivedDate(tr.id, e.target.value)} title="Fecha en que llegaron los documentos (decide la quincena de nómina)" disabled={paidInPayroll(tr.id)}
+                          style={{ fontSize: 10, padding: "1px 4px", borderRadius: 5, border: `1px solid ${colors.border}`, background: colors.inputBg, color: paidInPayroll(tr.id) ? colors.textMuted : colors.text, width: 112 }} />}
+                      </div>; })()}
                     </Td>
                     <Td align="center">
                       <button onClick={() => setExpModal(tr.id)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${colors.orange}40`, background: colors.orange + "10", color: colors.orange, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>

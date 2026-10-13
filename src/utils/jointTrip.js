@@ -67,6 +67,23 @@ export function jointIds(tripId, trips = []) {
 }
 
 /**
+ * Cambia la FECHA de recepción de documentos (viaje y su pareja). La fecha decide en qué quincena
+ * se paga el viaje; sirve para cargar viajes viejos con la fecha real en que llegaron los papeles.
+ * Si el viaje aún no estaba recibido, lo marca recibido con esa fecha. Conserva docsReceivedTs si ya existía.
+ */
+export function setReceivedDate(trips, tripId, date, { docKeys, by, now = new Date().toISOString() }) {
+  if (!date) return trips;
+  const ids = new Set(jointIds(tripId, trips));
+  return trips.map(tr => {
+    if (!ids.has(tr.id)) return tr;
+    const docs = Object.fromEntries(docKeys.map(k => [k, true]));
+    const status = (tr.status === "pending" || tr.status === "in_transit") ? "delivered" : tr.status;
+    return { ...tr, status, docs, docStatus: "delivered", podDelivered: true, docsReceivedAt: date, docsReceivedBy: tr.docsReceivedBy || by || "",
+      docsReceivedTs: tr.docsReceivedAt ? (tr.docsReceivedTs ?? null) : now };
+  });
+}
+
+/**
  * Marca (o desmarca) documentos recibidos en un viaje y en su pareja de viaje conjunto.
  * docsReceivedTs = momento exacto de la recepción: agrupa la «entrega» (visita) para la constancia de entrega.
  */
