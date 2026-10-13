@@ -378,7 +378,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                   const ayudanteRef = trRate ? (trSize === "T2" ? (trRate.helperT2 || 0) * 2 : (trRate.helperT1 || 0)) : 0;
                   const tripHelpers = (tr.helpers || []).filter(x => !isDirectLine(x)).reduce((s, x) => s + (x.pay || 0), 0);
                   const tripDiscounts = (tr.discounts || []).reduce((s, x) => s + (x.amount || 0), 0);
-                  const stColor = tr.status === "delivered" ? colors.green : tr.status === "in_transit" ? colors.yellow : colors.accent;
+                  const stColor = tr.status === "delivered" ? colors.green : tr.status === "in_transit" ? colors.yellow : tr.status === "cancelled" ? colors.textMuted : colors.accent;
                   const nextStatus = { pending: "in_transit", in_transit: "delivered" };
                   const handleStatusAdvance = (trip) => {
                     const next = nextStatus[trip.status];
@@ -410,9 +410,9 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                         </Td>;
                       })()}
                       <Td align="center">
-                        <button onClick={() => handleStatusAdvance(tr)}
-                          style={{ padding: "10px 14px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 600, minHeight: 44, minWidth: 88, cursor: "pointer", background: stColor + "22", color: stColor }}>
-                          {tr.status === "delivered" ? t.delivered : tr.status === "in_transit" ? t.inTransit : t.pending}
+                        <button onClick={() => handleStatusAdvance(tr)} disabled={!nextStatus[tr.status]}
+                          style={{ padding: "10px 14px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 600, minHeight: 44, minWidth: 88, cursor: nextStatus[tr.status] ? "pointer" : "default", background: stColor + "22", color: stColor }}>
+                          {tr.status === "delivered" ? t.delivered : tr.status === "in_transit" ? t.inTransit : tr.status === "cancelled" ? (t.cancelled || "Cancelado") : t.pending}
                         </button>
                       </Td>
                     </tr>
