@@ -7,6 +7,7 @@ import { invoiceHTML, invoiceSheet, openPrintWindow } from "../utils/printReport
 import { DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 import { invoiceBalance, buildAbono, invoiceStatusWith } from "../utils/cobros.js";
 import CobroModal from "../components/CobroModal.jsx";
+import { getAccounts } from "../utils/bankAccounts.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function nextInvoiceNumber(invoices) {
@@ -109,7 +110,7 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, partners = [], pfSettings = DEFAULT_PF_SETTINGS, isMobile }) {
+export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, partners = [], pfSettings = DEFAULT_PF_SETTINGS, isMobile, bankAccount = null }) {
 
   const todayStr = today();
 
@@ -587,6 +588,6 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
         </div>
       </div>
     )}
-    {cobroFor && (() => { const b = balanceOf(cobroFor); return <CobroModal inv={cobroFor} amount={b.amount} paid={b.paid} balance={b.balance} onSave={f => registerAbono(cobroFor, f)} onClose={() => setCobroFor(null)} />; })()}
+    {cobroFor && (() => { const b = balanceOf(cobroFor); return <CobroModal inv={cobroFor} amount={b.amount} paid={b.paid} balance={b.balance} onSave={f => registerAbono(cobroFor, f)} onClose={() => setCobroFor(null)} accounts={getAccounts(bankAccount, today())} />; })()}
   </div>;
 }

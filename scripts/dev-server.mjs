@@ -50,7 +50,7 @@ if (!existsSync(DB)) {
 let db = JSON.parse(readFileSync(DB, "utf8"));
 const TABLE_DEFAULTS = ["bl_trips","bl_expenses","bl_trucks","bl_drivers","bl_clients","bl_partners",
   "bl_brokers","bl_suppliers","bl_invoices","bl_cobros","bl_fixed_templates","bl_settlement_status",
-  "push_tokens","bl_rate_limits","appdata","bl_staff","bl_gps_km","bl_receipts"];
+  "push_tokens","bl_rate_limits","appdata","bl_staff","bl_gps_km","bl_receipts","bl_bank_transfers"];
 for (const t of TABLE_DEFAULTS) db[t] ??= [];
 const save = () => writeFileSync(DB, JSON.stringify(db, null, 1));
 

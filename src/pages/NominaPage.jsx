@@ -6,7 +6,8 @@ import { COMPANY } from "../constants/company.js";
 import { colors } from "../constants/theme.js";
 import { fmt, genPeriods, today, nxId } from "../utils/helpers.js";
 import { buildPayroll, payrollPayment, payrollKey, buildHelperPayroll, helperPayrollPayment } from "../utils/payroll.js";
-import { accountBalances, DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
+import { DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
+import { bankOverview } from "../utils/bankAccounts.js";
 import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow, helperPeriodReportHTML } from "../utils/printReport.js";
 import { Card, PageHeader, Badge, Btn, Th, Td } from "../components/ui/index.jsx";
 
@@ -178,7 +179,7 @@ function HelperCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onPrint }) {
  * Nómina (admin). Fuente única: buildPayroll → un viaje se paga en la quincena en que
  * la oficina recibió sus documentos. Profit First: la nómina sale de OpEx.
  */
-export default function NominaPage({ t, expenses, setExpenses, trips, drivers, trucks, clients = [], cobros = [], ayudantes = [], pfSettings = DEFAULT_PF_SETTINGS, user, isMobile }) {
+export default function NominaPage({ t, expenses, setExpenses, trips, drivers, trucks, clients = [], cobros = [], ayudantes = [], pfSettings = DEFAULT_PF_SETTINGS, bankAccount = null, bankTransfers = [], user, isMobile }) {
   const periods = useMemo(() => genPeriods([...trips.map(x => x.date), ...trips.map(x => x.docsReceivedAt).filter(Boolean), ...expenses.filter(e => e.category === "driverPay").map(e => e.date), today()]), [trips, expenses]);
   const [pIdx, setPIdx] = useState(0);
   const [method, setMethod] = useState("transfer");
@@ -192,7 +193,8 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
 
   const pendingTotal = rows.filter(r => !r.pay.paid).reduce((s, r) => s + r.pay.net + r.row.helpers, 0) + helperRows.filter(r => !r.pay.paid).reduce((s, r) => s + r.row.net, 0);
   const paidTotal = rows.filter(r => r.pay.paid).reduce((s, r) => s + r.pay.net + r.row.helpers, 0) + helperRows.filter(r => r.pay.paid).reduce((s, r) => s + r.row.net, 0);
-  const pf = useMemo(() => accountBalances({ cobros, expenses, settings: pfSettings }), [cobros, expenses, pfSettings]);
+  // Saldos reales de las cuentas del Banco: la nómina sale de OpEx
+  const pf = useMemo(() => { const b = bankOverview({ bankAccount, expenses, cobros, transfers: bankTransfers, settings: pfSettings, todayStr: today() }); return { opexAvailable: b.opexBalance, opexCommitted: b.opexCommitted, reserve: b.reserveBalance }; }, [bankAccount, expenses, cobros, bankTransfers, pfSettings]);
   const afterPay = pf.opexAvailable - pendingTotal;
 
   // ── Gastos que respaldan la nómina ───────────────────────────────────────
@@ -318,10 +320,10 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
 
     {/* ── Profit First: la nómina sale de OpEx ── */}
     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
-      <Card><div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>OPEX DISPONIBLE</div><div style={{ fontSize: 20, fontWeight: 800, color: pf.opexAvailable >= 0 ? colors.cyan : colors.red }}>{fmt(pf.opexAvailable)}</div><div style={{ fontSize: 10, color: colors.textMuted }}>80 % de ingresos reales − pagado</div></Card>
+      <Card><div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>OPEX DISPONIBLE</div><div style={{ fontSize: 20, fontWeight: 800, color: pf.opexAvailable >= 0 ? colors.cyan : colors.red }}>{fmt(pf.opexAvailable)}</div><div style={{ fontSize: 10, color: colors.textMuted }}>saldo de la cuenta OpEx</div></Card>
       <Card><div style={{ fontSize: 10, color: colors.orange, fontWeight: 700 }}>NÓMINA PENDIENTE · ESTE CORTE</div><div style={{ fontSize: 20, fontWeight: 800, color: colors.orange }}>{fmt(pendingTotal)}</div><div style={{ fontSize: 10, color: colors.textMuted }}>choferes + ayudantes</div></Card>
       <Card><div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>OPEX DESPUÉS DE PAGAR</div><div style={{ fontSize: 20, fontWeight: 800, color: afterPay >= 0 ? colors.green : colors.red }}>{fmt(afterPay)}</div><div style={{ fontSize: 10, color: colors.textMuted }}>{pf.opexCommitted > 0 ? `otros compromisos: ${fmt(pf.opexCommitted - rows.filter(r => !r.pay.paid).reduce((s, r) => s + r.pay.payExps.filter(e => e.status !== "paid").reduce((a, e) => a + e.amount, 0), 0))}` : "sin otros compromisos"}</div></Card>
-      <Card><div style={{ fontSize: 10, color: PURPLE, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}><PiggyBank size={11} /> RESERVA ({pf.reserve >= 0 ? pfSettings.reservePct : 0} %)</div><div style={{ fontSize: 20, fontWeight: 800, color: PURPLE }}>{fmt(pf.reserve)}</div><div style={{ fontSize: 10, color: colors.textMuted }}>no se toca para nómina</div></Card>
+      <Card><div style={{ fontSize: 10, color: PURPLE, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}><PiggyBank size={11} /> RESERVA (TAX · PROFIT · OWNER'S COMP)</div><div style={{ fontSize: 20, fontWeight: 800, color: PURPLE }}>{fmt(pf.reserve)}</div><div style={{ fontSize: 10, color: colors.textMuted }}>no se toca para nómina</div></Card>
     </div>
     {afterPay < 0 && pendingTotal > 0 && <div style={{ background: colors.red + "15", border: `1px solid ${colors.red}40`, borderRadius: 10, padding: "10px 14px", marginBottom: 14, display: "flex", gap: 10, alignItems: "center", fontSize: 12 }}>
       <AlertTriangle size={16} color={colors.red} /><div><b style={{ color: colors.red }}>OpEx no alcanza para esta nómina.</b> Faltan {fmt(-afterPay)}. Profit First: no se toca la Reserva; primero cobra lo pendiente en CxC o reduce gastos de operación.</div>

@@ -91,7 +91,7 @@ export default function App() {
   const {
     lang, setLang, t, user, login, logout, forceSync, syncAll,
     isAdmin, isPartner, isDriver, isAssistant, allUsers,
-    staff, setStaff, gpsKm, setGpsKm, distances, setDistances, ayudantes, setAyudantes,
+    staff, setStaff, gpsKm, setGpsKm, bankTransfers, setBankTransfers, distances, setDistances, ayudantes, setAyudantes,
     clients, setClients, partners, setPartners, trucks, setTrucks,
     drivers, setDrivers, trips, setTrips, expenses, setExpenses,
     brokers, setBrokers, suppliers, setSuppliers,
@@ -224,7 +224,7 @@ export default function App() {
   ];
   const navItems = isAdmin ? adminNav : isPartner ? partnerNav : isAssistant ? assistantNav : driverNav;
 
-  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, gpsKm, setGpsKm, distances, setDistances, ayudantes, setAyudantes, partner, partnerTruckIds, driverObj, alerts, receiptsPending };
+  const ctx = { t, user, isMobile, staff, setStaff, clients, setClients, partners, setPartners, trucks, setTrucks, drivers, setDrivers, trips, setTrips, expenses, setExpenses, brokers, setBrokers, suppliers, setSuppliers, fixedTemplates, setFixedTemplates, settlementStatus, setSettlementStatus, cobros, setCobros, invoices, setInvoices, bankAccount, setBankAccount, bankReconciliation, setBankReconciliation, pfSettings, setPfSettings, gpsKm, setGpsKm, bankTransfers, setBankTransfers, distances, setDistances, ayudantes, setAyudantes, partner, partnerTruckIds, driverObj, alerts, receiptsPending };
 
   const pageTitles = {
     dashboard:   t.dashboard,
@@ -409,7 +409,7 @@ export default function App() {
         {page === "partners"    && isAdmin    && <PartnersPage     {...ctx} />}
         {page === "brokers"     && isAdmin    && <BrokersPage      {...ctx} />}
         {page === "expenses"    && isAdmin    && <ExpensesPage     {...ctx} />}
-        {page === "cxp"         && isAdmin    && <CxPPage          {...ctx} />}
+        {page === "cxp"         && isAdmin    && <CxPPage          {...ctx} setPage={setPage} />}
         {page === "nomina"      && isAdmin    && <NominaPage       {...ctx} />}
         {page === "banco"       && isAdmin    && <BancoPage        {...ctx} />}
         {page === "costkm"      && isAdmin    && <CostPerKmPage    {...ctx} />}

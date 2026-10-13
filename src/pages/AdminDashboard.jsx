@@ -5,7 +5,7 @@ import { fmt, monthStr, expenseTruckId, today } from "../utils/helpers.js";
 import { invoiceBalance } from "../utils/cobros.js";
 import { tripNetRevenue } from "../utils/partnerModels.js";
 import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
-import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
+import AccountsPanel from "../components/AccountsPanel.jsx";
 import { pendingInfoTrips, missingInfo, requestTripsFilter } from "../utils/tripPending.js";
 
 // ── Mini stat block ─────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ function SectionTitle({ label, color }) {
   );
 }
 
-export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, pfSettings, isMobile, receiptsPending = 0 }) {
+export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, pfSettings, isMobile, receiptsPending = 0, bankAccount = null, bankTransfers = [], bankReconciliation = {} }) {
   // brokers is used in the revenue useMemo for pass-through deduction
   const cm = monthStr();
   const todayStr = today();
@@ -310,7 +310,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       </Card>
 
       {/* ── Profit First: las tres cuentas ── */}
-      <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} isMobile={isMobile} />
+      <AccountsPanel bankAccount={bankAccount} expenses={expenses} cobros={cobros} bankTransfers={bankTransfers} bankReconciliation={bankReconciliation} pfSettings={pfSettings} setPage={setPage} isMobile={isMobile} />
 
       {/* ── Pipeline de Facturación ── */}
       <Card style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => setPage("invoices")}>

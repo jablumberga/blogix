@@ -4,11 +4,12 @@ import { colors } from "../constants/theme.js";
 import { fmt, nxId } from "../utils/helpers.js";
 import { invoiceBalance, buildAbono, COBRO_METHODS } from "../utils/cobros.js";
 import CobroModal from "../components/CobroModal.jsx";
+import { getAccounts } from "../utils/bankAccounts.js";
 import { Card, PageHeader } from "../components/ui/index.jsx";
 import { allocateCobro, accountBalances, DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 import { today as todayFn } from "../utils/helpers.js";
 
-export default function CxCPage({ clients, trips, cobros, setCobros, trucks, invoices, setInvoices, setPage, isMobile, brokers, partners = [], expenses = [], pfSettings = DEFAULT_PF_SETTINGS }) {
+export default function CxCPage({ clients, trips, cobros, setCobros, trucks, invoices, setInvoices, setPage, isMobile, brokers, partners = [], expenses = [], pfSettings = DEFAULT_PF_SETTINGS, bankAccount = null }) {
   const today = todayFn();
 
   // ── Profit First: cada cobro se reparte al registrarlo ───────────────────
@@ -486,7 +487,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
           }
         </div>
       )}
-      {cobroFor && (() => { const b = invoiceBalance(cobroFor, cobros, balCtx); return <CobroModal inv={cobroFor} amount={b.amount} paid={b.paid} balance={b.balance} onSave={f => registerAbono(cobroFor, f)} onClose={() => setCobroFor(null)} />; })()}
+      {cobroFor && (() => { const b = invoiceBalance(cobroFor, cobros, balCtx); return <CobroModal inv={cobroFor} amount={b.amount} paid={b.paid} balance={b.balance} onSave={f => registerAbono(cobroFor, f)} onClose={() => setCobroFor(null)} accounts={getAccounts(bankAccount, todayFn())} />; })()}
     </div>
   );
 }

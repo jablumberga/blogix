@@ -5,6 +5,7 @@ import { fmt, nxId, expenseTruckId, getSupplierDueDate, today } from "../utils/h
 import { normalizePartner, expenseChargedToPartner, PARTNER_MODELS } from "../utils/partnerModels.js";
 import { fuelNeedsTruck } from "../utils/costPerKm.js";
 import { activeAyudantes } from "../utils/ayudantes.js";
+import { getAccounts, activeAccounts, expenseAccountId } from "../utils/bankAccounts.js";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td, Chk } from "../components/ui/index.jsx";
 import { receiptToExpenseForm, receiptDuplicates } from "../utils/receipts.js";
@@ -24,7 +25,8 @@ const settlementKey = (partnerId, date) => `${partnerId}-${(date || "").slice(0,
 // Categories where a direct truck link makes sense
 const TRUCK_CATEGORIES = ["fuel", "repair", "maintenance", "insurance", "tire", "loan", "other", "toll", "salary"];
 
-export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers, partners = [], settlementStatus = {}, fixedTemplates, setFixedTemplates, ayudantes = [], isMobile }) {
+export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers, partners = [], settlementStatus = {}, fixedTemplates, setFixedTemplates, ayudantes = [], isMobile, bankAccount = null }) {
+  const bankAccounts = useMemo(() => getAccounts(bankAccount, today()), [bankAccount]);
 
   const [filterCat, setFilterCat] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -275,6 +277,11 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
         <Sel label={t.paymentMethod} value={form.paymentMethod} onChange={e => setForm({ ...form, paymentMethod: e.target.value, ...(form.receiptId && !INSTANT_METHODS.includes(e.target.value) ? { status: "pending" } : {}) })}>
           {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t[m] || m}</option>)}
         </Sel>
+        {(() => { const auto = expenseAccountId({ ...form, accountId: null, status: "paid", amount: 1 }, bankAccounts);
+          return <Sel label="Sale de la cuenta" value={form.accountId || ""} onChange={e => setForm({ ...form, accountId: e.target.value || null })} data-expense-account>
+            <option value="">Automático ({auto ? bankAccounts.find(a => a.id === auto)?.name : "ninguna: efectivo / tarjeta"})</option>
+            {activeAccounts(bankAccounts).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </Sel>; })()}
         {form.category === "adelanto_ayudante"
           ? <Sel label="Ayudante *" value={form.ayudanteId || ""} onChange={e => setForm({ ...form, ayudanteId: Number(e.target.value) || null })}>
               <option value="">— Seleccionar ayudante —</option>
