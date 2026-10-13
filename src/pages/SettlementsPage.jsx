@@ -47,6 +47,7 @@ export function settlementHTML({ s, partner, t, clients = [], trucks = [], statu
   const r = (l, v, cls = "") => `<tr class="${cls}"><td class="lbl">${l}</td><td class="right">${v}</td></tr>`;
   const summary = s.model === "profit_share"
     ? r("Ingreso neto", fmt(s.netRevenue)) + (s.reimbursement ? r("Gastos reembolsados a la empresa", "− " + fmt(s.reimbursement)) : "") +
+      (s.truckLossIn ? r("Resultado de la quincena", fmt(s.periodResult)) + r("Pérdida anterior del camión (la financió la empresa; se recupera primero)", "− " + fmt(s.truckLossIn)) : "") +
       r("Utilidad a repartir", fmt(s.net), "sep") + r(`Parte del socio (${s.partnerSharePct} %)`, fmt(s.partnerShare)) + r(`Parte de la empresa (${100 - s.partnerSharePct} %)`, fmt(s.companyShare))
     : r("Ingreso neto", fmt(s.netRevenue)) + r(`Comisión empresa (${s.commissionPct} % del bruto)`, "− " + fmt(s.commission)) +
       (s.reimbursement ? r("Gastos reembolsados a la empresa", "− " + fmt(s.reimbursement)) : "") + (s.fixedTotal ? r("Cargos fijos", "− " + fmt(s.fixedTotal)) : "");
@@ -78,7 +79,7 @@ export function settlementHTML({ s, partner, t, clients = [], trucks = [], statu
     <div class="section">3 · Resumen de la liquidación</div>
     <table class="sum"><tbody>${summary}${carryRows}
       <tr class="total"><td class="lbl">A TRANSFERIR AL SOCIO</td><td class="right">${fmt(transfer)}</td></tr>
-      ${s.carryOut > 0 ? r("Saldo que el socio debe a la empresa (pasa a la siguiente quincena)", fmt(s.carryOut)) : ""}
+      ${s.carryOut > 0 ? (s.model === "profit_share" ? r("Pérdida del camión que pasa a la siguiente quincena (no la paga el socio: se recupera de las próximas utilidades)", fmt(s.carryOut)) : r("Saldo que el socio debe a la empresa (pasa a la siguiente quincena)", fmt(s.carryOut))) : ""}
     </tbody></table>
 
     <div class="sig"><div>Entregado por</div><div>Recibí conforme: ${esc(partner.name)}</div><div>Fecha</div></div>
@@ -95,7 +96,7 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
       <div>
         <div style={{ fontWeight: 700, fontSize: 16 }}>{isPartnerView ? "Mi liquidación" : partner.name} <Badge label={model.short || s.model} color={colors.accent} /></div>
-        <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{s.period.label} · {s.tripCount} viaje{s.tripCount !== 1 ? "s" : ""} entregado{s.tripCount !== 1 ? "s" : ""} · pago {s.payDate}{s.previousBalance > 0 && <span style={{ color: colors.red }}> · arrastra {fmt(s.previousBalance)} de la quincena anterior</span>}{notDelivered > 0 && <span style={{ color: colors.orange }}> · {notDelivered} sin entregar (entran al entregarse)</span>}</div>
+        <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{s.period.label} · {s.tripCount} viaje{s.tripCount !== 1 ? "s" : ""} entregado{s.tripCount !== 1 ? "s" : ""} · pago {s.payDate}{s.previousBalance > 0 && <span style={{ color: colors.red }}> · arrastra {fmt(s.previousBalance)} de la quincena anterior</span>}{s.truckLossIn > 0 && <span style={{ color: colors.orange }}> · el camión arrastra {fmt(s.truckLossIn)} de pérdida (se recupera primero)</span>}{notDelivered > 0 && <span style={{ color: colors.orange }}> · {notDelivered} sin entregar (entran al entregarse)</span>}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         {!isPartnerView && <div style={{ textAlign: "right", fontSize: 11, color: colors.textMuted }}>
@@ -104,7 +105,9 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11, color: colors.textMuted }}>{isPartnerView ? "RECIBES" : "A TRANSFERIR"}</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: isPaid ? colors.green : s.toTransfer < 0 ? colors.red : colors.orange }}>{fmt(transfer)}</div>
-          {s.carryOut > 0 && <div style={{ fontSize: 10, color: colors.red }}>el socio debe {fmt(s.carryOut)} · pasa a la siguiente quincena</div>}
+          {s.carryOut > 0 && (s.model === "profit_share"
+            ? <div style={{ fontSize: 10, color: colors.orange }} data-truck-loss>camión en pérdida {fmt(s.carryOut)} · la financia la empresa</div>
+            : <div style={{ fontSize: 10, color: colors.red }}>el socio debe {fmt(s.carryOut)} · pasa a la siguiente quincena</div>)}
         </div>
         {!isPartnerView && <>
           <button onClick={onPrint} style={{ padding: "7px 10px", borderRadius: 8, border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted, cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Printer size={13} /> PDF</button>
@@ -132,13 +135,17 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
         {s.reimbursement > 0 && <FRow label="Gastos pagados por la empresa (reembolso primero)" value={s.reimbursement} minus valueColor={colors.orange} hint={`${s.expenseLines.length} gasto(s)`} />}
         {s.fixedTotal > 0 && <FRow label="Cargos fijos (GPS, seguro…)" value={s.fixedTotal} minus valueColor={colors.orange} />}
         {s.model === "profit_share" && <>
+          {(s.truckLossIn > 0 || s.truckLossOut > 0) && <FRow label="Resultado de la quincena" value={s.periodResult} valueColor={s.periodResult >= 0 ? colors.green : colors.red} />}
+          {s.truckLossIn > 0 && <FRow label="Pérdida anterior del camión (la financió la empresa; se recupera primero)" value={s.truckLossIn} minus valueColor={colors.orange} hint={`recuperado ahora ${fmt(s.truckLossRecovered)}`} />}
           <FRow label="Utilidad a repartir" value={s.net} bold divider="single" valueColor={s.net >= 0 ? colors.green : colors.red} />
           <FRow label={`Socio ${s.partnerSharePct}%`} value={s.partnerShare} />
           <FRow label={`Empresa ${100 - s.partnerSharePct}%`} value={s.companyShare} valueColor={colors.cyan} />
         </>}
         {s.previousBalance > 0 && <FRow label="Saldo quincena anterior (el socio debía)" value={s.previousBalance} minus valueColor={colors.red} />}
         <FRow label={isPartnerView ? "Recibes" : "A transferir al socio"} value={transfer} bold divider="double" valueColor={isPaid ? colors.green : colors.orange} size={18} />
-        {s.carryOut > 0 && <FRow label="Queda debiendo el socio → pasa a la siguiente quincena" value={s.carryOut} valueColor={colors.red} />}
+        {s.carryOut > 0 && (s.model === "profit_share"
+          ? <FRow label="Pérdida del camión → pasa a la siguiente quincena (no la paga el socio)" value={s.carryOut} valueColor={colors.orange} />
+          : <FRow label="Queda debiendo el socio → pasa a la siguiente quincena" value={s.carryOut} valueColor={colors.red} />)}
         {!isPartnerView && <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, background: PURPLE + "14", fontSize: 11, color: colors.textMuted, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <PiggyBank size={12} color={PURPLE} /><b style={{ color: PURPLE }}>Profit First:</b> apartado para el socio al cobrar {fmt(rel.pool)} · se transfiere {fmt(rel.transfer)} · la empresa retiene {fmt(rel.released)} → <span style={{ color: PURPLE }}>Reserva {fmt(rel.releasedToReserve)}</span> · <span style={{ color: colors.cyan }}>OpEx {fmt(rel.releasedToOpex)}</span>.
         </div>}
@@ -189,7 +196,7 @@ export default function SettlementsPage({ t, trips = [], trucks = [], expenses =
       const s = chains.get(p.id).get(`${pd.mStr}-${pd.half}`);
       const truckIds = new Set(trucks.filter(tk => tk.partnerId === p.id).map(tk => tk.id));
       const notDelivered = trips.filter(tr => truckIds.has(tr.truckId) && tr.date >= pd.dateFrom && tr.date <= pd.dateTo && tr.status !== "delivered" && tr.status !== "cancelled").length;
-      if (s.tripCount === 0 && s.fixedTotal === 0 && notDelivered === 0 && !(s.previousBalance > 0)) return null;
+      if (s.tripCount === 0 && s.fixedTotal === 0 && notDelivered === 0 && !(s.previousBalance > 0) && !(s.truckLossIn > 0)) return null;
       return { p, s, notDelivered, key: settlementKeyOf(p.id, pd), status: settlementStatus[settlementKeyOf(p.id, pd)] || "unpaid" };
     }).filter(Boolean);
     if (cards.length === 0) return null;

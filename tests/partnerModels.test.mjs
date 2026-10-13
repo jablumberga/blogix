@@ -63,11 +63,13 @@ test("modelo 3 con broker pass-through histórico descuenta el 10%", () => {
   assert.equal(s.toTransfer, 13500);
 });
 
-test("pérdida en reparto: el socio recibe su % del negativo", () => {
+test("pérdida en reparto: no se le carga al socio; queda en el camión (la financia la empresa)", () => {
   const partner = { id: 7, model: "profit_share", partnerSharePct: 50 };
   const s = computeSettlement({ partner, period, trips, expenses: [{ id: 1, truckId: 1, date: "2026-10-02", category: "repair", amount: 50000 }], trucks });
-  assert.equal(s.net, -20000);
-  assert.equal(s.toTransfer, -10000);
+  assert.equal(s.periodResult, -20000);
+  assert.equal(s.net, 0); assert.equal(s.partnerShare, 0); assert.equal(s.toTransfer, 0);
+  assert.equal(s.carryOut, 20000); assert.equal(s.truckLossOut, 20000); assert.equal(s.previousBalance, 0, "el socio no debe nada");
+  assert.equal(s.companyReceives, s.netRevenue, "todo lo que entró se queda en la empresa");
 });
 
 test("normalizePartner migra el formato viejo a reparto de utilidad", () => {
