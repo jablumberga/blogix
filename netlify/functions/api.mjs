@@ -250,26 +250,42 @@ async function enforceTripRefs(url, key, incoming) {
   return { trips: [...byId.values()], extraUpserts: [...extra.values()] };
 }
 
+/**
+ * Lee TODAS las filas de una tabla. Supabase devuelve como máximo 1,000 filas por consulta: se pide el total
+ * (Prefer: count=exact → Content-Range «0-999/1234») y se traen las páginas que falten.
+ * Devuelve la Response del primer pedido si falla, para que quien llama decida.
+ */
+export async function readAllRows(url, key, table, query = "select=rec&order=id") {
+  const first = await fetch(`${url}/rest/v1/${table}?${query}`, { headers: { ...supabaseHeaders(key), "Prefer": "count=exact" } });
+  if (!first.ok) return { ok: false, res: first };
+  let rows = await first.json();
+  const total = Number(String(first.headers.get("content-range") || "").split("/")[1]);
+  while (Number.isFinite(total) && rows.length < total) {
+    const r = await fetch(`${url}/rest/v1/${table}?${query}&limit=1000&offset=${rows.length}`, { headers: supabaseHeaders(key) });
+    if (!r.ok) throw new Error(`${table} read failed (HTTP ${r.status})`);
+    const more = await r.json();
+    if (!Array.isArray(more) || more.length === 0) break;
+    rows = rows.concat(more);
+  }
+  return { ok: true, rows };
+}
+
 async function readTable(url, key, table) {
-  const res = await fetch(`${url}/rest/v1/${table}?select=rec&order=id`, {
-    headers: supabaseHeaders(key),
-  });
-  if (!res.ok) {
+  const r = await readAllRows(url, key, table);
+  if (!r.ok) {
     // 406 = table doesn't exist in PostgREST. Throw so the caller can fall back to legacy blob
     // rather than returning empty arrays that would overwrite good local data.
-    if (res.status === 406) throw new Error(`Table '${table}' not found — run DB migration`);
+    if (r.res.status === 406) throw new Error(`Table '${table}' not found — run DB migration`);
     return [];
   }
-  const rows = await res.json();
-  return rows.map(r => r.rec);
+  return r.rows.map(x => x.rec);
 }
 
 /** Como readTable, pero falla ante CUALQUIER error: para decisiones donde una lista vacía sería peligrosa. */
 async function readTableStrict(url, key, table) {
-  const res = await fetch(`${url}/rest/v1/${table}?select=rec&order=id`, { headers: supabaseHeaders(key) });
-  if (!res.ok) throw new Error(`${table} read failed (HTTP ${res.status})`);
-  const rows = await res.json();
-  return rows.map(r => r.rec);
+  const r = await readAllRows(url, key, table);
+  if (!r.ok) throw new Error(`${table} read failed (HTTP ${r.res.status})`);
+  return r.rows.map(x => x.rec);
 }
 
 async function readSettlementStatus(url, key) {

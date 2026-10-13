@@ -2,7 +2,10 @@
  * Costo por kilómetro — por camión, por destino y por chofer, en un rango de fechas.
  *
  * Kilómetros de un viaje (en este orden de confianza):
- *   1. GPS          trip.km con trip.kmSource === "gps"   (lo pone la sincronización con TrackSolid)
+ *   1. GPS          TODOS los km diarios del GPS (TrackSolid) del camión en el período, haya viaje o no
+ *                   (gpsPeriodKm). Por destino y por chofer se reparten entre los viajes del camión en el período
+ *                   según la distancia de cada viaje (odómetro o referencia; si no hay, por igual).
+ *                   — o trip.km con trip.kmSource === "gps" de sincronizaciones viejas (camión sin días del GPS)
  *   2. Odómetro     trip.odoEnd − trip.odoStart           (lo escribe el chofer)
  *   3. Estimado     distancia de referencia del destino   (tabla `distances`: provincia/municipio → km ida y vuelta)
  *
@@ -43,6 +46,35 @@ export function tripKm(trip, distances = []) {
   return ref > 0 ? { km: ref, source: "estimated" } : { km: 0, source: "none" };
 }
 
+const shiftDay = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+
+/**
+ * Km del GPS de cada camión en el período: TODOS los km diarios del GPS entre dateFrom y dateTo, haya viaje o no
+ * (así no importa si el viaje se cargó un día y se entregó al otro). Los días sin fila son días sin traer: la
+ * sincronización guarda 0 km en los días que consultó sin movimiento.
+ * @returns Map truckId → { imei, km, synced, daysWithData, daysExpected, missing:[fechas sin traer hasta hoy] }
+ */
+export function gpsPeriodKm({ trucks = [], gpsKm = [], dateFrom, dateTo, today = "" }) {
+  const out = new Map();
+  if (!dateFrom || !dateTo) return out;
+  const last = today && today < dateTo ? today : dateTo;
+  const expected = [];
+  for (let d = dateFrom, n = 0; d <= last && n < 400; d = shiftDay(d, 1), n++) expected.push(d);
+  const rowsByImei = new Map();
+  for (const g of gpsKm || []) {
+    if (!g?.imei || !g.date || g.date < dateFrom || g.date > dateTo) continue;
+    const k = String(g.imei); if (!rowsByImei.has(k)) rowsByImei.set(k, new Map());
+    const m = rowsByImei.get(k); m.set(g.date, (m.get(g.date) || 0) + (Number(g.km) || 0));
+  }
+  for (const t of trucks || []) {
+    if (!t.gpsImei) continue;
+    const rows = rowsByImei.get(String(t.gpsImei)) || new Map();
+    const km = Math.round([...rows.values()].reduce((s, x) => s + x, 0) * 10) / 10;
+    out.set(t.id, { imei: String(t.gpsImei), km, synced: rows.size > 0, daysWithData: rows.size, daysExpected: expected.length, missing: expected.filter(d => !rows.has(d)) });
+  }
+  return out;
+}
+
 const NOT_COST = new Set(["nominaTotalOverride", "adelanto_conductor", "adelanto_ayudante", "broker_commission", "partner_settlement", "cash_withdrawal", "reserve_withdrawal"]);
 const inRange = (d, from, to) => !!d && d >= from && d <= to;
 const daysBetween = (a, b) => Math.max(1, Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000) + 1);
@@ -51,7 +83,22 @@ const daysBetween = (a, b) => Math.max(1, Math.round((new Date(b + "T12:00:00") 
  * Cálculo principal.
  * @returns { byTruck:[], byRoute:[], byDriver:[], totals, quality }
  */
-export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks = [], drivers = [], clients = [], brokers = [], partners = [], fixedTemplates = [], distances = [], targetMarginPerKm = 0 }) {
+export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks = [], drivers = [], clients = [], brokers = [], partners = [], fixedTemplates = [], distances = [], gpsKm = [], today = "", targetMarginPerKm = 0 }) {
+  // Km del GPS: todos los km del camión en el período. Para ver por destino y por chofer, esos km se reparten entre
+  // los viajes del camión en el período según la distancia de cada viaje (odómetro o referencia; si no hay, por igual).
+  const gpsByTruck = gpsPeriodKm({ trucks, gpsKm, dateFrom, dateTo, today });
+  const baseKm = (tr) => tripKm(tr.kmSource === "gps" ? { ...tr, km: null, kmSource: null } : tr, distances); // sin km viejos del GPS por día
+  const gpsTripShare = new Map();
+  for (const [truckId, g] of gpsByTruck) {
+    if (!(g.km > 0)) continue;
+    const tTrips = trips.filter(t => t.truckId === truckId && t.status !== "cancelled" && inRange(t.date, dateFrom, dateTo));
+    if (!tTrips.length) continue;
+    const w = tTrips.map(t => baseKm(t).km), nz = w.filter(x => x > 0);
+    const avg = nz.length ? nz.reduce((s, x) => s + x, 0) / nz.length : 1;
+    const ww = w.map(x => x > 0 ? x : avg), sum = ww.reduce((s, x) => s + x, 0);
+    tTrips.forEach((t, i) => gpsTripShare.set(t.id, { km: g.km * ww[i] / sum, source: "gps" }));
+  }
+  const kmOf = (tr) => gpsTripShare.get(tr.id) || tripKm(tr, distances);
   const tripMap = new Map(trips.map(t => [t.id, t]));
   const truckMap = new Map(trucks.map(t => [t.id, t]));
   const partnerMap = new Map(partners.map(p => [p.id, normalizePartner(p)]));
@@ -77,7 +124,7 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
 
   for (const tr of pTrips) {
     const a = acc(tr.truckId);
-    const { km, source } = tripKm(tr, distances);
+    const { km, source } = kmOf(tr);
     const gross = Number(tr.revenue) || 0;
     const net = tripNetRevenue(tr, clientMap, brokerMap);
     a.trips++; a.km += km; a.revenue += net; a.kmBySource[source]++;
@@ -120,7 +167,7 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
   for (const [truckId, pool] of fuelPool) {
     const tTrips = pTrips.filter(t => t.truckId === truckId);
     if (tTrips.length === 0) { fuelUnallocated += pool.company; continue; }
-    const kms = tTrips.map(t => tripKm(t, distances).km);
+    const kms = tTrips.map(t => kmOf(t).km);
     const totalKm = kms.reduce((s, k) => s + k, 0);
     tTrips.forEach((tr, i) => {
       const w = totalKm > 0 ? kms[i] / totalKm : 1 / tTrips.length;
@@ -128,6 +175,13 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
       const d = byDriver.get(tr.driverId); if (d) { d.fuel += pool.amt * w; d.gallons += pool.gallons * w; }
     });
     fuelAllocated += pool.company;
+  }
+
+  // Camión con km del GPS y sin viajes en el período: igual se mueve y gasta → entra con sus km
+  for (const [truckId, g] of gpsByTruck) {
+    if (!g.synced || !(g.km > 0 || perTruck.has(truckId))) continue;
+    const a = acc(truckId); a.gpsKm = g.km; a.gpsDaysMissing = g.missing.length;
+    if (a.trips === 0) a.km = g.km;
   }
 
   // Fijos por camión (plantillas mensuales prorrateadas por días)
@@ -163,7 +217,10 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
   totals.costPerKm = totals.km > 0 ? totals.cost / totals.km : null;
   totals.revenuePerKm = totals.km > 0 ? totals.revenue / totals.km : null;
   totals.marginPerKm = totals.km > 0 ? (totals.revenue - totals.cost) / totals.km : null;
-  const quality = pTrips.reduce((q, tr) => { q[tripKm(tr, distances).source]++; return q; }, { gps: 0, odometer: 0, estimated: 0, none: 0 });
+  const quality = pTrips.reduce((q, tr) => { q[kmOf(tr).source]++; return q; }, { gps: 0, odometer: 0, estimated: 0, none: 0 });
+  // Camiones con GPS a los que les faltan días del período por traer (sus km se quedan cortos)
+  quality.gpsMissing = [...gpsByTruck].filter(([, g]) => g.synced && g.missing.length > 0).map(([truckId, g]) => ({ truckId, plate: truckMap.get(truckId)?.plate || `#${truckId}`, days: g.missing.length }));
+  quality.gpsNotSynced = [...gpsByTruck].filter(([, g]) => !g.synced && g.daysExpected > 0).map(([truckId]) => truckMap.get(truckId)?.plate || `#${truckId}`);
   quality.fuelAllocated = fuelAllocated;     // combustible sin viaje repartido entre viajes del camión
   quality.fuelUnallocated = fuelUnallocated; // combustible sin viaje de camiones sin viajes en el período (solo en «Por camión»)
   quality.fuelWithoutGallons = expenses.filter(e => e.category === "fuel" && !(Number(e.gallons) > 0) && ((e.tripId && pTripIds.has(e.tripId)) || (!e.tripId && inRange(e.date, dateFrom, dateTo)))).length;

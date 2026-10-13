@@ -55,7 +55,7 @@ for (const t of TABLE_DEFAULTS) db[t] ??= [];
 const save = () => writeFileSync(DB, JSON.stringify(db, null, 1));
 
 // ── Mini PostgREST ──────────────────────────────────────────────────────────
-// Soporta lo que usan las funciones: select, order, limit, eq/neq/in/not.in
+// Soporta lo que usan las funciones: select, order, limit, offset, Prefer: count=exact, eq/neq/in/not.in
 // (sobre columnas o rec->>campo), upsert por id (Prefer: resolution=merge-duplicates),
 // PATCH y DELETE con filtros, y el rpc bl_rate_limit_hit.
 function colValue(row, col) {
@@ -120,9 +120,13 @@ async function restHandler(req, url) {
     let out = rows.filter(match);
     const order = url.searchParams.get("order");
     if (order) { const [col, dir] = order.split("."); out = [...out].sort((a, b) => (a[col] > b[col] ? 1 : a[col] < b[col] ? -1 : 0) * (dir === "desc" ? -1 : 1)); }
-    const limit = Number(url.searchParams.get("limit"));
-    if (limit) out = out.slice(0, limit);
-    return json(out.map(r => project(r, url.searchParams.get("select"))));
+    // Como Supabase: máximo DEV_MAX_ROWS filas por respuesta (1,000), offset/limit y Content-Range con Prefer: count=exact
+    const total = out.length, maxRows = Number(process.env.DEV_MAX_ROWS) || 1000;
+    const offset = Number(url.searchParams.get("offset")) || 0;
+    const limit = Math.min(Number(url.searchParams.get("limit")) || maxRows, maxRows);
+    out = out.slice(offset, offset + limit);
+    const headers = /count=exact/.test(prefer) ? { "Content-Range": `${out.length ? `${offset}-${offset + out.length - 1}` : "*"}/${total}` } : {};
+    return Response.json(out.map(r => project(r, url.searchParams.get("select"))), { status: 200, headers });
   }
   if (req.method === "POST") {
     let body = await req.json();
