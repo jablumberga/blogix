@@ -165,14 +165,14 @@ export default function PartnerDashboard({ pfSettings, t, trips, trucks, expense
       <StatCard icon={Route}           label={t.totalTrips}  value={filtered.length}  color={colors.cyan} />
       <StatCard icon={TrendingUp}      label={passThruDeduction > 0 ? "Ingreso Neto" : "Ingreso Bruto"} value={fmt(rev)} color={colors.green} />
       <StatCard icon={TrendingDown}    label="Total Deducciones" value={fmt(totalDeducciones)} color={colors.orange} />
-      <StatCard icon={CircleDollarSign} label="A Recibir"   value={fmt(Math.max(0, toReceive))}   color={toReceive >= 0 ? colors.green : colors.red} sub={toReceive < 0 ? `debes ${fmt(-toReceive)} · pasa a la siguiente quincena` : settle.previousBalance > 0 ? `incluye ${fmt(settle.previousBalance)} que debías` : undefined} />
+      <StatCard icon={CircleDollarSign} label="A Recibir"   value={fmt(Math.max(0, toReceive))}   color={toReceive >= 0 ? colors.green : colors.red} sub={toReceive < 0 ? `debes ${fmt(-toReceive)} · pasa a la siguiente quincena` : settle.previousBalance > 0 ? `incluye ${fmt(settle.previousBalance)} que debías` : settle.truckLossOut > 0 ? `el camión quedó en pérdida ${fmt(settle.truckLossOut)}: la financia la empresa` : settle.truckLossIn > 0 ? `antes de repartir se recuperaron ${fmt(settle.truckLossRecovered)} de pérdida anterior` : undefined} />
     </div>
 
     <Card style={{ marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 15 }}>Mi liquidación · {periodLabel} <Badge label={modelLabel} color={colors.accent} /></div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{settle.tripCount} viaje{settle.tripCount !== 1 ? "s" : ""} entregado{settle.tripCount !== 1 ? "s" : ""}{settle.expenseLines.length > 0 ? ` · ${settle.expenseLines.length} gasto(s) descontado(s)` : ""}{viewMode === "quincena" ? ` · pago ${settle.payDate}` : ""}{settle.previousBalance > 0 ? <span style={{ color: colors.red }}> · se descuentan {fmt(settle.previousBalance)} de la quincena anterior</span> : ""}</div>
+          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{settle.tripCount} viaje{settle.tripCount !== 1 ? "s" : ""} entregado{settle.tripCount !== 1 ? "s" : ""}{settle.expenseLines.length > 0 ? ` · ${settle.expenseLines.length} gasto(s) descontado(s)` : ""}{viewMode === "quincena" ? ` · pago ${settle.payDate}` : ""}{settle.previousBalance > 0 ? <span style={{ color: colors.red }}> · se descuentan {fmt(settle.previousBalance)} de la quincena anterior</span> : ""}{settle.truckLossIn > 0 ? <span style={{ color: colors.orange }}> · el camión venía con {fmt(settle.truckLossIn)} de pérdida (la empresa la financió y se recupera antes de repartir)</span> : ""}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div style={{ textAlign: "right" }}>

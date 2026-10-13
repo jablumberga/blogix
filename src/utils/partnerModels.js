@@ -8,7 +8,10 @@
  *                      combustible y gastos de emergencia; todo gasto marcado
  *                      «cargar al socio» se descuenta en la liquidación.
  *  profit_share        Modelo 3. Se reparte la utilidad después de gastos: el socio
- *                      recibe partnerSharePct % del neto.
+ *                      recibe partnerSharePct % del neto. La empresa financia toda la
+ *                      operación: si el camión da pérdida, NO se le carga al socio; la
+ *                      pérdida queda en el camión y las próximas utilidades la reembolsan
+ *                      primero a la empresa (arrastre del camión) antes de repartir.
  *
  * Pago: cada quincena se paga `fondoDays` días después de cerrar (30 por defecto:
  * la primera quincena sale a los 30 días y de ahí cada 15).
@@ -146,11 +149,22 @@ export function computeSettlement({ partner, period, trips, expenses, trucks, cl
   // del camión (reimbursement). Lo que queda es lo que se comisiona/reparte.
   const reimbursement = expensesTotal;
   let commission = 0, partnerShare = 0, companyShare = 0, net = 0, toTransfer = 0;
+  let periodResult = 0, truckLossIn = 0, truckLossRecovered = 0, truckLossOut = 0;
   if (p.model === "profit_share") {
-    net = netRevenue - reimbursement;                      // utilidad a repartir
-    const pct = Number(p.partnerSharePct) || 0;
-    partnerShare = Math.round(net * pct / 100);
-    companyShare = net - partnerShare;
+    // Arrastre del camión: la pérdida de quincenas anteriores la financió la empresa y se le
+    // reembolsa primero de la utilidad; el socio nunca queda debiendo.
+    periodResult = netRevenue - reimbursement;            // resultado del camión en la quincena
+    truckLossIn = Math.max(0, Number(carryIn) || 0);
+    truckLossRecovered = Math.min(truckLossIn, Math.max(0, periodResult));
+    net = periodResult - truckLossIn;                     // lo que queda para repartir (negativo = sigue en pérdida)
+    if (net > 0) {
+      const pct = Number(p.partnerSharePct) || 0;
+      partnerShare = Math.round(net * pct / 100);
+      companyShare = net - partnerShare;
+    } else {
+      truckLossOut = -net;                                // pasa a la siguiente quincena (no la paga el socio)
+      net = 0;
+    }
     toTransfer = partnerShare;
   } else {
     commission = Math.round(grossRevenue * (Number(p.companyPct) || 0) / 100);
@@ -159,11 +173,12 @@ export function computeSettlement({ partner, period, trips, expenses, trucks, cl
     companyShare = commission + fixedTotal;
     toTransfer = net;
   }
-  // Saldo negativo de quincenas anteriores (el socio debía): se descuenta primero de lo que le toca
-  const previousBalance = Math.max(0, Number(carryIn) || 0);
+  // Comisión: saldo negativo de quincenas anteriores (el socio debía) se descuenta primero de lo que le toca
+  const previousBalance = p.model === "profit_share" ? 0 : Math.max(0, Number(carryIn) || 0);
   toTransfer = toTransfer - previousBalance;
-  // Si vuelve a salir negativo, esa deuda pasa a la siguiente quincena
-  const carryOut = toTransfer < 0 ? -toTransfer : 0;
+  // Lo que pasa a la siguiente quincena: en comisión, lo que el socio quedó debiendo;
+  // en reparto de utilidad, la pérdida del camión que todavía no se recupera
+  const carryOut = p.model === "profit_share" ? truckLossOut : (toTransfer < 0 ? -toTransfer : 0);
   // Lo que la empresa retiene de esta quincena: lo que entró por el camión menos lo que se transfiere
   // (nunca más de lo que entró: si no hubo ingreso, no se retiene nada y la deuda se arrastra)
   const companyReceives = Math.max(0, netRevenue - Math.max(0, toTransfer));
@@ -177,6 +192,7 @@ export function computeSettlement({ partner, period, trips, expenses, trucks, cl
     expenseLines, expensesTotal,
     fixedLines, fixedTotal,
     reimbursement, previousBalance, carryOut,
+    periodResult, truckLossIn, truckLossRecovered, truckLossOut,
     net, partnerSharePct: Number(p.partnerSharePct) || 0, partnerShare, companyShare, companyReceives,
     toTransfer,
   };
@@ -184,8 +200,8 @@ export function computeSettlement({ partner, period, trips, expenses, trucks, cl
 
 
 /**
- * Liquidaciones encadenadas de un socio: de la quincena más vieja a la más nueva,
- * arrastrando el saldo negativo (lo que el socio quedó debiendo) a la siguiente.
+ * Liquidaciones encadenadas de un socio: de la quincena más vieja a la más nueva, arrastrando
+ * a la siguiente lo que el socio quedó debiendo (comisión) o la pérdida del camión (reparto de utilidad).
  * `periods` en cualquier orden; devuelve un Map clave(mStr-half) → liquidación.
  */
 export function computeSettlementChain({ partner, periods = [], trips, expenses, trucks, clients = [], brokers = [], drivers = [] }) {
