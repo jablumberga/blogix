@@ -38,7 +38,7 @@ test("costo por km: camión propio vs camión de socio", () => {
   assert.equal(r.byRoute[0].trips, 2);
 });
 
-import { signParams, summarize, assignTripKm } from "../netlify/functions/gps.mjs";
+import { signParams, summarize, assignTripKm, kmOf, localDate, utcRange } from "../netlify/functions/gps.mjs";
 test("GPS: firma Jimi, km diarios y asignación a viajes", () => {
   // firma: MD5(secret + "app_key"+"k" + "method"+"m" + secret) en mayúsculas
   const sig = signParams({ method: "m", app_key: "k", sign: "x" }, "s");
@@ -49,6 +49,33 @@ test("GPS: firma Jimi, km diarios y asignación a viajes", () => {
   const trucks = [{ id: 1, gpsImei: "1" }, { id: 2, gpsImei: "2" }, { id: 3 }];
   const trips = [{ id: 10, truckId: 1, date: "2026-10-05" }, { id: 11, truckId: 1, date: "2026-10-05" }, { id: 12, truckId: 3, date: "2026-10-06" }, { id: 13, truckId: 2, date: "2026-10-07" }];
   assert.deepEqual(assignTripKm(daily, trips, trucks), [{ tripId: 10, km: 160.2 }, { tripId: 11, km: 160.2 }]);
+});
+
+test("GPS real (Open API de TrackSolid): «distance» en metros y hora UTC → km del día en hora de RD", () => {
+  // formato de la Open API: distance en METROS, startTime en UTC
+  assert.equal(kmOf({ distance: 25000 }), 25);
+  assert.equal(kmOf({ distance: "184500" }), 184.5);
+  assert.equal(kmOf({ totalMileage: "120.4" }), 120.4, "otras versiones: totalMileage en km");
+  assert.equal(kmOf({ totalMileage: "250000" }), 250, "un trayecto de 250,000 «km» es imposible: venía en metros");
+  assert.equal(kmOf({ elapsed: 300, avgSpeed: 40 }), 0);
+  // 9:30 pm del 12 en RD = 01:30 del 13 en UTC → cuenta para el 12
+  assert.equal(localDate("2026-10-13 01:30:00"), "2026-10-12");
+  assert.equal(localDate("2026-10-12 12:00:00"), "2026-10-12");
+  // el día 12 de RD se pide a la API de 04:00 UTC del 12 a 03:59:59 UTC del 13; nunca después de ahora
+  assert.deepEqual(utcRange("2026-10-12", "2026-10-12", { now: new Date("2026-11-01T00:00:00Z") }), { begin: "2026-10-12 04:00:00", end: "2026-10-13 03:59:59", empty: false });
+  assert.equal(utcRange("2026-10-01", "2026-10-31", { now: new Date("2026-10-13T13:10:00Z") }).end, "2026-10-13 13:09:00");
+  assert.equal(utcRange("2026-11-01", "2026-11-15", { now: new Date("2026-10-13T13:10:00Z") }).empty, true);
+  const items = [
+    { imei: "8288", startTime: "2026-10-12 11:05:00", endTime: "2026-10-12 14:00:00", distance: 152300 }, // ida (mañana del 12)
+    { imei: "8288", startTime: "2026-10-12 18:20:00", endTime: "2026-10-12 21:00:00", distance: 149800 }, // vuelta
+    { imei: "8288", startTime: "2026-10-13 01:30:00", endTime: "2026-10-13 01:50:00", distance: 4100 },   // 9:30 pm del 12 en RD
+    { imei: "8288", startTime: "2026-10-13 13:00:00", endTime: "2026-10-13 13:05:00", distance: 0 },      // hoy, encendido sin moverse
+  ];
+  const daily = summarize(items);
+  assert.deepEqual(daily, [{ imei: "8288", date: "2026-10-12", km: 306.2 }, { imei: "8288", date: "2026-10-13", km: 0 }]);
+  const trucks = [{ id: 1, gpsImei: "8288" }];
+  // viaje bien fechado (12) recibe los km; un viaje en un día de 0 km no recibe nada (no tapa odómetro ni distancia de referencia)
+  assert.deepEqual(assignTripKm(daily, [{ id: 1, truckId: 1, date: "2026-10-12" }, { id: 2, truckId: 1, date: "2026-10-13" }], trucks), [{ tripId: 1, km: 306.2 }]);
 });
 
 // ── Combustible registrado solo al camión (sin viaje) ─────────────────────────
