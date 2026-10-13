@@ -92,8 +92,9 @@ export function autoLinkJointPairs(trips = []) {
  * Escritura de un CHOFER (servidor): nunca borra, solo crea o edita viajes suyos.
  *  - viajes bloqueados (facturados, cobrados o con documentos recibidos) no se tocan:
  *    se conserva lo que hay en el servidor
- *  - viajes nuevos o editados deben tener cliente activo, destino, camión y tarifa > 0
- *    (salvo cancelados) y fecha válida cercana (±`maxDays` días)
+ *  - viajes nuevos o editados deben tener cliente activo, destino, camión y fecha válida cercana
+ *    (±`maxDays` días). Sin tarifa del cliente se guarda igual con tarifa 0: queda «por completar»
+ *    para la oficina (ver utils/tripPending.js) y no se puede facturar hasta que la pongan.
  *  - se conservan campos que solo pone el servidor/admin (enlace de conjunto, bitácora)
  * Devuelve { trips, errors:[{tripId, error}], ignored:[ids] }.
  */
@@ -130,7 +131,7 @@ export function sanitizeDriverTrips({ incoming = [], existing = [], driverId, cl
     else if (cl.status === "inactive") problems.push("cliente inactivo");
     if (!tr.province || !tr.municipality) problems.push("falta el destino");
     if (!truckMap.get(Number(tr.truckId))) problems.push("camión no existe");
-    if (!cancelled && !(Number(tr.revenue) > 0)) problems.push("tarifa debe ser mayor que 0");
+    if (!(Number(tr.revenue) > 0)) tr.revenue = 0; // sin tarifa: se guarda como récord y la oficina la completa
     const d = /^\d{4}-\d{2}-\d{2}$/.test(tr.date || "") ? new Date(tr.date + "T00:00:00") : null;
     if (!d || isNaN(d)) problems.push("fecha inválida");
     else if (Math.abs((d - t0) / 86400000) > maxDays) problems.push(`fecha fuera de rango (±${maxDays} días)`);

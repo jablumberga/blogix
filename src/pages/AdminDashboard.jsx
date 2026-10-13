@@ -5,7 +5,8 @@ import { fmt, monthStr, expenseTruckId, today } from "../utils/helpers.js";
 import { invoiceBalance } from "../utils/cobros.js";
 import { tripNetRevenue } from "../utils/partnerModels.js";
 import { Card, PageHeader, Th, Td, StatusBadge } from "../components/ui/index.jsx";
-import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
+import AccountsPanel from "../components/AccountsPanel.jsx";
+import { pendingInfoTrips, missingInfo, requestTripsFilter } from "../utils/tripPending.js";
 
 // ── Mini stat block ─────────────────────────────────────────────────────────
 function Stat({ label, value, color, sub, onClick }) {
@@ -42,7 +43,7 @@ function SectionTitle({ label, color }) {
   );
 }
 
-export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, pfSettings, isMobile, receiptsPending = 0 }) {
+export default function AdminDashboard({ t, trips, trucks, expenses, clients, drivers, partners, brokers, suppliers, cobros, invoices, alerts, setPage, pfSettings, isMobile, receiptsPending = 0, bankAccount = null, bankTransfers = [], bankReconciliation = {} }) {
   // brokers is used in the revenue useMemo for pass-through deduction
   const cm = monthStr();
   const todayStr = today();
@@ -254,6 +255,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   }, [trips]);
 
   // ── Alerts ──────────────────────────────────────────────────────────────
+  const pendingTrips = useMemo(() => pendingInfoTrips(trips), [trips]);
   const errCount  = alerts.filter(a => a.severity === "error").length;
   const warnCount = alerts.filter(a => a.severity === "warning").length;
   const infoCount = alerts.filter(a => a.severity === "info").length;
@@ -268,6 +270,19 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         <Camera size={18} color={colors.orange} />
         <span style={{ flex: 1 }}><b>{receiptsPending}</b> recibo{receiptsPending > 1 ? "s" : ""} por foto por revisar</span>
         <span style={{ color: colors.orange, fontSize: 12, display: "flex", alignItems: "center", gap: 2 }}>Revisar <ChevronRight size={14} /></span>
+      </button>}
+
+      {pendingTrips.length > 0 && <button onClick={() => { requestTripsFilter("pending"); setPage?.("trips"); }} data-dash-pending-trips style={{ width: "100%", marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", borderRadius: 10, border: `1px solid ${colors.orange}55`, background: colors.orange + "14", color: colors.text, cursor: "pointer", textAlign: "left", fontSize: 14 }}>
+        <AlertTriangle size={18} color={colors.orange} style={{ flexShrink: 0, marginTop: 1 }} />
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <b>{pendingTrips.length}</b> viaje{pendingTrips.length > 1 ? "s" : ""} pendiente{pendingTrips.length > 1 ? "s" : ""} de completar información
+          <span style={{ display: "block", fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
+            {pendingTrips.slice(0, 3).map(tr => { const cl = clients.find(c => c.id === tr.clientId); const dr = drivers.find(d => d.id === tr.driverId);
+              return <span key={tr.id} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>#{tr.id} · {tr.date} · {cl?.companyName || "—"} → {tr.municipality || "—"}{dr ? ` · ${dr.name}` : ""} — falta {missingInfo(tr, { drivers, expenses }).join(" y ")}</span>; })}
+            {pendingTrips.length > 3 && <span style={{ display: "block" }}>y {pendingTrips.length - 3} más…</span>}
+          </span>
+        </span>
+        <span style={{ color: colors.orange, fontSize: 12, display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>Completar <ChevronRight size={14} /></span>
       </button>}
 
       {/* ── Date filter ── */}
@@ -295,7 +310,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
       </Card>
 
       {/* ── Profit First: las tres cuentas ── */}
-      <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} isMobile={isMobile} />
+      <AccountsPanel bankAccount={bankAccount} expenses={expenses} cobros={cobros} bankTransfers={bankTransfers} bankReconciliation={bankReconciliation} pfSettings={pfSettings} setPage={setPage} isMobile={isMobile} />
 
       {/* ── Pipeline de Facturación ── */}
       <Card style={{ marginBottom: 12, cursor: "pointer" }} onClick={() => setPage("invoices")}>

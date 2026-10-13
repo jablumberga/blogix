@@ -14,7 +14,7 @@ function applyData(data, setters) {
   const { setClients, setPartners, setTrucks, setDrivers, setTrips,
           setExpenses, setBrokers, setSuppliers, setFixedTemplates,
           setSettlementStatus, setCobros, setInvoices, setPfSettings, setGpsKm, setDistances, setAyudantes,
-          setBankAccount, setBankReconciliation, setStaff } = setters;
+          setBankAccount, setBankReconciliation, setStaff, setBankTransfers } = setters;
   if (!data || Object.keys(data).length === 0) return;
   const hasAnyData = Object.values(data).some(v =>
     Array.isArray(v) ? v.length > 0 : (v && typeof v === "object" ? Object.keys(v).length > 0 : Boolean(v))
@@ -34,6 +34,7 @@ function applyData(data, setters) {
   if (Array.isArray(data.invoices))       setInvoices(data.invoices);
   if (Array.isArray(data.staff))          setStaff(data.staff);
   if (Array.isArray(data.gpsKm))          setGpsKm(data.gpsKm);
+  if (Array.isArray(data.bankTransfers) && setBankTransfers) setBankTransfers(data.bankTransfers);
   if (Array.isArray(data.distances))      setDistances(data.distances);
   if (Array.isArray(data.ayudantes) && setAyudantes) setAyudantes(data.ayudantes);
   if (data.bankAccount != null)           setBankAccount(data.bankAccount);
@@ -42,7 +43,7 @@ function applyData(data, setters) {
 }
 
 // ── Guardado por registro: se envía solo lo que cambió respecto a lo último conocido del servidor ──
-const TABLE_KEYS = ["clients", "partners", "trucks", "drivers", "trips", "expenses", "brokers", "suppliers", "fixedTemplates", "cobros", "invoices", "staff", "gpsKm"];
+const TABLE_KEYS = ["clients", "partners", "trucks", "drivers", "trips", "expenses", "brokers", "suppliers", "fixedTemplates", "cobros", "invoices", "staff", "gpsKm", "bankTransfers"];
 const SCALAR_KEYS = ["settlementStatus", "bankAccount", "bankReconciliation", "pfSettings", "distances", "ayudantes"];
 const stripPw = (r) => { if (r && r.password) { const { password: _p, ...rest } = r; return rest; } return r; };
 export function snapshotOf(data) {
@@ -118,6 +119,7 @@ export function AppProvider({ children }) {
   const [invoices, setInvoices] = useState([]);
   const [staff, setStaff] = useState([]); // usuarios de oficina (asistente administrativa)
   const [gpsKm, setGpsKm] = useState([]);       // km diarios por camión desde el GPS (TrackSolid)
+  const [bankTransfers, setBankTransfers] = useState([]); // transferencias entre cuentas del Banco
   const [distances, setDistances] = useState([]); // distancias de referencia por destino (km ida y vuelta)
   const [ayudantes, setAyudantes] = useState([]); // ayudantes como personas (pago directo o por el chofer)
   const [bankAccount, setBankAccount] = useState({ name: "Cuenta Principal", bank: "", openingBalance: 0, openingDate: today() });
@@ -140,7 +142,7 @@ export function AppProvider({ children }) {
     setClients, setPartners, setTrucks, setDrivers, setTrips,
     setExpenses, setBrokers, setSuppliers, setFixedTemplates,
     setSettlementStatus, setCobros, setInvoices,
-    setBankAccount, setBankReconciliation, setStaff, setPfSettings, setGpsKm, setDistances, setAyudantes,
+    setBankAccount, setBankReconciliation, setStaff, setPfSettings, setGpsKm, setDistances, setAyudantes, setBankTransfers,
   };
 
   // ── Load on mount ─────────────────────────────────────────────────────────
@@ -166,10 +168,10 @@ export function AppProvider({ children }) {
     if (!dataLoadedRef.current) return;
     currentDataRef.current = {
       clients, partners, trucks, drivers, trips, expenses,
-      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm,
+      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm, bankTransfers,
       bankAccount, bankReconciliation, pfSettings, distances, ayudantes,
     };
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm, bankAccount, bankReconciliation, pfSettings, distances, ayudantes]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm, bankTransfers, bankAccount, bankReconciliation, pfSettings, distances, ayudantes]);
 
   // ── Flush to localStorage on tab close / Android OS kill (admin only) ────
   useEffect(() => {
@@ -195,7 +197,7 @@ export function AppProvider({ children }) {
         : user?.role === "assistant"
         ? { trips }
         : { clients, partners, trucks, drivers, trips, expenses,
-            brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm,
+            brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm, bankTransfers,
             bankAccount, bankReconciliation, pfSettings, distances, ayudantes };
       let patch = null;
       if (user?.role === "admin" && baseRef.current && versionRef.current) {
@@ -241,7 +243,7 @@ export function AppProvider({ children }) {
       setSyncStatus(result.saved === "api" ? "saved" : "offline");
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
-  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm, bankAccount, bankReconciliation, pfSettings, distances, ayudantes]);
+  }, [clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm, bankTransfers, bankAccount, bankReconciliation, pfSettings, distances, ayudantes]);
 
   // ── Dynamic user list ─────────────────────────────────────────────────────
   const allUsers = useMemo(() => [
@@ -450,13 +452,13 @@ export function AppProvider({ children }) {
     setSyncStatus("saving");
     const result = await saveData({
       clients, partners, trucks, drivers, trips, expenses,
-      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm,
+      brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm, bankTransfers,
       bankAccount, bankReconciliation, pfSettings, distances, ayudantes,
     }, versionRef.current);
     if (result.saved === "unauthorized") { setUser(null); return; }
     if (result.saved === "rejected") { setSyncError(result.error); setSyncStatus("rejected"); return result; }
     if (result.saved === "conflict") { setSyncStatus("conflict"); return result; }
-    if (result.saved === "api") { versionRef.current = result.version || 0; baseRef.current = snapshotOf({ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm, bankAccount, bankReconciliation, pfSettings, distances, ayudantes }); conflictsRef.current = 0; }
+    if (result.saved === "api") { versionRef.current = result.version || 0; baseRef.current = snapshotOf({ clients, partners, trucks, drivers, trips, expenses, brokers, suppliers, fixedTemplates, settlementStatus, cobros, invoices, staff, gpsKm, bankTransfers, bankAccount, bankReconciliation, pfSettings, distances, ayudantes }); conflictsRef.current = 0; }
     setSyncStatus(result.saved === "api" ? "saved" : "offline");
     return result;
   };
@@ -480,7 +482,7 @@ export function AppProvider({ children }) {
     settlementStatus, setSettlementStatus,
     cobros, setCobros,
     invoices, setInvoices,
-    staff, setStaff, gpsKm, setGpsKm, distances, setDistances, ayudantes, setAyudantes,
+    staff, setStaff, gpsKm, setGpsKm, bankTransfers, setBankTransfers, distances, setDistances, ayudantes, setAyudantes,
     bankAccount, setBankAccount,
     bankReconciliation, setBankReconciliation,
     pfSettings, setPfSettings,

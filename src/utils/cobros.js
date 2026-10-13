@@ -35,7 +35,7 @@ export function invoiceBalance(inv, cobros = [], { trips = [], clients = [], bro
 }
 
 /** Construye un abono (no lo guarda). Devuelve null si el monto no es válido. */
-export function buildAbono({ inv, amount, date, method = "transfer", reference = "", note = "", cobros = [], trips = [], trucks = [], partners = [], clients = [], brokers = [], settings = DEFAULT_PF_SETTINGS, nextId }) {
+export function buildAbono({ inv, amount, date, method = "transfer", reference = "", note = "", accountId = null, cobros = [], trips = [], trucks = [], partners = [], clients = [], brokers = [], settings = DEFAULT_PF_SETTINGS, nextId }) {
   const amt = round2(Number(amount) || 0);
   if (!inv || !(amt > 0) || !date) return null;
   const { balance, amount: invAmt } = invoiceBalance(inv, cobros, { trips, clients, brokers });
@@ -43,7 +43,7 @@ export function buildAbono({ inv, amount, date, method = "transfer", reference =
   if (!(capped > 0)) return null;
   const pf = allocateCobro({ amount: capped, tripIds: inv.tripIds || [], trips, trucks, partners, clients, brokers, settings, invoiceAmount: invAmt });
   return { id: nextId, invoiceId: inv.id, clientId: inv.clientId, date, collectedDate: date, amount: capped, method, reference, note,
-    status: "collected", collectedTripIds: [...(inv.tripIds || [])], pf: { ...pf, at: date } };
+    status: "collected", collectedTripIds: [...(inv.tripIds || [])], pf: { ...pf, at: date }, ...(accountId ? { accountId } : {}) };
 }
 
 /** Estado que le toca a la factura según sus abonos. */

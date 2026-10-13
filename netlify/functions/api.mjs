@@ -289,7 +289,7 @@ async function readSettlementStatus(url, key) {
 async function readAllTables(url, key) {
   const [
     trips, expenses, trucks, drivers, clients, partners,
-    brokers, suppliers, invoices, cobros, fixedTemplates, settlementStatus, staff, gpsKm,
+    brokers, suppliers, invoices, cobros, fixedTemplates, settlementStatus, staff, gpsKm, bankTransfers,
   ] = await Promise.all([
     readTable(url, key, "bl_trips"),
     readTable(url, key, "bl_expenses"),
@@ -305,12 +305,13 @@ async function readAllTables(url, key) {
     readSettlementStatus(url, key),
     readTable(url, key, "bl_staff").catch(() => []), // tabla nueva: puede no existir aún
     readTable(url, key, "bl_gps_km").catch(() => []), // km diarios por GPS (TrackSolid); puede no existir aún
+    readTable(url, key, "bl_bank_transfers").catch(() => []), // transferencias entre cuentas del Banco; puede no existir aún
   ]);
   // Extract bank config stored in the settlement_status blob under __ keys
   const { __bankAccount, __bankReconciliation, __pfSettings, __distances, __ayudantes, ...cleanSettlementStatus } = settlementStatus;
   return {
     trips, expenses, trucks, drivers, clients, partners, brokers, suppliers,
-    invoices, cobros, fixedTemplates, staff, gpsKm,
+    invoices, cobros, fixedTemplates, staff, gpsKm, bankTransfers,
     settlementStatus: cleanSettlementStatus,
     bankAccount: __bankAccount || null,
     bankReconciliation: __bankReconciliation || null,
@@ -388,6 +389,7 @@ async function syncAllTables(url, key, body) {
   await run("bl_fixed_templates",  () => syncTable(url, key, "bl_fixed_templates", body.fixedTemplates));
   await run("bl_staff",            () => syncTable(url, key, "bl_staff",           body.staff));
   if (Array.isArray(body.gpsKm)) await run("bl_gps_km", () => syncTable(url, key, "bl_gps_km", body.gpsKm));
+  if (Array.isArray(body.bankTransfers)) await run("bl_bank_transfers", () => syncTable(url, key, "bl_bank_transfers", body.bankTransfers));
   if (errors.length > 0) throw new Error(errors.join("; "));
   // syncSettlementStatus is intentionally NOT called here — the POST handler is the sole writer
   // of the version stamp so _version is always set atomically after all tables confirm success.
@@ -635,7 +637,7 @@ export default async (request) => {
           // oficina ni cambia un gasto aprobado de un recibo). El chofer solo crea gastos nuevos, y nunca «aprueba»
           // un recibo: el enlace receiptId lo pone solo la oficina.
           existingExpIds = new Set(driverExps.filter(e => expById.has(e.id)).map(e => e.id));
-          for (const e of driverExps) if (!existingExpIds.has(e.id)) { delete e.receiptId; delete e.receiptDriverId; }
+          for (const e of driverExps) if (!existingExpIds.has(e.id)) { delete e.receiptId; delete e.receiptDriverId; delete e.accountId; }
           const mine = exTrips.filter(t => t.driverId === driverId);
           // Lista de ayudantes: para validar quién va en los viajes nuevos del chofer
           let stAy;
@@ -847,7 +849,7 @@ export default async (request) => {
     if (body.patch === true) {
       if (!useRelational) return Response.json({ error: "patch solo en modo relacional" }, { status: 400, headers: corsHeaders });
       const TABLES = { trips: "bl_trips", expenses: "bl_expenses", trucks: "bl_trucks", drivers: "bl_drivers", clients: "bl_clients", partners: "bl_partners",
-        brokers: "bl_brokers", suppliers: "bl_suppliers", invoices: "bl_invoices", cobros: "bl_cobros", fixedTemplates: "bl_fixed_templates", staff: "bl_staff", gpsKm: "bl_gps_km" };
+        brokers: "bl_brokers", suppliers: "bl_suppliers", invoices: "bl_invoices", cobros: "bl_cobros", fixedTemplates: "bl_fixed_templates", staff: "bl_staff", gpsKm: "bl_gps_km", bankTransfers: "bl_bank_transfers" };
       const tables = body.tables || {};
       for (const k of Object.keys(tables)) if (!TABLES[k]) return Response.json({ error: `tabla desconocida: ${k}` }, { status: 400, headers: corsHeaders });
       const up = (k) => Array.isArray(tables[k]?.upserts) ? tables[k].upserts : [];

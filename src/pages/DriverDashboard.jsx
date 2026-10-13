@@ -2,6 +2,7 @@ import { useState, useEffect, Fragment } from "react";
 import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown, Camera } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
+import { needsRate } from "../utils/tripPending.js";
 import { calcDriverPay, DEFAULT_HELPERS, tripSize } from "../utils/driverPay.js";
 import { crewSlots, buildHelperLines, helperExpensePlan, planToNewExpenses, clientHelpersMode, clientSkipsHelpers, isDirectLine } from "../utils/ayudantes.js";
 import HelperSlots from "../components/HelperSlots.jsx";
@@ -59,8 +60,12 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
         const tk = trucks.find(t2 => t2.id === Number(f.truckId));
         const size = tk?.size || "T1";
         const price = size === "T2" ? (rate.priceT2 ?? rate.price ?? 0) : (rate.priceT1 ?? rate.price ?? 0);
-        f.revenue = price; setRateMsg(`${t.rateApplied} (${size}): ${fmt(price)}`); return;
+        if (price > 0) { f.revenue = price; setRateMsg("✓ El cliente tiene tarifa para este destino."); return; } // sin mostrar el monto al chofer
       }
+      // Sin tarifa para este destino/camión: se puede registrar igual; la oficina completa la tarifa
+      f.revenue = "";
+      setRateMsg(`⚠️ ${cl.companyName} no tiene tarifa para ${f.municipality} con este camión. Puedes registrar el viaje: la oficina completará la tarifa.`);
+      return;
     }
     setRateMsg("");
   };
@@ -87,13 +92,15 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
       if (Number(form.jointDriverId) === driverObj?.id) { setFormError("El compañero no puedes ser tú mismo."); return; }
       if (Number(form.jointTruckId) === Number(form.truckId)) { setFormError("El camión del compañero debe ser distinto al tuyo."); return; }
     }
-    // Sin tarifa del cliente para el destino: el servidor lo rechaza (tarifa > 0), mejor avisar aquí
-    if (!(Number(form.revenue) > 0)) { setFormError("El cliente no tiene tarifa para este destino con tu camión. Avisa a la oficina para que la agregue en Clientes antes de registrar el viaje."); return; }
+    // Sin tarifa del cliente o sin tarifa de pago del chofer: se registra igual (queda el récord) y la oficina completa
+    const missing = [];
+    if (!(Number(form.revenue) > 0)) missing.push("la tarifa del cliente para este destino");
     if (driverObj) {
       const tk0 = trucks.find(t2 => t2.id === Number(form.truckId));
       const pre = calcDriverPay({ driver: driverObj, trip: { ...form, revenue: Number(form.revenue) || 0, numHelpers: Number(form.numHelpers) || 0 }, truck: tk0, clientId: Number(form.clientId) });
-      if (pre.payType === "perTrip" && !pre.rateFound && !window.confirm("No tienes tarifa de pago para este destino: el viaje se guardará SIN tu pago y la oficina tendrá que ajustarlo. ¿Registrar de todos modos?")) return;
+      if (pre.payType === "perTrip" && !pre.rateFound) missing.push("tu tarifa de pago");
     }
+    if (missing.length && !window.confirm(`Falta ${missing.join(" y ")}. El viaje se guardará igual y la oficina completará esa información. ¿Registrar?`)) return;
     setFormError("");
     // Ayudantes: vacío = por defecto (1 en T1, 2 en T2) y pago según el tarifario del chofer — misma regla que Viajes
     const tkH = trucks.find(t2 => t2.id === Number(form.truckId));
@@ -222,8 +229,9 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
           </Sel>
         </div>
         <DestinationSelect t={t} province={form.province} municipality={form.municipality} onProvinceChange={v => handleDestChange("province", v)} onMunicipalityChange={v => handleDestChange("municipality", v)} extra={(form.clientId ? clients.filter(c => c.id === Number(form.clientId)) : clients).flatMap(c => c.rates || [])} />
+        {rateMsg && <div data-rate-msg style={{ marginTop: 6, fontSize: 12, color: rateMsg.startsWith("⚠") ? colors.orange : colors.green }}>{rateMsg}</div>}
         <div style={{ marginTop: 10 }}>
-          <Sel label={t.truck} value={form.truckId} onChange={e => { const tk = trucks.find(x => x.id === Number(e.target.value)); const crew = crewSlots(tk, ayudantes); setForm({ ...form, truckId: e.target.value, ...(crew.helperIds.length || (form.helperIds || []).some(Boolean) ? crew : {}) }); }}>
+          <Sel label={t.truck} value={form.truckId} onChange={e => { const tk = trucks.find(x => x.id === Number(e.target.value)); const crew = crewSlots(tk, ayudantes); const f = { ...form, truckId: e.target.value, ...(crew.helperIds.length || (form.helperIds || []).some(Boolean) ? crew : {}) }; tryApplyRate(f, null); setForm(f); }}>
             {trucks.length === 0 && <option value="">— Sin camión asignado (contacta al admin) —</option>}
             {[...trucks].sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0)).map(tk => <option key={tk.id} value={tk.id}>{tk.plate} ({tk.size}){tk.mine === false ? " · otro camión" : ""}</option>)}
           </Sel>
@@ -392,7 +400,7 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
                     <tr style={{ borderBottom: `1px solid ${colors.border}11` }}>
                       <Td>{tr.date}</Td>
                       <Td>{tr.municipality}, {tr.province}</Td>
-                      <Td>{cl?.companyName || "—"}{tr.joint && <div style={{ fontSize: 10, color: colors.purple || "#9b7fe8", fontWeight: 700 }}>⛓ conjunto{tr.jointAuto ? " (lo registró tu compañero)" : tr.jointDriverId ? ` con ${driversAll.find(d => d.id === tr.jointDriverId)?.name || "compañero"}` : ""}</div>}</Td>
+                      <Td>{cl?.companyName || "—"}{needsRate(tr) && <div style={{ fontSize: 10, color: colors.orange, fontWeight: 600 }} data-trip-pending>tarifa pendiente (la completa la oficina)</div>}{tr.joint && <div style={{ fontSize: 10, color: colors.purple || "#9b7fe8", fontWeight: 700 }}>⛓ conjunto{tr.jointAuto ? " (lo registró tu compañero)" : tr.jointDriverId ? ` con ${driversAll.find(d => d.id === tr.jointDriverId)?.name || "compañero"}` : ""}</div>}</Td>
                       <Td align="right" bold color={colors.green}>
                         {driverObj?.salaryType === "fixed" ? <span style={{ fontSize: 10, color: colors.textMuted }}>Fijo</span> : basePay > 0 ? fmt(basePay) : <span style={{ fontSize: 10, color: colors.orange }}>—</span>}
                       </Td>

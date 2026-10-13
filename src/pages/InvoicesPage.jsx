@@ -5,8 +5,9 @@ import { fmt, nxId, getPeriodInfo, today } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../components/ui/index.jsx";
 import { invoiceHTML, invoiceSheet, openPrintWindow } from "../utils/printReport.js";
 import { DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
-import { invoiceBalance, buildAbono } from "../utils/cobros.js";
+import { invoiceBalance, buildAbono, invoiceStatusWith } from "../utils/cobros.js";
 import CobroModal from "../components/CobroModal.jsx";
+import { getAccounts } from "../utils/bankAccounts.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function nextInvoiceNumber(invoices) {
@@ -109,7 +110,7 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, partners = [], pfSettings = DEFAULT_PF_SETTINGS, isMobile }) {
+export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, partners = [], pfSettings = DEFAULT_PF_SETTINGS, isMobile, bankAccount = null }) {
 
   const todayStr = today();
 
@@ -259,6 +260,9 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
       amount: invoiceTotal,
       brokerDeduction: invoiceBrokerDeduction > 0 ? invoiceBrokerDeduction : undefined,
     };
+    // «Cobrada» no se escoge a mano: sale de los cobros registrados (si no, Banco, Profit First y CxC no cuadran)
+    data.status = editId !== null ? invoiceStatusWith(data, cobros, balCtx) : (data.status === "sent" ? "sent" : "draft");
+    if (data.status !== "paid") data.paidDate = null;
     if (editId !== null) {
       setInvoices(prev => prev.map(inv => inv.id === editId ? { ...inv, ...data } : inv));
     } else {
@@ -417,6 +421,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                   </Td>
                   <Td>
                     <Badge label={cfg.label} color={cfg.color}/>
+                    {inv.status === "paid" && bal.balance > 0 && <div style={{ fontSize: 9, color: colors.orange, fontWeight: 700, marginTop: 3 }} title="Está marcada cobrada pero falta registrar el cobro: usa «✓ Cobrar» para que cuadren Banco, Profit First y Cuentas x Cobrar." data-paid-no-cobro>⚠ falta registrar el cobro</div>}
                   </Td>
                   <Td align="right">
                     <div style={{ display: "flex", gap: 3, justifyContent: "flex-end", alignItems: "center" }}>
@@ -477,9 +482,15 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                 {clients.filter(c => c.status === "active" || !c.status).map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
               </Sel>
               <Inp label="Fecha Factura" type="date" value={form.date} onChange={e => handleDateChange(e.target.value)} />
-              <Sel label="Estado" value={form.status} onChange={e => setForm(prev => ({...prev, status: e.target.value}))}>
-                {Object.entries(STATUS_CONFIG).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
-              </Sel>
+              {form.status === "paid"
+                ? <div><div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Estado</div><div style={{ fontSize: 13, fontWeight: 600, color: colors.green, padding: "7px 0" }}>Cobrada <span style={{ fontSize: 10, color: colors.textMuted, fontWeight: 400 }}>(por sus cobros)</span></div></div>
+                : <div>
+                    <Sel label="Estado" value={form.status === "sent" ? "sent" : "draft"} onChange={e => setForm(prev => ({...prev, status: e.target.value}))} data-invoice-status>
+                      <option value="draft">{STATUS_CONFIG.draft.label}</option>
+                      <option value="sent">{STATUS_CONFIG.sent.label}</option>
+                    </Sel>
+                    <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 3 }}>Para cobrarla usa «✓ Cobrar»: registra el cobro y lo reparte en Profit First y Banco.</div>
+                  </div>}
               <div>
                 <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Fecha Vencimiento</div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: form.dueDate < todayStr && form.status !== "paid" ? colors.red : colors.text, padding: "7px 0" }}>
@@ -577,6 +588,6 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
         </div>
       </div>
     )}
-    {cobroFor && (() => { const b = balanceOf(cobroFor); return <CobroModal inv={cobroFor} amount={b.amount} paid={b.paid} balance={b.balance} onSave={f => registerAbono(cobroFor, f)} onClose={() => setCobroFor(null)} />; })()}
+    {cobroFor && (() => { const b = balanceOf(cobroFor); return <CobroModal inv={cobroFor} amount={b.amount} paid={b.paid} balance={b.balance} onSave={f => registerAbono(cobroFor, f)} onClose={() => setCobroFor(null)} accounts={getAccounts(bankAccount, today())} />; })()}
   </div>;
 }

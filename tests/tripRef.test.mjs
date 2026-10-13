@@ -55,17 +55,22 @@ test("sanitizeDriverTrips: viaje válido pasa; nunca cambia de chofer", () => {
   const r = sanitizeDriverTrips({ incoming: [{ ...good, driverId: 99 }], existing: [], driverId: 5, clients, trucks, today });
   assert.equal(r.errors.length, 0); assert.equal(r.trips[0].driverId, 5);
 });
-test("sanitizeDriverTrips: rechaza sin cliente/destino/camión/tarifa/fecha, cliente inactivo y referencia faltante", () => {
+test("sanitizeDriverTrips: rechaza sin cliente/destino/camión/fecha, cliente inactivo y referencia faltante", () => {
   const bad = [
-    { ...good, id: 11, clientId: 9 }, { ...good, id: 12, municipality: "" }, { ...good, id: 13, truckId: 7 }, { ...good, id: 14, revenue: 0 },
+    { ...good, id: 11, clientId: 9 }, { ...good, id: 12, municipality: "" }, { ...good, id: 13, truckId: 7 },
     { ...good, id: 15, date: "2025-01-01" }, { ...good, id: 16, clientId: 2 }, { ...good, id: 17, invoiceRef: "" }, { ...good, id: 18, date: "hoy" },
   ];
   const r = sanitizeDriverTrips({ incoming: bad, existing: [], driverId: 5, clients, trucks, today });
-  assert.equal(r.errors.length, 8); assert.equal(r.trips.length, 0);
-  assert.match(r.errors.find(e => e.tripId === 14).error, /tarifa/); assert.match(r.errors.find(e => e.tripId === 17).error, /referencia/);
+  assert.equal(r.errors.length, 7); assert.equal(r.trips.length, 0);
+  assert.match(r.errors.find(e => e.tripId === 17).error, /referencia/);
   // cancelado: no exige tarifa ni referencia
   const c = sanitizeDriverTrips({ incoming: [{ ...good, id: 19, revenue: 0, invoiceRef: "", status: "cancelled" }], existing: [], driverId: 5, clients, trucks, today });
   assert.equal(c.errors.length, 0);
+});
+test("sanitizeDriverTrips: sin tarifa del cliente se guarda igual (tarifa 0, queda por completar)", () => {
+  const r = sanitizeDriverTrips({ incoming: [{ ...good, id: 14, revenue: 0 }, { ...good, id: 24, revenue: "" }, { ...good, id: 25, revenue: -50 }], existing: [], driverId: 5, clients, trucks, today });
+  assert.equal(r.errors.length, 0);
+  assert.deepEqual(r.trips.map(t => [t.id, t.revenue]), [[14, 0], [24, 0], [25, 0]]);
 });
 test("sanitizeDriverTrips: facturado, cobrado o recibido en oficina no se puede editar (se conserva el del servidor)", () => {
   const existing = [{ ...good, id: 20, revenue: 5000 }, { ...good, id: 21 }, { ...good, id: 22, docsReceivedAt: "2026-10-08" }];

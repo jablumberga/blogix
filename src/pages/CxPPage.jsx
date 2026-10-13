@@ -3,9 +3,9 @@ import { CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, getSupplierDueDate, today } from "../utils/helpers.js";
 import { Card, PageHeader, Badge, Th, Td } from "../components/ui/index.jsx";
-import ProfitFirstPanel from "../components/ProfitFirstPanel.jsx";
+import AccountsPanel from "../components/AccountsPanel.jsx";
 
-export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, suppliers, trips, cobros = [], pfSettings, isMobile }) {
+export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, suppliers, trips, cobros = [], pfSettings, isMobile, bankAccount = null, bankTransfers = [], bankReconciliation = {}, setPage }) {
   const todayStr = today();
 
   const supplierMap = useMemo(() => new Map((suppliers || []).map(s => [s.id, s])), [suppliers]);
@@ -122,7 +122,7 @@ export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, su
 
   return <div>
     <PageHeader title="Cuentas por Pagar" />
-    <ProfitFirstPanel cobros={cobros} expenses={expenses} pfSettings={pfSettings} compact isMobile={isMobile} />
+    <AccountsPanel bankAccount={bankAccount} expenses={expenses} cobros={cobros} bankTransfers={bankTransfers} bankReconciliation={bankReconciliation} pfSettings={pfSettings} setPage={setPage} compact isMobile={isMobile} />
     <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 12 }}>Todo lo de esta página se paga desde <b style={{ color: colors.cyan }}>OpEx</b>. Las liquidaciones de socios no están aquí: son pass-through y se pagan en Liquidaciones.</div>
 
     {/* KPI cards */}

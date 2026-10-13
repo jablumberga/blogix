@@ -4,17 +4,19 @@ import { colors } from "../constants/theme.js";
 import { fmt, today } from "../utils/helpers.js";
 import { Inp, Sel, Btn } from "./ui/index.jsx";
 import { COBRO_METHODS } from "../utils/cobros.js";
+import { cobroAccountId, activeAccounts } from "../utils/bankAccounts.js";
 
 /** Registrar un cobro (abono total o parcial) a una factura. */
-export default function CobroModal({ inv, balance, paid = 0, amount = 0, onSave, onClose }) {
-  const [form, setForm] = useState({ date: today(), amount: balance, method: "transfer", reference: "", note: "" });
+export default function CobroModal({ inv, balance, paid = 0, amount = 0, onSave, onClose, accounts = [] }) {
+  const [form, setForm] = useState({ date: today(), amount: balance, method: "transfer", reference: "", note: "", accountId: "" });
+  const auto = cobroAccountId({ status: "collected", amount: 1, method: form.method }, accounts);
   const [err, setErr] = useState("");
   const submit = () => {
     const amt = Number(form.amount) || 0;
     if (!form.date) { setErr("Indica la fecha del cobro."); return; }
     if (!(amt > 0)) { setErr("El monto debe ser mayor que 0."); return; }
     if (amt > balance + 0.005) { setErr(`El monto supera el saldo pendiente (${fmt(balance)}).`); return; }
-    onSave({ ...form, amount: amt });
+    onSave({ ...form, amount: amt, accountId: form.accountId || null });
   };
   return <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
     <div onClick={e => e.stopPropagation()} style={{ background: colors.card, border: `1px solid ${colors.border}`, borderRadius: 12, padding: 18, width: "100%", maxWidth: 440 }}>
@@ -29,6 +31,10 @@ export default function CobroModal({ inv, balance, paid = 0, amount = 0, onSave,
         <Sel label="Método" value={form.method} onChange={e => setForm({ ...form, method: e.target.value })}>{Object.entries(COBRO_METHODS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Sel>
         <Inp label="Referencia / nº" value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} placeholder="opcional" />
       </div>
+      {accounts.length > 0 && <div style={{ marginTop: 10 }}><Sel label="Entra a la cuenta" value={form.accountId} onChange={e => setForm({ ...form, accountId: e.target.value })} data-cobro-account>
+        <option value="">Automático ({auto ? accounts.find(a => a.id === auto)?.name : "ninguna"})</option>
+        {activeAccounts(accounts).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+      </Sel></div>}
       <div style={{ marginTop: 10 }}><Inp label="Nota" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="opcional" /></div>
       <div style={{ display: "flex", gap: 6, marginTop: 10, fontSize: 11 }}>
         <button onClick={() => setForm({ ...form, amount: balance })} style={{ background: "transparent", border: `1px solid ${colors.border}`, color: colors.textMuted, borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>Saldo completo</button>
