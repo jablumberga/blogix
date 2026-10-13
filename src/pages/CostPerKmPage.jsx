@@ -55,7 +55,9 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
     if (!res.ok) { setGpsMsg(`No se pudo: ${res.error}`); return; }
     if (Array.isArray(res.gpsKm) && setGpsKm) setGpsKm(prev => { const key = g => `${g.imei}|${g.date}`; const map = new Map(prev.map(g => [key(g), g])); for (const g of res.gpsKm) map.set(key(g), { ...(map.get(key(g)) || {}), ...g, id: map.get(key(g))?.id || g.id }); return [...map.values()]; });
     if (Array.isArray(res.tripKm) && setTrips) setTrips(prev => prev.map(t => { const k = res.tripKm.find(x => x.tripId === t.id); return k ? { ...t, km: k.km, kmSource: "gps" } : t; }));
-    setGpsMsg(`Listo: ${res.devices || 0} GPS, ${(res.gpsKm || []).length} días de km, ${(res.tripKm || []).length} viajes con km del GPS.`);
+    const fmt1 = (n) => (Number(n) || 0).toLocaleString("es-DO", { maximumFractionDigits: 1 });
+    if (res.items > 0 && !(res.totalKm > 0)) { setGpsMsg(`No: el GPS mandó ${res.items} trayecto(s) pero sin kilómetros (datos recibidos: ${(res.fields || []).join(", ") || "—"}). Envíale este mensaje a soporte.`); return; }
+    setGpsMsg(res.note ? `Listo: ${res.note}.` : `Listo: ${res.devices || 0} GPS · ${fmt1(res.totalKm)} km en ${(res.gpsKm || []).length} día(s) · ${(res.tripKm || []).length} viaje(s) con km del GPS.${(res.gpsKm || []).length && !(res.tripKm || []).length ? " Ningún viaje coincide con un día con km: revisa que la fecha del viaje sea el día que salió el camión." : ""}`);
   };
 
   const st = (s) => s === "ok" ? colors.green : s === "bad" ? colors.red : colors.textMuted;
