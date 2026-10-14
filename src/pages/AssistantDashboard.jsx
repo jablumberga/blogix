@@ -53,10 +53,11 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
   const printHelper = (row) => openPrintWindow(`Pago ${row.ayudante.name} ${period.label}`, helperPeriodReportHTML({ row, period, generatedBy: user?.name }));
   const exportPayrollXlsx = async () => {
     const XLSX = await import("xlsx");
-    const { resumen, detalle, ayudantes: ayud } = payrollSheets(payroll, helperPayroll);
+    const { resumen, detalle, ayudantes: ayud, tripulacion } = payrollSheets(payroll, helperPayroll);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), "Detalle viajes");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tripulacion), "Tripulación");
     if (ayud) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ayud), "Ayudantes directos");
     XLSX.writeFile(wb, `nomina-${period.dateFrom}-a-${period.dateTo}.xlsx`);
   };
