@@ -30,3 +30,18 @@ test("abonos parciales: saldo, tope y Profit First proporcional", () => {
   // sin saldo no se puede abonar más
   assert.equal(buildAbono({ inv, amount: 1, date: "2026-10-21", cobros, trips, trucks, partners, clients, nextId: 3 }), null);
 });
+
+test("invoiceCancelBlock: bloquea anular si el cobro ya se repartió en Banco, está conciliado o la liquidación del socio ya se transfirió", async () => {
+  const { invoiceCancelBlock } = await import("../src/utils/cobros.js");
+  const inv = { id: 1, tripIds: [10, 11], amount: 10000 };
+  const cobros = [{ id: 5, invoiceId: 1, date: "2026-10-10", amount: 10000 }];
+  const trips = [{ id: 10, date: "2026-10-05", truckId: 1 }, { id: 11, date: "2026-10-06", truckId: 3 }];
+  const trucks = [{ id: 1, partnerId: null }, { id: 3, partnerId: 2 }];
+  const partners = [{ id: 2, name: "Eudy" }];
+  assert.equal(invoiceCancelBlock(inv, { cobros, trips, trucks, partners }), null, "sin reparto ni liquidación: se puede");
+  assert.match(invoiceCancelBlock(inv, { cobros, bankTransfers: [{ id: 1, kind: "distribution", distKeys: ["cobro:5"] }] }), /repartió en Banco/);
+  assert.match(invoiceCancelBlock(inv, { cobros, bankTransfers: [{ id: 2, kind: "deposit", cobroIds: [5] }] }), /repartió en Banco/);
+  assert.match(invoiceCancelBlock(inv, { cobros, bankReconciliation: { "cobro-5": "reconciled" } }), /conciliado/);
+  assert.match(invoiceCancelBlock(inv, { cobros, trips, trucks, partners, expenses: [{ category: "partner_settlement", status: "paid", settlementKey: "2-2026-10-1" }] }), /Eudy/);
+  assert.equal(invoiceCancelBlock(inv, { cobros, trips, trucks, partners, expenses: [{ category: "partner_settlement", status: "paid", settlementKey: "2-2026-10-2" }] }), null, "otra quincena no bloquea");
+});
