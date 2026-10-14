@@ -27,9 +27,9 @@ function calcDueDate(date, client) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// Sin «Borrador»: una factura se crea ya emitida (por cobrar). Las viejas en "draft" se muestran como por cobrar.
 const STATUS_CONFIG = {
-  draft:     { label: "Borrador",   color: colors.textMuted, icon: FileText },
-  sent:      { label: "Enviada",    color: colors.accent,    icon: Send },
+  sent:      { label: "Por cobrar", color: colors.accent,    icon: Send },
   paid:      { label: "Cobrada",    color: colors.green,     icon: CheckCircle2 },
   cancelled: { label: "Anulada",    color: colors.red,       icon: Ban },
 };
@@ -124,7 +124,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     date: todayStr,
     clientId: "",
     tripIds: [],
-    status: "draft",
+    status: "sent",
     notes: "",
     dueDate: "",
   };
@@ -261,7 +261,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
       brokerDeduction: invoiceBrokerDeduction > 0 ? invoiceBrokerDeduction : undefined,
     };
     // «Cobrada» no se escoge a mano: sale de los cobros registrados (si no, Banco, Profit First y CxC no cuadran)
-    data.status = editId !== null ? invoiceStatusWith(data, cobros, balCtx) : (data.status === "sent" ? "sent" : "draft");
+    data.status = editId !== null ? invoiceStatusWith(data, cobros, balCtx) : "sent";
     if (data.status !== "paid") data.paidDate = null;
     if (editId !== null) {
       setInvoices(prev => prev.map(inv => inv.id === editId ? { ...inv, ...data } : inv));
@@ -283,7 +283,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     const next = [...cobros, abono];
     setCobros(next);
     const b = invoiceBalance(inv, next, balCtx);
-    setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, status: b.settled ? "paid" : (i.status === "draft" ? "sent" : i.status), paidDate: b.settled ? form.date : null } : i));
+    setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, status: b.settled ? "paid" : "sent", paidDate: b.settled ? form.date : null } : i));
     setCobroFor(null);
   };
 
@@ -386,7 +386,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
               const cl = clients.find(c => c.id === inv.clientId);
               const amount = invAmt(inv);
               const bal = balanceOf(inv);
-              const cfg = STATUS_CONFIG[inv.status] || STATUS_CONFIG.draft;
+              const cfg = STATUS_CONFIG[inv.status] || STATUS_CONFIG.sent;
               const isOverdue = inv.status !== "paid" && inv.status !== "cancelled" && inv.dueDate && inv.dueDate < todayStr;
               const daysLeft = inv.dueDate ? Math.ceil((new Date(inv.dueDate) - new Date(todayStr)) / 86400000) : null;
               return (
@@ -426,12 +426,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                   <Td align="right">
                     <div style={{ display: "flex", gap: 3, justifyContent: "flex-end", alignItems: "center" }}>
                       {/* Quick status transitions */}
-                      {inv.status === "draft" && (
-                        <button onClick={() => setStatus(inv.id, "sent")} title="Marcar enviada" style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.accent}`, background: "transparent", color: colors.accent, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
-                          <Send size={10}/>
-                        </button>
-                      )}
-                      {inv.status !== "cancelled" && bal.balance > 0 && (
+                                            {inv.status !== "cancelled" && bal.balance > 0 && (
                         <button onClick={() => setCobroFor(inv)} title="Registrar cobro (total o abono)" style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.green}`, background: colors.green+"18", color: colors.green, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
                           ✓ Cobrar
                         </button>
@@ -484,11 +479,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
               <Inp label="Fecha Factura" type="date" value={form.date} onChange={e => handleDateChange(e.target.value)} />
               {form.status === "paid"
                 ? <div><div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Estado</div><div style={{ fontSize: 13, fontWeight: 600, color: colors.green, padding: "7px 0" }}>Cobrada <span style={{ fontSize: 10, color: colors.textMuted, fontWeight: 400 }}>(por sus cobros)</span></div></div>
-                : <div>
-                    <Sel label="Estado" value={form.status === "sent" ? "sent" : "draft"} onChange={e => setForm(prev => ({...prev, status: e.target.value}))} data-invoice-status>
-                      <option value="draft">{STATUS_CONFIG.draft.label}</option>
-                      <option value="sent">{STATUS_CONFIG.sent.label}</option>
-                    </Sel>
+                : <div><div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Estado</div><div style={{ fontSize: 13, fontWeight: 600, color: colors.accent, padding: "7px 0" }}>Por cobrar</div>
                     <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 3 }}>Para cobrarla usa «✓ Cobrar»: registra el cobro y lo reparte en Profit First y Banco.</div>
                   </div>}
               <div>

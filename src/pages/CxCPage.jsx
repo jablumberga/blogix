@@ -115,7 +115,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
     const next = [...cobros, abono];
     setCobros(next);
     const b = invoiceBalance(inv, next, balCtx);
-    setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, status: b.settled ? "paid" : (i.status === "draft" ? "sent" : i.status), paidDate: b.settled ? form.date : null } : i));
+    setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, status: b.settled ? "paid" : "sent", paidDate: b.settled ? form.date : null } : i));
     setCobroFor(null);
   };
   const deleteAbono = (inv, abono) => {
@@ -146,7 +146,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
       inv.status === "paid"   ? colors.green  :
       inv.isOverdue           ? colors.red     :
       inv.daysLeft !== null && inv.daysLeft <= 7 ? colors.orange :
-      inv.status === "draft"  ? colors.border  : colors.accent;
+      colors.accent;
 
     const brokerDed = inv.brokerDeduction || (inv.isPassThrough ? inv.grossAmt - inv.amount : 0);
     const pf = pfFor(inv.amount, inv.tripIds || []);
@@ -162,8 +162,7 @@ export default function CxCPage({ clients, trips, cobros, setCobros, trucks, inv
               <span style={{ fontWeight: 600, fontSize: 13 }}>{inv.client?.companyName || "—"}</span>
               {inv.status === "paid"   && <span style={{ fontSize: 10, color: colors.green,   background: colors.green+"18",   padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>✓ Cobrada</span>}
               {inv.status !== "paid" && inv.paid > 0 && <span style={{ fontSize: 10, color: colors.cyan, background: colors.cyan+"18", padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>Abono parcial</span>}
-              {inv.status === "draft"  && <span style={{ fontSize: 10, color: colors.textMuted, background: colors.textMuted+"18", padding: "2px 8px", borderRadius: 10 }}>Borrador</span>}
-              {inv.status === "sent" && !inv.isOverdue && <span style={{ fontSize: 10, color: colors.accent, background: colors.accent+"18", padding: "2px 8px", borderRadius: 10 }}>Enviada</span>}
+              {(inv.status === "sent" || inv.status === "draft") && !inv.isOverdue && <span style={{ fontSize: 10, color: colors.accent, background: colors.accent+"18", padding: "2px 8px", borderRadius: 10 }}>Por cobrar</span>}
               {inv.isOverdue           && <span style={{ fontSize: 10, color: colors.red,    background: colors.red+"18",    padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>⚠ Vencida</span>}
               {inv.status === "sent" && !inv.isOverdue && inv.daysLeft !== null && inv.daysLeft <= 7
                 && <span style={{ fontSize: 10, color: colors.orange, background: colors.orange+"18", padding: "2px 8px", borderRadius: 10 }}>Vence pronto</span>}
