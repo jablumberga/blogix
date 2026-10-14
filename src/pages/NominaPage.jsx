@@ -6,6 +6,7 @@ import { COMPANY } from "../constants/company.js";
 import { colors } from "../constants/theme.js";
 import { fmt, genPeriods, today, nxId } from "../utils/helpers.js";
 import { buildPayroll, payrollPayment, payrollKey, buildHelperPayroll, helperPayrollPayment } from "../utils/payroll.js";
+import { tripCrew } from "../utils/driverPay.js";
 import { DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 import { bankOverview } from "../utils/bankAccounts.js";
 import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow, helperPeriodReportHTML } from "../utils/printReport.js";
@@ -103,6 +104,9 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
                 <Td align="right" color={l.split.viaDriver.amount ? colors.cyan : colors.textMuted}>{l.split.viaDriver.amount ? `${fmt(l.split.viaDriver.amount)} (${l.split.viaDriver.count})` : "—"}{l.split.direct.length > 0 && <div style={{ fontSize: 10, color: colors.textMuted }}>+ directo: {l.split.direct.map(d => d.name).join(", ")}</div>}</Td>
                 <Td align="right"><Badge label={l.paid ? "✓ Pagado" : "Pendiente"} color={l.paid ? colors.green : colors.orange} /></Td>
               </tr>
+              {row.payType === "perTrip" && calc.rateFound && <tr style={{ background: colors.accent + "06" }}><Td></Td><Td colSpan={10} style={{ fontSize: 11, color: colors.textMuted, paddingLeft: 20 }} data-crew>
+                ↳ {tripCrew(trip, calc, row.driver).map((c, i) => <span key={i} style={{ marginRight: 14, whiteSpace: "nowrap" }}><b style={{ color: c.role === "chofer" ? colors.text : colors.cyan }}>{c.role === "chofer" ? "Chofer" : `Ayudante ${c.idx}`}{c.role === "ayudante" && c.name && !/^Ayudante \d+$/.test(c.name) ? ` (${c.name})` : ""}</b>: {fmt(c.base)}{c.dieta ? ` + dieta ${fmt(c.dieta)}` : ""} = <b>{fmt(c.total)}</b>{c.direct ? <span style={{ color: colors.purple }}> · directo</span> : ""}</span>)}
+              </Td></tr>}
               {editing && <tr><td colSpan={11} style={{ padding: "6px 10px" }}><OverrideBox label="Override de este viaje" current={l.amount} note={l.exp?.overrideNote} onSave={(a, n) => { onLineOverride(l, a, n); setEditingLine(null); }} onCancel={() => setEditingLine(null)} /></td></tr>}
               {(trip.discounts || []).filter(x => x.amount > 0).map((x, i) => <tr key={`d${i}`} style={{ background: colors.red + "08" }}><Td></Td><Td colSpan={7} style={{ fontSize: 11, color: colors.red, paddingLeft: 20 }}>↳ Descuento: {x.desc || "—"}</Td><Td align="right" color={colors.red}>−{fmt(x.amount)}</Td><Td></Td><Td></Td></tr>)}
             </Fragment>;
@@ -284,10 +288,11 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
   const printPayroll = () => openPrintWindow(`Nómina ${period.label}`, payrollReportHTML({ payroll, helperPayroll, generatedBy: user?.name }));
   const exportXlsx = async () => {
     const XLSX = await import("xlsx");
-    const { resumen, detalle, ayudantes: ayud } = payrollSheets(payroll, helperPayroll);
+    const { resumen, detalle, ayudantes: ayud, tripulacion } = payrollSheets(payroll, helperPayroll);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), "Detalle viajes");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tripulacion), "Tripulación");
     if (ayud) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ayud), "Ayudantes directos");
     XLSX.writeFile(wb, `nomina-${period.dateFrom}-a-${period.dateTo}.xlsx`);
   };

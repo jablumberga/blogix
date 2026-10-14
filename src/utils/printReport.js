@@ -5,6 +5,7 @@
 import { fmt } from "./helpers.js";
 import { TRIP_DOCS } from "./payroll.js";
 import { isDirectLine } from "./ayudantes.js";
+import { tripCrew } from "./driverPay.js";
 import { COMPANY } from "../constants/company.js";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -176,6 +177,7 @@ export function payrollReportHTML({ payroll, helperPayroll = null, company = "B-
     </tr>`).join("");
   const viaOf = (x) => x.split ? x.split.viaDriver : { count: x.calc.numHelpers, amount: x.calc.helpersTotal };
   const helperDetail = drivers.flatMap(r => r.trips.filter(x => viaOf(x).count > 0).map((x) => { const { trip, calc } = x; const v = viaOf(x); return `<tr><td>${esc(trip.date)}</td><td>#${esc(trip.id)} ${esc(trip.municipality)}</td><td>${esc(r.driver.name)}</td><td>${esc((trip.helpers || []).filter(h => !isDirectLine(h)).map(h => h.name).filter(Boolean).join(", ") || "—")}</td><td class="right">${v.count}</td><td class="right">${fmt(calc.helperEach)}</td><td class="right">${fmt(v.amount)}</td></tr>`; })).join("");
+  const crewRows = drivers.flatMap(r => r.trips.flatMap(({ trip, calc }) => tripCrew(trip, calc, r.driver).map(c => `<tr><td>${esc(trip.date)}</td><td>#${esc(trip.id)} ${esc(trip.municipality)}</td><td>${esc(c.name)}</td><td>${c.role === "chofer" ? "Chofer" : `Ayudante ${c.idx}`}</td><td class="right">${fmt(c.base)}</td><td class="right">${c.dieta ? fmt(c.dieta) : "—"}</td><td class="right"><b>${fmt(c.total)}</b></td><td class="small">${c.role === "chofer" ? "al chofer" : c.direct ? "directo al ayudante" : "por el chofer"}</td></tr>`))).join("");
   const hp = helperPayroll && helperPayroll.rows.length ? helperPayroll : null;
   const directRows = hp ? hp.rows.map(h => `<tr><td>${esc(h.ayudante.name)}</td><td>${esc(h.ayudante.cedula || "")}</td><td class="right">${h.tripCount}</td><td class="right">${fmt(h.gross)}</td><td class="right">${h.advances ? "−" + fmt(h.advances) : "—"}</td><td class="right"><b>${fmt(h.net)}</b></td><td class="small">${esc([h.ayudante.bank, h.ayudante.account].filter(Boolean).join(" · "))}</td><td class="small">${h.pendingCount ? `<span class="no">${h.pendingCount} pendiente(s), no pagados</span>` : `<span class="ok">todo recibido</span>`}</td></tr>`).join("") : "";
   return `
@@ -195,6 +197,9 @@ export function payrollReportHTML({ payroll, helperPayroll = null, company = "B-
       <tfoot><tr><td colspan="2">Totales</td><td class="right">${hp.totals.trips}</td><td class="right">${fmt(hp.totals.gross)}</td><td class="right">−${fmt(hp.totals.advances)}</td><td class="right">${fmt(hp.totals.net)}</td><td></td><td></td></tr></tfoot>
     </table>
     ` : ""}<div class="box"><div>Total choferes: <b>${fmt(totals.net)}</b></div><div>Total ayudantes${hp ? " (por el chofer)" : ""}: <b>${fmt(totals.helpers)}</b></div>${hp ? `<div>Total ayudantes directos: <b>${fmt(hp.totals.net)}</b></div>` : ""}<div style="font-size:15px;margin-top:6px">Total nómina del período: <b>${fmt(totals.total + (hp ? hp.totals.net : 0))}</b></div></div>
+    <h2>Tripulación por viaje (chofer, ayudantes y dieta repartida)</h2>
+    <table><thead><tr><th>Fecha</th><th>Viaje</th><th>Persona</th><th>Rol</th><th class="right">Base</th><th class="right">Dieta</th><th class="right">Total</th><th>Se paga</th></tr></thead>
+      <tbody>${crewRows || `<tr><td colspan="8" class="muted">Sin viajes en el período</td></tr>`}</tbody></table>
     <h2>Detalle de ayudantes por viaje${hp ? " (pagados por el chofer)" : ""}</h2>
     <table><thead><tr><th>Fecha</th><th>Viaje</th><th>Chofer</th><th>Ayudantes</th><th class="right">Cant.</th><th class="right">Pago c/u</th><th class="right">Total</th></tr></thead>
       <tbody>${helperDetail || `<tr><td colspan="7" class="muted">Sin ayudantes en el período</td></tr>`}</tbody></table>`;
@@ -212,7 +217,9 @@ export function payrollSheets(payroll, helperPayroll = null) {
     ...hp.rows.map(h => [h.ayudante.name, h.ayudante.cedula || "", h.ayudante.bank || "", h.ayudante.account || "", h.tripCount, h.gross, h.advances, h.net, h.pendingCount]),
     [], ["Fecha", "Viaje", "Ayudante", "Chofer", "Cliente", "Destino", "Camión", "Monto"],
     ...hp.rows.flatMap(h => h.trips.map(x => [x.trip.date, x.trip.id, h.ayudante.name, x.driver?.name || "", x.client?.companyName || "", `${x.trip.municipality}, ${x.trip.province}`, x.truck?.plate || "", x.amount]))] : null;
-  return { resumen, detalle, ayudantes };
+  const tripulacion = [["Fecha", "Viaje", "Chofer del viaje", "Cliente", "Destino", "Tamaño", "Persona", "Rol", "Base", "Dieta", "Total", "Se paga"],
+    ...drivers.flatMap(r => r.trips.flatMap(({ trip, calc, client }) => tripCrew(trip, calc, r.driver).map(c => [trip.date, trip.id, r.driver.name, client?.companyName || "", `${trip.municipality}, ${trip.province}`, calc.size, c.name, c.role === "chofer" ? "Chofer" : `Ayudante ${c.idx}`, c.base, c.dieta, c.total, c.role === "chofer" ? "al chofer" : c.direct ? "directo al ayudante" : "por el chofer"])))];
+  return { resumen, detalle, ayudantes, tripulacion };
 }
 
 /** Tamaño del camión como lo lee el cliente: T1 = 16 pies, T2 = 26 pies. */

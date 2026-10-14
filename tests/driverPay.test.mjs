@@ -87,3 +87,19 @@ test("importación de tarifario de chofer con dieta y ayudante", () => {
   assert.deepEqual(rates[0], { province: "Dajabón", municipality: "Dajabón", priceT1: 2000, priceT2: 2500, dietaT1: 500, helperT1: 1000, dietaT2: 600, helperT2: 1200 });
   assert.equal(rates[1].priceT2, 4000); assert.equal(rates[1].helperT1, 0);
 });
+
+test("tripCrew: una línea por persona, dieta repartida; chofer / ayudante 1 / ayudante 2", async () => {
+  const { tripCrew } = await import("../src/utils/driverPay.js");
+  const trip = { province: "Dajabón", municipality: "Dajabón", helpers: [{ name: "Jeffrey", direct: true, ayudanteId: 1 }, { name: "Ayudante 2" }] };
+  const calc = calcDriverPay({ driver, trip, truck: t2 });
+  const crew = tripCrew(trip, calc, driver);
+  assert.deepEqual(crew.map(c => [c.role, c.name, c.base, c.dieta, c.total, c.direct]), [
+    ["chofer", "Rober", 2500, 200, 2700, false],
+    ["ayudante", "Jeffrey", 1200, 200, 1400, true],
+    ["ayudante", "Ayudante 2", 1200, 200, 1400, false],
+  ]);
+  assert.equal(crew.reduce((s, c) => s + c.total, 0), calc.total, "la suma de la tripulación es la nómina del viaje");
+  // sin ayudantes: solo el chofer, con toda la dieta
+  const solo = tripCrew({ ...trip, numHelpers: 0, helpers: [] }, calcDriverPay({ driver, trip: { ...trip, numHelpers: 0 }, truck: t2 }), driver);
+  assert.equal(solo.length, 1); assert.equal(solo[0].dieta, 600);
+});

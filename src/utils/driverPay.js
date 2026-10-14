@@ -104,7 +104,51 @@ export function calcDriverPay({ driver, trip, truck, clientId }) {
 
   const driverGross = base + dieta;
   const driverNet = Math.max(0, driverGross - discounts);
-  return { size, base, dieta, dietaTotal, dietaEach, driverGross, discounts, driverNet, numHelpers, helperBase, helperEach, helpersTotal, total: driverNet + helpersTotal, rateFound, sheetName, sizeFallback, payType: d.payType };
+  // Tripulación SIEMPRE separada: chofer, ayudante 1, ayudante 2… cada uno con su base y su parte de la dieta
+  const helperOverride = trip?.helperPayEach != null && trip.helperPayEach !== "";
+  const crew = [{ role: "Chofer", base, dieta, total: driverGross }];
+  for (let i = 0; i < numHelpers; i++) crew.push({ role: `Ayudante ${i + 1}`, base: helperOverride ? helperEach : helperBase, dieta: helperOverride ? 0 : dietaEach, total: helperEach });
+  return { size, base, dieta, dietaTotal, dietaEach, driverGross, discounts, driverNet, numHelpers, helperBase, helperEach, helpersTotal, crew, total: driverNet + helpersTotal, rateFound, sheetName, sizeFallback, payType: d.payType };
+}
+
+const money = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
+/** «1,300 + dieta 333» (o solo «1,300» si no hay dieta). */
+export const crewPartText = (line) => line?.dieta ? `${money(line.base)} + dieta ${money(line.dieta)}` : money(line?.base);
+/** Texto del gasto del chofer: «Chofer Rober: 1,700 + dieta 334 · Dajabón». */
+export function driverPayText(calc, driverName, where) {
+  const c = calc?.crew?.[0];
+  return `Chofer ${driverName || ""}: ${c ? crewPartText(c) : money(calc?.driverNet)}${where ? ` · ${where}` : ""}`;
+}
+/** Texto de los ayudantes que van por el chofer: «Ayudante 1: 1,300 + dieta 333 · Ayudante 2: … · Dajabón». */
+export function helpersPayText(calc, count, where, fromIndex = 0) {
+  const lines = (calc?.crew || []).slice(1 + fromIndex, 1 + fromIndex + count);
+  const txt = lines.length ? lines.map(l => `${l.role}: ${crewPartText(l)}`).join(" · ") : `Ayudantes (${count})`;
+  return `${txt}${where ? ` · ${where}` : ""}`;
+}
+/** Texto de un ayudante directo: «Ayudante Jeffrey: 1,300 + dieta 333 · Dajabón». */
+export function helperDirectText(calc, name, where) {
+  const l = calc?.crew?.[1];
+  return `Ayudante ${name || ""}: ${l ? crewPartText(l) : money(calc?.helperEach)}${where ? ` · ${where}` : ""}`;
+}
+
+/**
+ * Tripulación del viaje, una línea por persona, siempre separada: chofer, ayudante 1, ayudante 2…
+ * Cada línea: { role: "chofer"|"ayudante", idx, name, base, dieta, total, direct, ayudanteId }
+ *   chofer:   base + su parte de dieta = neto (sin descuentos)
+ *   ayudante: base + su parte de dieta = pago (helperEach); si el viaje fijó el pago a mano, base = pago − dieta
+ */
+export function tripCrew(trip, calc, driver) {
+  if (!calc) return [];
+  const lines = Array.isArray(trip?.helpers) ? trip.helpers : [];
+  const names = Array.isArray(trip?.helperNames) ? trip.helperNames : [];
+  const out = [{ role: "chofer", idx: 0, name: driver?.name || "Chofer", base: calc.base, dieta: calc.dieta, total: calc.base + calc.dieta, direct: false, ayudanteId: null }];
+  for (let i = 0; i < (calc.numHelpers || 0); i++) {
+    const l = lines[i] || {};
+    const direct = !!(l.direct && l.ayudanteId != null && l.ayudanteId !== "");
+    const dieta = calc.dietaEach || 0;
+    out.push({ role: "ayudante", idx: i + 1, name: String(l.name || names[i] || "").trim() || `Ayudante ${i + 1}`, base: Math.max(0, calc.helperEach - dieta), dieta, total: calc.helperEach, direct, ayudanteId: direct ? Number(l.ayudanteId) : null });
+  }
+  return out;
 }
 
 /** Descripción corta para el gasto de nómina. */
