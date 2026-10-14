@@ -31,8 +31,10 @@ test("costo por km: camión propio vs camión de socio", () => {
   assert.equal(own.km, 320); assert.equal(own.variable, 4800); assert.equal(own.fixed, 1500); assert.equal(own.cost, 6300);
   assert.ok(Math.abs(own.costPerKm - 6300 / 320) < 1e-9);
   assert.ok(Math.abs(own.kmPerGallon - 20) < 1e-9);
-  // socio (reparto 50 %): gastos reembolsados por el socio → costo empresa 0; ingreso empresa = 50 % de 5500
-  assert.equal(part.cost, 0); assert.equal(part.partnerRecovered, 4500); assert.equal(part.companyRevenue, 2750);
+  // socio (reparto 50 %): los gastos salen de la utilidad antes de repartir → la empresa carga el 50 % (2250)
+  // y recibe el 50 % del flete (2750): margen 500 = 50 % de (5500 − 4500), igual que la liquidación
+  assert.equal(part.cost, 2250); assert.equal(part.partnerRecovered, 2250); assert.equal(part.companyRevenue, 2750);
+  assert.equal(part.margin, 500);
   assert.equal(part.km, 300);
   assert.equal(r.quality.odometer, 1); assert.equal(r.quality.estimated, 1);
   assert.equal(r.byRoute[0].trips, 2);
@@ -177,7 +179,33 @@ test("combustible sin viaje: camión sin viajes en el período solo cuenta en «
 test("combustible sin viaje en camión de socio que se le descuenta: no es costo de la empresa, pero sí cuenta para km/gal del chofer", () => {
   const sTrips = [{ id: 7, truckId: 3, driverId: 5, clientId: 1, date: "2026-10-06", status: "delivered", revenue: 8000, province: "Santiago", municipality: "Santiago de los Caballeros", odoStart: 10, odoEnd: 310 }];
   const r = costPerKm({ ...base, trips: sTrips, expenses: [{ id: 1, truckId: 3, date: "2026-10-06", category: "fuel", amount: 5000, gallons: 25, status: "paid" }] });
-  assert.equal(r.byTruck[0].cost, 0); assert.equal(r.byTruck[0].partnerRecovered, 5000);
-  assert.equal(r.byRoute[0].cost, 0);
+  assert.equal(r.byTruck[0].cost, 2500); assert.equal(r.byTruck[0].partnerRecovered, 2500);
+  assert.equal(r.byRoute[0].cost, 2500);
   assert.equal(r.byDriver[0].fuel, 5000); assert.equal(r.byDriver[0].gallons, 25); assert.equal(r.byDriver[0].kmPerGallon, 12);
+});
+
+test("reparto de utilidad: margen de la página = parte de la empresa en la liquidación; en pérdida la empresa carga todo", async () => {
+  const { computeSettlement } = await import("../src/utils/partnerModels.js");
+  const period = { dateFrom: "2026-10-01", dateTo: "2026-10-15" };
+  const ps = [{ id: 2, name: "Eudy", model: "profit_share", partnerSharePct: 60 }];
+  const tk = [{ id: 3, plate: "B", partnerId: 2 }];
+  const tr = [{ id: 2, truckId: 3, driverId: 2, clientId: 1, date: "2026-10-06", status: "delivered", revenue: 10000, province: "Santiago", municipality: "Santiago de los Caballeros", odoStart: 0, odoEnd: 300 }];
+  // utilidad: 10000 − 7000 = 3000 → empresa 40 % = 1200
+  const ex = [{ id: 1, tripId: 2, category: "fuel", amount: 5000, gallons: 20, status: "paid" }, { id: 2, tripId: 2, category: "driverPay", amount: 2000, status: "paid" }];
+  const r = costPerKm({ ...period, trips: tr, expenses: ex, trucks: tk, partners: ps, clients, distances });
+  const s = computeSettlement({ partner: ps[0], period, trips: tr, expenses: ex, trucks: tk, clients });
+  assert.equal(s.companyShare, 1200);
+  assert.equal(r.byTruck[0].companyRevenue, 4000); assert.equal(r.byTruck[0].cost, 2800); assert.equal(r.byTruck[0].margin, 1200);
+  assert.equal(r.byTruck[0].partnerRecovered, 4200);
+  // en pérdida (gastos 12000 > flete 10000): la empresa se queda con el flete y carga con todos los gastos → −2000
+  const exLoss = [{ id: 1, tripId: 2, category: "repair", amount: 12000, status: "paid" }];
+  const r2 = costPerKm({ ...period, trips: tr, expenses: exLoss, trucks: tk, partners: ps, clients, distances });
+  const s2 = computeSettlement({ partner: ps[0], period, trips: tr, expenses: exLoss, trucks: tk, clients });
+  assert.equal(s2.truckLossOut, 2000); assert.equal(s2.partnerShare, 0);
+  assert.equal(r2.byTruck[0].companyRevenue, 10000); assert.equal(r2.byTruck[0].cost, 12000); assert.equal(r2.byTruck[0].margin, -2000);
+  assert.equal(r2.byTruck[0].partnerRecovered, 0);
+  // gasto marcado "no descontar al socio" (chargeToPartner:false): costo 100 % de la empresa
+  const exOwn = [{ id: 1, tripId: 2, category: "fuel", amount: 1000, gallons: 5, status: "paid", chargeToPartner: false }];
+  const r3 = costPerKm({ ...period, trips: tr, expenses: exOwn, trucks: tk, partners: ps, clients, distances });
+  assert.equal(r3.byTruck[0].cost, 1000); assert.equal(r3.byTruck[0].companyRevenue, 4000);
 });

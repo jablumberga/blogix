@@ -14,7 +14,13 @@
  *             cualquier gasto ligado al viaje o al camión en el período
  *   fijo:     plantillas de gastos fijos con truckId (prorrateadas por días del período)
  *   En camiones de socios, lo que se le descuenta al socio en la liquidación NO es costo de la empresa:
- *   se resta (la empresa solo "paga" lo que no recupera). Se usa `settlementCharged` si se pasa.
+ *   se resta (la empresa solo "paga" lo que no recupera).
+ *   · comisión:           la empresa paga todo y retiene su % del flete.
+ *   · comisión + gastos:  el socio reembolsa los gastos; la empresa retiene su % del flete.
+ *   · reparto de utilidad: los gastos salen de la utilidad ANTES de repartir, así que la empresa carga con su
+ *                         parte (100 − % socio) de cada gasto y recibe esa misma parte del flete. Si el camión
+ *                         cierra en pérdida en el período, la pérdida la financia la empresa completa
+ *                         (igual que en la liquidación: el socio nunca queda debiendo). Se calcula por camión.
  */
 import { expenseChargedToPartner, normalizePartner } from "./partnerModels.js";
 import { tripNetRevenue } from "./partnerModels.js";
@@ -110,11 +116,31 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
   const pTripIds = new Set(pTrips.map(t => t.id));
 
   // ── Gastos del período atribuibles a un camión ─────────────────────────────
+  const expenseApplies = (e) => {
+    if (NOT_COST.has(e.category)) return false;
+    return e.tripId ? pTripIds.has(e.tripId) : !!(e.truckId && inRange(e.date, dateFrom, dateTo));
+  };
+  const truckOfExpense = (e) => e.truckId || tripMap.get(e.tripId)?.truckId;
+  const partnerOfTruck = (truckId) => truckId ? partnerMap.get(truckMap.get(truckId)?.partnerId) : null;
+  // Reparto de utilidad: parte de cada gasto descontado que carga la empresa = su parte de la utilidad
+  // (100 − % socio); si el camión queda en pérdida en el período, la empresa carga el 100 % (financia la pérdida).
+  const psShare = new Map(); // truckId → fracción del gasto descontado que es costo de la empresa
+  for (const tk of trucks) {
+    const partner = partnerOfTruck(tk.id);
+    if (!partner || partner.model !== "profit_share") continue;
+    const companyPct = (100 - (Number(partner.partnerSharePct) || 0)) / 100;
+    const rev = pTrips.filter(t => t.truckId === tk.id).reduce((s, t) => s + tripNetRevenue(t, clientMap, brokerMap), 0);
+    const charged = expenses.filter(e => expenseApplies(e) && truckOfExpense(e) === tk.id && expenseChargedToPartner(e, partner)).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    psShare.set(tk.id, rev - charged >= 0 ? companyPct : 1);
+  }
   const costOf = (e) => { // costo para la empresa (si el socio lo reembolsa, no es costo nuestro)
     const amt = Number(e.amount) || 0;
-    const truckId = e.truckId || tripMap.get(e.tripId)?.truckId;
-    const partner = truckId ? partnerMap.get(truckMap.get(truckId)?.partnerId) : null;
-    if (partner && partner.model !== "commission" && expenseChargedToPartner(e, partner)) return { amt, company: 0, truckId };
+    const truckId = truckOfExpense(e);
+    const partner = partnerOfTruck(truckId);
+    if (partner && partner.model !== "commission" && expenseChargedToPartner(e, partner)) {
+      const share = partner.model === "profit_share" ? (psShare.get(truckId) ?? 1) : 0;
+      return { amt, company: amt * share, truckId };
+    }
     return { amt, company: amt, truckId };
   };
   const perTruck = new Map(); // truckId → acumuladores
@@ -137,10 +163,8 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
   }
 
   for (const e of expenses) {
-    if (NOT_COST.has(e.category)) continue;
+    if (!expenseApplies(e)) continue;
     const linkedTrip = e.tripId ? tripMap.get(e.tripId) : null;
-    const applies = linkedTrip ? pTripIds.has(e.tripId) : (e.truckId && inRange(e.date, dateFrom, dateTo));
-    if (!applies) continue;
     const { amt, company, truckId } = costOf(e);
     if (!truckId) continue;
     const a = acc(truckId);
@@ -196,10 +220,11 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
     const variable = a.fuel + a.driver + a.helpers + a.maintenance + a.other;
     const cost = variable + a.fixed;
     const partner = tk?.partnerId ? partnerMap.get(tk.partnerId) : null;
-    // Ingreso de la empresa: en camión propio todo el flete; en camión de socio, lo que retiene (comisión / parte)
+    // Ingreso de la empresa: en camión propio todo el flete; en camión de socio, lo que retiene (comisión / parte).
+    // Reparto de utilidad en pérdida: la empresa se queda con todo el flete y carga con todos los gastos.
     let companyRevenue = a.revenue;
     if (partner) {
-      if (partner.model === "profit_share") companyRevenue = a.revenue * (100 - (Number(partner.partnerSharePct) || 0)) / 100;
+      if (partner.model === "profit_share") companyRevenue = a.revenue * (psShare.get(a.truckId) ?? 1);
       else companyRevenue = a.revenue * (Number(partner.companyPct) || 0) / 100;
     }
     const kmOk = a.km > 0;

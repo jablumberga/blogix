@@ -138,7 +138,7 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
             <Td align="right" bold color={st(tk.status)}>{fmtPerKm(tk.marginPerKm)}</Td><Td align="right">{tk.kmPerGallon ? tk.kmPerGallon.toFixed(1) : "—"}</Td>
           </tr>)}</tbody>
       </table></div>
-      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>Ingreso empresa: en camión propio el flete neto; en camión de socio solo lo que retiene la empresa (comisión o su parte). Costo: lo que paga la empresa y NO recupera del socio. Fijos: plantillas de gastos fijos con camión, prorrateadas por días. Km de camiones con GPS: todos los del período (viajes, regresos y movimientos sin viaje).</div>
+      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>Ingreso empresa: en camión propio el flete neto; en camión de socio solo lo que retiene la empresa (comisión o su parte). Costo: lo que paga la empresa y NO recupera del socio (en reparto de utilidad la empresa carga su parte de cada gasto descontado, y el 100 % si el camión cierra en pérdida — igual que la liquidación). Fijos: plantillas de gastos fijos con camión, prorrateadas por días. Km de camiones con GPS: todos los del período (viajes, regresos y movimientos sin viaje).</div>
     </Card>}
 
     {tab === "routes" && <Card>
