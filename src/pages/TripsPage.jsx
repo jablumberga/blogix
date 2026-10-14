@@ -10,6 +10,8 @@ import { TRIP_DOCS, docsComplete } from "../utils/payroll.js";
 import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
 import { needsRate, takeTripsFilter } from "../utils/tripPending.js";
 import { buildCompanionTrip, applyReceived, setReceivedDate, jointIds } from "../utils/jointTrip.js";
+import SortBar from "../components/SortBar.jsx";
+import { sortRecords, DEFAULT_SORT } from "../utils/sortList.js";
 import { tripPassThrough } from "../utils/profitFirst.js";
 import { checkRef } from "../api.js";
 import { generateConduce } from "../utils/generateConduce.js";
@@ -28,6 +30,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const [filterClient, setFilterClient] = useState("all");
   const [filterDriver, setFilterDriver] = useState("all");
   const [filterTruck, setFilterTruck] = useState("all");
+  const [sort, setSort] = useState(DEFAULT_SORT); // por defecto: fecha, más reciente primero
   const [rateMsg, setRateMsg] = useState("");
   const [formError, setFormError] = useState("");
 
@@ -335,7 +338,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
 
   const addDiscountRow = () => setForm({ ...form, discounts: [...(form.discounts || []), { desc: "", amount: 0 }] });
 
-  let filtered = [...trips].sort((a, b) => b.date.localeCompare(a.date));
+  let filtered = [...trips];
   if (filterStatus !== "all") filtered = filtered.filter(tr => tr.status === filterStatus);
   if (filterClient !== "all") filtered = filtered.filter(tr => tr.clientId === Number(filterClient));
   if (filterDriver !== "all") filtered = filtered.filter(tr => tr.driverId === Number(filterDriver));
@@ -343,6 +346,12 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const clientMap = new Map(clients.map(c => [c.id, c]));
   const driverMap = new Map(drivers.map(d => [d.id, d]));
   const truckMap  = new Map(trucks.map(tk => [tk.id, tk]));
+  const TRIP_SORTS = [["date", "Fecha"], ["id", "# viaje"], ["invoiceRef", "Ref. factura"], ["client", "Cliente"], ["destination", "Destino"], ["driver", "Chofer"], ["truck", "Camión"], ["revenue", "Flete"], ["status", "Estado"], ["docsReceivedAt", "Docs recibidos"]].map(([key, label]) => ({ key, label }));
+  const tripSortGetters = {
+    client: tr => clientMap.get(tr.clientId)?.companyName, driver: tr => driverMap.get(tr.driverId)?.name, truck: tr => truckMap.get(tr.truckId)?.plate,
+    destination: tr => `${tr.province || ""} ${tr.municipality || ""}`.trim(), revenue: tr => Number(tr.revenue) || 0, id: tr => Number(tr.id),
+  };
+  filtered = sortRecords(filtered, sort, tripSortGetters);
   const tripExpMap = expenses.reduce((m, e) => { if (e.tripId && !["adelanto_conductor", "adelanto_ayudante", "nominaTotalOverride", "partner_settlement"].includes(e.category)) m.set(e.tripId, (m.get(e.tripId) || 0) + e.amount); return m; }, new Map());
   if (filterExtra === "nodocs") filtered = filtered.filter(tr => tr.status !== "cancelled" && !docsComplete(tr, clientMap.get(tr.clientId)));
   if (filterExtra === "uninvoiced") filtered = filtered.filter(tr => tr.status !== "cancelled" && (tr.revenue || 0) > 0 && !invoicedTripMap.has(tr.id));
@@ -414,6 +423,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         <option value="all">{t.all} {t.fleet || "Camiones"}</option>
         {trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}
       </Sel>
+      <SortBar options={TRIP_SORTS} value={sort} onChange={setSort} style={{ marginLeft: isMobile ? 0 : "auto" }} />
     </div>
 
     {/* Resumen del filtro activo */}
