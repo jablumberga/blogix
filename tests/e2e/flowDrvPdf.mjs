@@ -1,0 +1,14 @@
+import { open, login, nav, shot, sleep } from "./lib.mjs";
+const { browser, page } = await open(); const errs = []; page.on("pageerror", e => errs.push(e.message));
+await login(page, "admin"); await nav(page, "Nómina"); await sleep(1200);
+const popup = page.waitForEvent("popup");
+await page.locator("[data-driver-payroll-pdf]").first().click();
+const pdf = await popup; await pdf.waitForLoadState(); await sleep(800);
+await pdf.screenshot({ path: "../shots/DRVPDF01.png", fullPage: true });
+const t = await pdf.innerText("body"); console.log(t.slice(0, 1500)); await pdf.close();
+await nav(page, "Entregas (oficina)"); await sleep(800);
+await page.locator("button, div", { hasText: /^Rober/ }).filter({ hasText: "viajes" }).last().click(); await sleep(800);
+console.log("oficina btn", await page.locator("[data-driver-payroll-pdf]").count());
+const popup2 = page.waitForEvent("popup"); await page.locator("[data-driver-payroll-pdf]").first().click(); const p2 = await popup2; await p2.waitForLoadState(); await sleep(500);
+console.log("oficina pdf title:", await p2.title()); await p2.close();
+console.log("errs", errs); await browser.close();

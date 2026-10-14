@@ -2,8 +2,8 @@ import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Printer, FileSpreadsheet, ClipboardCheck, Users, UserCog, AlertTriangle, HardHat } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { genBillingPeriods, today } from "../utils/helpers.js";
-import { buildPayroll, buildHelperPayroll, partnerTripsInPeriod, TRIP_DOCS } from "../utils/payroll.js";
-import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow, helperPeriodReportHTML } from "../utils/printReport.js";
+import { buildPayroll, buildHelperPayroll, payrollPayment, partnerTripsInPeriod, TRIP_DOCS } from "../utils/payroll.js";
+import { driverPeriodReportHTML, driverPayrollHTML, payrollReportHTML, payrollSheets, openPrintWindow, helperPeriodReportHTML } from "../utils/printReport.js";
 import { applyReceived, setReceivedDate } from "../utils/jointTrip.js";
 import { Card, Btn, Badge, Th, Td } from "../components/ui/index.jsx";
 import DeliveryReceiptPanel from "../components/DeliveryReceiptPanel.jsx";
@@ -49,6 +49,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
 
   // ── Reportes ────────────────────────────────────────────────────────────
   const printDriver = (row) => openPrintWindow(`Viajes ${row.driver.name} ${period.label}`, driverPeriodReportHTML({ row, period, generatedBy: user?.name }));
+  const printDriverPayroll = (row) => openPrintWindow(`Nómina ${row.driver.name} ${period.label}`, driverPayrollHTML({ row, pay: payrollPayment({ row, period, expenses }), period, generatedBy: user?.name }));
   const printPayroll = () => openPrintWindow(`Nómina ${period.label}`, payrollReportHTML({ payroll, helperPayroll, generatedBy: user?.name }));
   const printHelper = (row) => openPrintWindow(`Pago ${row.ayudante.name} ${period.label}`, helperPeriodReportHTML({ row, period, generatedBy: user?.name }));
   const exportPayrollXlsx = async () => {
@@ -142,6 +143,7 @@ export default function AssistantDashboard({ user, trips, setTrips, drivers = []
             <span style={{ fontSize: 11, color: colors.textMuted }}>{detailItems.length} viajes · {detailItems.filter(x => x.docsOk).length} recibidos · {detailItems.filter(x => !x.docsOk).length} pendientes · {period.label}</span>
             <span style={{ flex: 1 }} />
             {detailItems.length > 0 && <Btn variant="ghost" onClick={() => setAllReceived(detailItems, !detailItems.every(x => x.docsOk))} style={{ fontSize: 11 }}><ClipboardCheck size={12} /> {detailItems.every(x => x.docsOk) ? "Desmarcar todos" : "Marcar todos como recibidos"}</Btn>}
+            {selectedDriver && <Btn variant="ghost" onClick={() => printDriverPayroll(selectedDriver)} style={{ fontSize: 11 }} data-driver-payroll-pdf><Printer size={12} /> Nómina del chofer (PDF)</Btn>}
             {selectedDriver && <Btn variant="ghost" onClick={() => printDriver(selectedDriver)} style={{ fontSize: 11 }}><Printer size={12} /> Relación de viajes (PDF)</Btn>}
           </div>
           {selPerson && <DeliveryReceiptPanel key={`${sel.kind}-${sel.id}`} kind={sel.kind} person={selPerson} trips={trips} trucks={trucks} clients={clients} drivers={drivers} user={user} onMark={setReceived} />}
