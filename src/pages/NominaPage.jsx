@@ -9,7 +9,7 @@ import { buildPayroll, payrollPayment, payrollKey, buildHelperPayroll, helperPay
 import { tripCrew } from "../utils/driverPay.js";
 import { DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 import { bankOverview } from "../utils/bankAccounts.js";
-import { driverPeriodReportHTML, payrollReportHTML, payrollSheets, openPrintWindow, helperPeriodReportHTML } from "../utils/printReport.js";
+import { driverPeriodReportHTML, driverPayrollHTML, payrollReportHTML, payrollSheets, openPrintWindow, helperPeriodReportHTML } from "../utils/printReport.js";
 import { Card, PageHeader, Badge, Btn, Th, Td } from "../components/ui/index.jsx";
 
 const PURPLE = "#9b7fe8";
@@ -28,7 +28,7 @@ function OverrideBox({ label, current, note, onSave, onCancel, color = PURPLE })
   </div>;
 }
 
-function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride, onTotalOverride, onClearTotalOverride, onPrint, isMobile }) {
+function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride, onTotalOverride, onClearTotalOverride, onPrint, onPrintPayroll, isMobile }) {
   const [open, setOpen] = useState(false);
   const [editingLine, setEditingLine] = useState(null);
   const [editingTotal, setEditingTotal] = useState(false);
@@ -50,6 +50,7 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <button onClick={onPrintPayroll} title="Nómina de este chofer en PDF (viajes, chofer + dieta, ayudantes + dieta, adelantos, neto)" style={smallBtn(colors.accent + "14", colors.accent, `1px solid ${colors.accent}40`)} data-driver-payroll-pdf><Printer size={12} /> Nómina PDF</button>
         <button onClick={onPrint} style={smallBtn(colors.green + "14", colors.green, `1px solid ${colors.green}40`)}><FileText size={12} /> Relación</button>
         <WhatsAppButton phone={d.phone} name={d.name} template="pago_quincena" compact label="WhatsApp" testId={`pay-${d.id}`}
           data={{ name: d.name, period: period?.label || "", company: COMPANY.brand || "B-Logix", trips: row.tripCount, advances: row.advances, net: pay.net, paid: pay.paid }} />
@@ -285,6 +286,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
 
   // ── Reportes ──────────────────────────────────────────────────────────────
   const printDriver = (row) => openPrintWindow(`Viajes ${row.driver.name} ${period.label}`, driverPeriodReportHTML({ row, period, generatedBy: user?.name }));
+  const printDriverPayroll = (row, pay) => openPrintWindow(`Nómina ${row.driver.name} ${period.label}`, driverPayrollHTML({ row, pay, period, generatedBy: user?.name }));
   const printPayroll = () => openPrintWindow(`Nómina ${period.label}`, payrollReportHTML({ payroll, helperPayroll, generatedBy: user?.name }));
   const exportXlsx = async () => {
     const XLSX = await import("xlsx");
@@ -348,7 +350,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
     {rows.map(({ row, pay }) => <DriverCard key={row.driver.id} row={row} pay={pay} period={period} isMobile={isMobile}
       onMarkPaid={() => markPaid({ row, pay })} onMarkUnpaid={() => markUnpaid({ pay })}
       onLineOverride={(l, a, n) => lineOverride(row, l, a, n)} onTotalOverride={(a, n) => totalOverride(row, pay, a, n)} onClearTotalOverride={() => clearTotalOverride(row)}
-      onPrint={() => printDriver(row)} />)}
+      onPrint={() => printDriver(row)} onPrintPayroll={() => printDriverPayroll(row, pay)} />)}
     {helperRows.length > 0 && <>
       <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "18px 0 8px" }}><HardHat size={15} color={colors.orange} /><b style={{ fontSize: 14 }}>Ayudantes (pago directo)</b><span style={{ fontSize: 11, color: colors.textMuted }}>· se les paga a ellos, no al chofer · misma regla: viaje con documentos recibidos en el corte</span></div>
       {helperRows.map(({ row, pay }) => <HelperCard key={row.ayudante.id} row={row} pay={pay} period={period}

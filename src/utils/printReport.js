@@ -163,6 +163,59 @@ export function helperPeriodReportHTML({ row, period, generatedBy, minRows = 10 
     <div class="sig"><div>Entregado por: ${esc(generatedBy || "")}</div><div>Recibí conforme: ${esc(a.name)}</div><div>Fecha</div></div>`;
 }
 
+/**
+ * Nómina del período de UN chofer: sus viajes con chofer + dieta, ayudantes + dieta, descuentos, adelantos y neto.
+ * row = fila de buildPayroll; pay = payrollPayment(row) (opcional: overrides, pagado/pendiente).
+ */
+export function driverPayrollHTML({ row, pay = null, period, generatedBy }) {
+  const d = row.driver;
+  const plates = [...new Set(row.trips.map(x => x.truck?.plate).filter(Boolean))].join(", ");
+  const lineOf = (x) => pay?.lines?.find(l => l.trip.id === x.trip.id) || null;
+  const tripRows = row.trips.map((x) => { const { trip, client, calc } = x; const l = lineOf(x); const crew = tripCrew(trip, calc, d);
+    const chofer = crew[0], ayud = crew.slice(1);
+    return `
+    <tr>
+      <td>${esc(trip.date)}<br><span class="small muted">#${esc(trip.id)} · rec. ${esc(trip.docsReceivedAt || "—")}</span></td>
+      <td>${esc(client?.companyName || "—")}<br><span class="small muted">${esc(trip.invoiceRef || "")}</span></td>
+      <td>${esc(trip.municipality)}, ${esc(trip.province)}</td>
+      <td style="text-align:center">${esc(calc?.size || "")}${!calc?.rateFound && row.payType === "perTrip" ? `<br><span class="no small">sin tarifa</span>` : ""}</td>
+      <td class="right">${fmt(chofer?.base || 0)}</td>
+      <td class="right">${chofer?.dieta ? fmt(chofer.dieta) : "—"}</td>
+      <td class="right">${calc?.discounts ? "−" + fmt(calc.discounts) : "—"}</td>
+      <td class="right"><b>${fmt(l ? l.amount : calc?.driverNet || 0)}</b>${l?.overridden ? `<br><span class="small muted">ajustado${l.exp?.overrideNote ? ": " + esc(l.exp.overrideNote) : ""}</span>` : ""}</td>
+      <td class="small">${ayud.length ? ayud.map(a => `${esc(a.name)}: ${fmt(a.base)}${a.dieta ? " + dieta " + fmt(a.dieta) : ""} = <b>${fmt(a.total)}</b>${a.direct ? " (directo)" : ""}`).join("<br>") : "—"}</td>
+      <td class="right">${fmt(ayud.filter(a => !a.direct).reduce((s, a) => s + a.total, 0))}</td>
+      <td class="small">${l ? (l.paid ? `<span class="ok">pagado</span>` : "pendiente") : ""}</td>
+    </tr>`; });
+  const driverTotal = pay ? pay.driverTotal : row.net + row.advances;
+  const grossEff = pay ? pay.grossEff : driverTotal;
+  const net = pay ? pay.net : Math.max(0, driverTotal - row.advances);
+  const helpersViaDriver = row.helpers;
+  return `
+    ${companyHeaderHTML("NÓMINA DEL CHOFER")}
+    <table class="fields">
+      <tr><td>Chofer:</td><td>${esc(d.name)}</td></tr>
+      <tr><td>Período:</td><td>${esc(period.label)} (${esc(period.dateFrom)} a ${esc(period.dateTo)})</td></tr>
+      <tr><td>Pago:</td><td>${row.payType === "fixed" ? "Salario fijo" : row.payType === "percentage" ? `${esc(d.percentageAmount)}% del flete` : "Por viaje (tarifario)"}</td></tr>
+      <tr><td>Camión:</td><td>${esc(plates || "—")}</td></tr>
+      <tr><td>Generado:</td><td>${new Date().toLocaleString("es-DO")}${generatedBy ? ` por ${esc(generatedBy)}` : ""}</td></tr>
+    </table>
+    <table class="grid">
+      <thead><tr><th>Fecha</th><th>Cliente</th><th>Destino</th><th>Tarifa</th><th class="right">Chofer</th><th class="right">Dieta</th><th class="right">Desc.</th><th class="right">Neto chofer</th><th>Ayudantes (base + dieta)</th><th class="right">Ayud. por el chofer</th><th>Estado</th></tr></thead>
+      <tbody>${tripRows.join("") || `<tr><td colspan="11" class="muted">Sin viajes recibidos en el período</td></tr>`}</tbody>
+      <tfoot><tr><td colspan="4"><b>Totales (${row.tripCount} viaje${row.tripCount !== 1 ? "s" : ""})</b></td><td class="right">${fmt(row.base)}</td><td class="right">${fmt(row.dieta)}</td><td class="right">${row.discounts ? "−" + fmt(row.discounts) : "—"}</td><td class="right"><b>${fmt(driverTotal)}</b></td><td></td><td class="right"><b>${fmt(helpersViaDriver)}</b></td><td></td></tr></tfoot>
+    </table>
+    <div class="box">
+      ${pay?.override ? `<div>Total ajustado: <b>${fmt(grossEff)}</b>${pay.override.overrideNote ? ` <span class="small muted">(${esc(pay.override.overrideNote)})</span>` : ""}</div>` : `<div>Bruto chofer (chofer + su parte de dieta − descuentos): <b>${fmt(grossEff)}</b></div>`}
+      <div>Adelantos del período: <b>−${fmt(row.advances)}</b></div>
+      <div style="font-size:15px">NETO A TRANSFERIR AL CHOFER: <b>${fmt(net)}</b>${pay?.paid ? ` <span class="ok">✓ PAGADO</span>` : ""}</div>
+      <div>Ayudantes que cobran por el chofer: <b>${fmt(helpersViaDriver)}</b> (${row.helperCount})${row.directHelpers ? ` · ayudantes con pago directo (no van al chofer): ${fmt(row.directHelpers)}` : ""}</div>
+      <div style="font-size:14px">TOTAL A TRANSFERIR (chofer + ayudantes por él): <b>${fmt(net + helpersViaDriver)}</b></div>
+    </div>
+    <div class="small muted" style="margin-top:6px">La dieta del tarifario es del equipo y se reparte en partes iguales entre chofer y ayudantes. Cada viaje se paga en la quincena en que la oficina recibió sus documentos.${row.pendingCount ? ` ${row.pendingCount} viaje(s) pendiente(s) de documentos no incluido(s).` : ""}</div>
+    <div class="sig"><div>Preparado por: ${esc(generatedBy || "")}</div><div>Recibí conforme: ${esc(d.name)}</div><div>Fecha</div></div>`;
+}
+
 /** Reporte de nómina del período con todos los choferes y ayudantes (para contabilidad). */
 export function payrollReportHTML({ payroll, helperPayroll = null, company = "B-Logix", generatedBy }) {
   const { period, drivers, totals } = payroll;
