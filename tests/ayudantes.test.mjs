@@ -11,7 +11,7 @@ const ayudantes = [
   { id: 3, name: "Luis", payMode: "direct", status: "inactive" },
   { id: 4, name: "Ramón", status: "active" }, // sin payMode → directo
 ];
-const driver = { id: 7, name: "Rober", payType: "perTrip", rateSheets: [{ id: 1, name: "General", clientId: null, rates: [{ province: "Santiago", municipality: "Santiago de los Caballeros", priceT1: 1000, dietaT1: 0, helperT1: 300, priceT2: 2000, dietaT2: 200, helperT2: 400 }] }] };
+const driver = { id: 7, name: "Rober", payType: "perTrip", rateSheets: [{ id: 1, name: "General", clientId: null, rates: [{ province: "Santiago", municipality: "Santiago de los Caballeros", priceT1: 1000, dietaT1: 0, helperT1: 300, priceT2: 2000, dietaT2: 0, helperT2: 400 }] }] };
 const trucks = [{ id: 1, plate: "L1", size: "T2", helperIds: [1, 2] }, { id: 2, plate: "L2", size: "T1" }];
 const client = { id: 5, companyName: "Bocel", rules: {} };
 const base = { driverId: 7, truckId: 1, clientId: 5, province: "Santiago", municipality: "Santiago de los Caballeros", revenue: 9000, status: "delivered" };

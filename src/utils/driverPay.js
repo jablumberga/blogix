@@ -9,6 +9,14 @@
  *
  * Ayudantes: por defecto T1 = 1 y T2 = 2, pero el viaje puede traer
  * numHelpers (0, 1, 2…) y helperPayEach para sobreescribir.
+ *
+ * Dieta: la del tarifario es la dieta TOTAL del equipo y se reparte en partes iguales entre el chofer y los
+ * ayudantes que fueron (T1 con 1 ayudante: mitad y mitad; T2 con 2: un tercio cada uno; sin ayudantes: toda al
+ * chofer). El residuo de la división queda con el chofer. helperPayEach del viaje, si viene, ya incluye la
+ * parte de dieta del ayudante (es lo que se le paga en total).
+ *
+ * Destino con tarifa solo para un tamaño (p. ej. solo T1) usado con el otro camión: se usa esa tarifa completa
+ * (precio, dieta y ayudante) y calc.sizeFallback lo indica.
  */
 
 export const PAY_TYPES = {
@@ -65,19 +73,19 @@ export function calcDriverPay({ driver, trip, truck, clientId }) {
   const discounts = (trip?.discounts || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
   const revenue = Number(trip?.revenue) || 0;
 
-  let base = 0, dieta = 0, helperEach = 0, rateFound = true, sheetName = null;
+  let base = 0, dietaTotal = 0, helperBase = 0, rateFound = true, sheetName = null, sizeFallback = false;
   if (d.payType === "perTrip") {
     const sheet = getRateSheet(d, clientId ?? trip?.clientId);
     const rate = findRate(sheet, trip?.province, trip?.municipality);
     sheetName = sheet?.name || null;
     if (!rate) rateFound = false;
     else {
-      const t2 = size === "T2";
+      let t2 = size === "T2";
+      // Ruta con tarifa solo para el otro tamaño: se usa esa tarifa completa (precio, dieta y ayudante)
+      if (!(Number(t2 ? rate.priceT2 : rate.priceT1) > 0) && Number(t2 ? rate.priceT1 : rate.priceT2) > 0) { t2 = !t2; sizeFallback = true; }
       base       = Number(t2 ? rate.priceT2  : rate.priceT1)  || 0;
-      dieta      = Number(t2 ? rate.dietaT2  : rate.dietaT1)  || 0;
-      helperEach = Number(t2 ? rate.helperT2 : rate.helperT1) || 0;
-      // Ruta solo-T1 usada con camión T2 (o al revés): cae al otro precio
-      if (base === 0) { base = Number(t2 ? rate.priceT1 : rate.priceT2) || 0; }
+      dietaTotal = Number(t2 ? rate.dietaT2  : rate.dietaT1)  || 0;
+      helperBase = Number(t2 ? rate.helperT2 : rate.helperT1) || 0;
     }
   } else if (d.payType === "percentage") {
     base = Math.round(revenue * (Number(d.percentageAmount) || 0) / 100);
@@ -87,12 +95,16 @@ export function calcDriverPay({ driver, trip, truck, clientId }) {
 
   // Ayudantes: el viaje manda; si no dice nada, el default por tamaño
   const numHelpers = trip?.numHelpers != null && trip.numHelpers !== "" ? Math.max(0, Number(trip.numHelpers) || 0) : DEFAULT_HELPERS[size];
+  // Dieta total repartida en partes iguales entre chofer y ayudantes; el residuo queda con el chofer
+  const dietaEach = numHelpers > 0 ? Math.floor(dietaTotal / (numHelpers + 1)) : 0;
+  const dieta = dietaTotal - dietaEach * numHelpers;
+  let helperEach = helperBase + dietaEach;
   if (trip?.helperPayEach != null && trip.helperPayEach !== "") helperEach = Number(trip.helperPayEach) || 0;
   const helpersTotal = numHelpers * helperEach;
 
   const driverGross = base + dieta;
   const driverNet = Math.max(0, driverGross - discounts);
-  return { size, base, dieta, driverGross, discounts, driverNet, numHelpers, helperEach, helpersTotal, total: driverNet + helpersTotal, rateFound, sheetName, payType: d.payType };
+  return { size, base, dieta, dietaTotal, dietaEach, driverGross, discounts, driverNet, numHelpers, helperBase, helperEach, helpersTotal, total: driverNet + helpersTotal, rateFound, sheetName, sizeFallback, payType: d.payType };
 }
 
 /** Descripción corta para el gasto de nómina. */
@@ -100,7 +112,7 @@ export function describeDriverPay(calc, driver) {
   const d = normalizeDriver(driver);
   if (d.payType === "percentage") return `Nómina (${d.percentageAmount || 0}%): ${d.name}`;
   const parts = [`Nómina por viaje ${calc.size}: ${d.name}`];
-  if (calc.dieta) parts.push(`dieta ${calc.dieta}`);
-  if (calc.numHelpers) parts.push(`${calc.numHelpers} ayud. × ${calc.helperEach}`);
+  if (calc.dieta) parts.push(calc.dietaEach ? `dieta ${calc.dieta} (de ${calc.dietaTotal} repartida)` : `dieta ${calc.dieta}`);
+  if (calc.numHelpers) parts.push(`${calc.numHelpers} ayud. × ${calc.helperEach}${calc.dietaEach ? ` (incl. dieta ${calc.dietaEach})` : ""}`);
   return parts.join(" · ");
 }

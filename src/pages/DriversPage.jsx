@@ -165,7 +165,7 @@ export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks,
         </Sel>
         {form.payType === "fixed" && <Inp label="Salario fijo por quincena (RD$)" type="number" value={form.fixedAmount} onChange={e => setForm({ ...form, fixedAmount: e.target.value })} />}
         {form.payType === "percentage" && <Inp label="% del ingreso del viaje" type="number" min="0" max="100" value={form.percentageAmount} onChange={e => setForm({ ...form, percentageAmount: e.target.value })} />}
-        {form.payType === "perTrip" && <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 6 }}>Se paga según el tarifario del destino. T1: chofer + 1 ayudante; T2: chofer + 2 ayudantes. En cada viaje se puede cambiar la cantidad de ayudantes.</div>}
+        {form.payType === "perTrip" && <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 6 }}>Se paga según el tarifario del destino. T1: chofer + 1 ayudante; T2: chofer + 2 ayudantes. La dieta del tarifario es la del equipo completo y se reparte en partes iguales entre chofer y ayudantes. En cada viaje se puede cambiar la cantidad de ayudantes.</div>}
         <Inp label={t.username} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} autoComplete="off" />
         {!editId ? <Inp label={t.password} type="password" value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} autoComplete="new-password" /> : <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 8 }}>La contraseña se cambia con el botón 🔑 de la lista.</div>}
       </div>
