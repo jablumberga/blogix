@@ -5,7 +5,7 @@ import { fmt, nxId, getPeriodInfo, today } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../components/ui/index.jsx";
 import { invoiceHTML, invoiceSheet, openPrintWindow } from "../utils/printReport.js";
 import { DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
-import { invoiceBalance, buildAbono, invoiceStatusWith } from "../utils/cobros.js";
+import { invoiceBalance, buildAbono, invoiceStatusWith, invoiceCancelBlock } from "../utils/cobros.js";
 import SortBar from "../components/SortBar.jsx";
 import { sortRecords, DEFAULT_SORT } from "../utils/sortList.js";
 import CobroModal from "../components/CobroModal.jsx";
@@ -112,7 +112,7 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, partners = [], pfSettings = DEFAULT_PF_SETTINGS, isMobile, bankAccount = null }) {
+export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, partners = [], pfSettings = DEFAULT_PF_SETTINGS, isMobile, bankAccount = null, bankTransfers = [], bankReconciliation = {}, expenses = [] }) {
 
   const todayStr = today();
 
@@ -293,6 +293,8 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   const deleteInvoice = (id) => {
     const inv = invoices.find(x => x.id === id);
     if (!inv) return;
+    const block = invoiceCancelBlock(inv, { cobros, bankTransfers, bankReconciliation, expenses, trips, trucks, partners });
+    if (block) { window.alert(`No se puede eliminar la factura ${inv.invoiceNumber || "#" + inv.id}: ${block}.`); return; }
     const b = balanceOf(inv);
     const ids = new Set(inv.tripIds || []);
     if (!window.confirm("¿Eliminar esta factura? Los viajes quedarán disponibles para facturar de nuevo" + (b.paid > 0 ? ` y se borrarán sus ${b.abonos.length} cobro(s) por ${fmt(b.paid)} (se revierte su reparto Profit First)` : "") + ".")) return;
@@ -305,6 +307,8 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   const cancelInvoice = (id) => {
     const inv = invoices.find(x => x.id === id);
     if (!inv || inv.status === "cancelled") return;
+    const block = invoiceCancelBlock(inv, { cobros, bankTransfers, bankReconciliation, expenses, trips, trucks, partners });
+    if (block) { window.alert(`No se puede anular la factura ${inv.invoiceNumber || "#" + inv.id}: ${block}.`); return; }
     const b = balanceOf(inv);
     if (!window.confirm(`¿Anular la factura ${inv.invoiceNumber || "#" + inv.id}? Conserva su número como ANULADA; los viajes quedan disponibles para facturar de nuevo` + (b.paid > 0 ? ` y se borran sus cobros por ${fmt(b.paid)}` : "") + ".")) return;
     const ids = new Set(inv.tripIds || []);

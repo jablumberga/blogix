@@ -59,3 +59,30 @@ export function invoiceStatusWith(inv, cobros, ctx) {
 export function collectedTripIdSet(cobros = []) {
   return new Set(cobros.flatMap(c => (c?.collectedTripIds || []).map(Number)));
 }
+
+/**
+ * ¿Se puede anular / borrar una factura? Devuelve el motivo si NO:
+ *  · alguno de sus cobros ya se repartió en Banco (Reparto de Income) o se depositó desde Caja
+ *  · alguno de sus cobros ya está conciliado con el estado de cuenta
+ *  · un viaje de la factura es de un camión de socio y la liquidación de esa quincena ya está transferida
+ * (anular borraría los cobros y dejaría Banco y las liquidaciones descuadrados).
+ */
+export function invoiceCancelBlock(inv, { cobros = [], bankTransfers = [], bankReconciliation = {}, expenses = [], trips = [], trucks = [], partners = [] } = {}) {
+  if (!inv) return null;
+  const mine = invoiceCobros(inv, cobros);
+  const used = mine.find(c => (bankTransfers || []).some(t => (t.distKeys || []).includes(`cobro:${c.id}`) || (t.cobroIds || []).includes(c.id)));
+  if (used) return `el cobro del ${used.date} (${used.amount}) ya se repartió en Banco: borra primero ese reparto o depósito en Banco`;
+  const rec = mine.find(c => bankReconciliation?.[`cobro-${c.id}`] === "reconciled");
+  if (rec) return `el cobro del ${rec.date} (${rec.amount}) ya está conciliado con el banco: deshaz la conciliación primero`;
+  const truckMap = new Map((trucks || []).map(t => [t.id, t]));
+  const paidKeys = new Set((expenses || []).filter(e => e.category === "partner_settlement" && e.status === "paid" && e.settlementKey).map(e => e.settlementKey));
+  if (paidKeys.size) {
+    for (const tid of inv.tripIds || []) {
+      const tr = (trips || []).find(t => t.id === tid); const partnerId = tr ? truckMap.get(tr.truckId)?.partnerId : null;
+      if (!tr || !partnerId || !tr.date) continue;
+      const [y, m, dd] = tr.date.split("-"); const key = `${partnerId}-${y}-${m}-${Number(dd) <= 15 ? 1 : 2}`;
+      if (paidKeys.has(key)) { const p = (partners || []).find(x => x.id === partnerId); return `el viaje #${tr.id} ya está en la liquidación transferida de ${p?.name || "un socio"} (${y}-${m} ${Number(dd) <= 15 ? "1–15" : "16–fin"}): desmárcala primero en Liquidaciones`; }
+    }
+  }
+  return null;
+}
