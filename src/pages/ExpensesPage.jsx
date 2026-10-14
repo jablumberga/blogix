@@ -7,6 +7,8 @@ import { fuelNeedsTruck } from "../utils/costPerKm.js";
 import { activeAyudantes } from "../utils/ayudantes.js";
 import { getAccounts, activeAccounts, expenseAccountId } from "../utils/bankAccounts.js";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
+import SortBar from "../components/SortBar.jsx";
+import { sortRecords, DEFAULT_SORT } from "../utils/sortList.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td, Chk } from "../components/ui/index.jsx";
 import { receiptToExpenseForm, receiptDuplicates } from "../utils/receipts.js";
 import { listReceipts, rejectReceipt, approveReceipt, notifyReceiptsChanged } from "../utils/receiptsApi.js";
@@ -31,6 +33,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   const [filterCat, setFilterCat] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterTruck, setFilterTruck] = useState("all");
+  const [sort, setSort] = useState(DEFAULT_SORT); // por defecto: fecha, más reciente primero
   const [filterPartner, setFilterPartner] = useState(false); // solo gastos reembolsables por socios
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -102,6 +105,13 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
   if (filterStatus !== "all") filtered = filtered.filter(e => filterStatus === "pending" ? (!e.status || e.status === "pending") : e.status === filterStatus);
   if (filterTruck !== "all") filtered = filtered.filter(e => expenseTruckId(e, tripMap) === Number(filterTruck));
   if (filterPartner) filtered = filtered.filter(isReimbursable);
+  const EXPENSE_SORTS = [["date", "Fecha"], ["id", "# gasto"], ["category", "Categoría"], ["amount", "Monto"], ["truck", "Camión"], ["tripId", "# viaje"], ["supplier", "Suplidor"], ["status", "Estado"], ["dueDate", "Vence"]].map(([key, label]) => ({ key, label }));
+  const expenseSortGetters = {
+    id: e => Number(e.id), amount: e => Number(e.amount) || 0, category: e => t[e.category] || e.category, tripId: e => e.tripId ? Number(e.tripId) : null,
+    truck: e => { const id = expenseTruckId(e, tripMap); return id ? (trucks || []).find(tk => tk.id === id)?.plate : null; },
+    supplier: e => e.supplierId ? (suppliers || []).find(s => s.id === e.supplierId)?.name : null, status: e => e.status || "pending",
+  };
+  filtered = sortRecords(filtered, sort, expenseSortGetters);
 
   // Socio del camión elegido en el formulario (para la casilla «cargar al socio»)
   const formTruckId = form.truckId || (form.tripId ? tripMap.get(Number(form.tripId))?.truckId : null);
@@ -444,6 +454,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
           <option value="all">Todos los camiones</option>
           {(trucks||[]).map(tk => <option key={tk.id} value={tk.id}>{tk.plate}</option>)}
         </select>
+        <SortBar options={EXPENSE_SORTS} value={sort} onChange={setSort} style={{ marginLeft: isMobile ? 0 : "auto" }} />
       </div>
     </Card>
 
@@ -462,7 +473,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
             <Th align="right">{t.expenseAmount}</Th>
             <Th></Th>
           </tr></thead>
-          <tbody>{filtered.sort((a, b) => (b.date||"").localeCompare(a.date||"")).map(e => {
+          <tbody>{filtered.map(e => {
             const isPaid = e.status === "paid";
             const resolvedTruckId = expenseTruckId(e, tripMap);
             const tk = resolvedTruckId ? (trucks||[]).find(x => x.id === resolvedTruckId) : null;

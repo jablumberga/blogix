@@ -6,6 +6,8 @@ import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../com
 import { invoiceHTML, invoiceSheet, openPrintWindow } from "../utils/printReport.js";
 import { DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 import { invoiceBalance, buildAbono, invoiceStatusWith } from "../utils/cobros.js";
+import SortBar from "../components/SortBar.jsx";
+import { sortRecords, DEFAULT_SORT } from "../utils/sortList.js";
 import CobroModal from "../components/CobroModal.jsx";
 import { getAccounts } from "../utils/bankAccounts.js";
 
@@ -118,6 +120,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   const [editId, setEditId] = useState(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterClient, setFilterClient] = useState("all");
+  const [sort, setSort] = useState(DEFAULT_SORT); // por defecto: fecha, más reciente primero
 
   const emptyForm = {
     invoiceNumber: "",
@@ -335,7 +338,12 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
   }, [invoices, cobros, tripRevMap, todayStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Filtered list ────────────────────────────────────────────────────────
-  let filtered = [...invoices].sort((a, b) => (b.date||"").localeCompare(a.date||""));
+  const INVOICE_SORTS = [["date", "Fecha"], ["invoiceNumber", "# factura"], ["client", "Cliente"], ["amount", "Monto"], ["balance", "Saldo"], ["dueDate", "Vencimiento"], ["status", "Estado"], ["trips", "Nº de viajes"]].map(([key, label]) => ({ key, label }));
+  const invoiceSortGetters = {
+    client: inv => clients.find(c => c.id === inv.clientId)?.companyName, amount: inv => invAmt(inv),
+    balance: inv => invoiceBalance(inv, cobros, { trips, clients, brokers }).balance, trips: inv => (inv.tripIds || []).length,
+  };
+  let filtered = sortRecords(invoices, sort, invoiceSortGetters);
   if (filterStatus !== "all") filtered = filtered.filter(inv => inv.status === filterStatus);
   if (filterClient !== "all") filtered = filtered.filter(inv => inv.clientId === Number(filterClient));
 
@@ -361,6 +369,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
           <option value="all">Todos los clientes</option>
           {clients.map(c => <option key={c.id} value={c.id}>{c.companyName}</option>)}
         </select>
+        <SortBar options={INVOICE_SORTS} value={sort} onChange={setSort} style={{ marginLeft: isMobile ? 0 : "auto" }} />
       </div>
     </Card>
 
