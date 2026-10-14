@@ -165,44 +165,30 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   const cashPosition = totalCxC - totalCxP;
 
   // ── CFO Billing Pipeline ──────────────────────────────────────────────────
-  const { invoicedAmt, outstandingAmt, collectedAmt, readyToInvoiceAmt, pendingDocsAmt } = useMemo(() => {
-    const tripRevMap = new Map(trips.map(t => [t.id, t.revenue || 0]));
-    // Prefer stored inv.amount (net after broker deduction) — fall back to gross recompute for old invoices
-    const invAmt = (inv) => inv.amount != null ? inv.amount : (inv.tripIds || []).reduce((s, tid) => s + (tripRevMap.get(tid) || 0), 0);
-    const periodInv = (invoices || []).filter(inv => inv.date >= dateFrom && inv.date <= dateTo && inv.status !== "cancelled");
-    const allInvoicedIds = new Set();
-    (invoices || []).forEach(inv => { if (inv.status !== "cancelled") (inv.tripIds || []).forEach(id => allInvoicedIds.add(id)); });
-    // readyToInvoice = delivered trips with docs, not yet invoiced, net of pass-through broker
-    const cMap = new Map(clients.map(c => [c.id, c]));
-    const bMap = new Map(brokers.map(b => [b.id, b]));
-    const readyToInvoice = mt.filter(tr => tr.status === "delivered" && tr.docStatus === "delivered" && (tr.revenue || 0) > 0 && !allInvoicedIds.has(tr.id));
-    const readyAmt = readyToInvoice.reduce((s, tr) => {
-      const cl = cMap.get(tr.clientId);
-      if (cl?.rules?.brokerPassThrough && tr.brokerId) {
-        const br = bMap.get(tr.brokerId);
-        const ded = br ? Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100) : 0;
-        return s + (tr.revenue || 0) - ded;
-      }
-      return s + (tr.revenue || 0);
-    }, 0);
+  // ── Pipeline de facturación: foto de HOY (no se filtra por el período del panel, salvo «Cobrado») ──
+  //   Cobrado        = cobros registrados con fecha dentro del período
+  //   Por cobrar     = saldo abierto de TODAS las facturas (monto − abonos), sea cual sea su fecha
+  //   Listo facturar = TODOS los viajes con documentos recibidos por oficina y sin factura
+  //   Docs pendientes= TODOS los viajes sin documentos recibidos y sin factura
+  const { outstandingAmt, outstandingCount, collectedAmt, collectedCount, readyToInvoiceAmt, readyCount, pendingDocsAmt, pendingDocsCount } = useMemo(() => {
+    const ctx = { trips, clients, brokers };
+    const cMap = new Map(clients.map(c => [c.id, c])), bMap = new Map((brokers || []).map(b => [b.id, b]));
+    const active = (invoices || []).filter(inv => inv.status !== "cancelled");
+    const allInvoicedIds = new Set(active.flatMap(inv => inv.tripIds || []));
+    const open = active.map(i => invoiceBalance(i, cobros, ctx)).filter(b => b.balance > 0);
+    const periodCobros = (cobros || []).filter(c => c && c.date >= dateFrom && c.date <= dateTo && active.some(i => i.id === c.invoiceId));
+    const unbilled = trips.filter(tr => tr.status !== "cancelled" && (tr.revenue || 0) > 0 && !allInvoicedIds.has(tr.id));
+    const ready = unbilled.filter(tr => tr.docStatus === "delivered");
+    const pending = unbilled.filter(tr => tr.docStatus !== "delivered");
+    const net = (list) => list.reduce((s, tr) => s + tripNetRevenue(tr, cMap, bMap), 0);
     return {
-      invoicedAmt:      periodInv.reduce((s, inv) => s + invAmt(inv), 0),
-      outstandingAmt:   periodInv.filter(i => i.status === "sent" || i.status === "draft").reduce((s, i) => s + invAmt(i), 0),
-      collectedAmt:     periodInv.filter(i => i.status === "paid").reduce((s, i) => s + invAmt(i), 0),
-      readyToInvoiceAmt: readyAmt,
-      // Docs pendientes: todo viaje del período al que la oficina aún no le recibió los documentos (sea cual sea su estado)
-      pendingDocsAmt:   mt.filter(tr => (tr.revenue || 0) > 0 && tr.docStatus !== "delivered" && !allInvoicedIds.has(tr.id))
-                          .reduce((s, tr) => {
-                            const cl = cMap.get(tr.clientId);
-                            if (cl?.rules?.brokerPassThrough && tr.brokerId) {
-                              const br = bMap.get(tr.brokerId);
-                              const ded = br ? Math.round((tr.revenue || 0) * (br.commissionPct || 10) / 100) : 0;
-                              return s + (tr.revenue || 0) - ded;
-                            }
-                            return s + (tr.revenue || 0);
-                          }, 0),
+      outstandingAmt: open.reduce((s, b) => s + b.balance, 0), outstandingCount: open.length,
+      collectedAmt: periodCobros.reduce((s, c) => s + (Number(c.amount) || 0), 0), collectedCount: periodCobros.length,
+      readyToInvoiceAmt: net(ready), readyCount: ready.length,
+      pendingDocsAmt: net(pending), pendingDocsCount: pending.length,
     };
-  }, [invoices, mt, trips, clients, brokers, dateFrom, dateTo]);
+  }, [invoices, cobros, trips, clients, brokers, dateFrom, dateTo]);
+  const pipelineTotal = collectedAmt + outstandingAmt + readyToInvoiceAmt + pendingDocsAmt;
 
   // ── Broker commissions in period ────────────────────────────────────────
   const brokerBreakdown = useMemo(() => {
@@ -332,10 +318,10 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         {/* 5-metric grid */}
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 8, marginBottom: 10 }}>
           {[
-            { label: "Cobrado",        value: collectedAmt,     color: colors.green,    sub: "cobro registrado" },
-            { label: "Por Cobrar",     value: outstandingAmt,   color: colors.cyan,     sub: "facturado, sin cobro" },
-            { label: "Listo Facturar", value: readyToInvoiceAmt, color: colors.orange,  sub: "docs recibidos, sin factura" },
-            { label: "Docs Pendientes",value: pendingDocsAmt,   color: colors.yellow,   sub: "sin docs recibidos" },
+            { label: "Cobrado",        value: collectedAmt,     color: colors.green,    sub: `${collectedCount} cobro${collectedCount !== 1 ? "s" : ""} en el período` },
+            { label: "Por Cobrar",     value: outstandingAmt,   color: colors.cyan,     sub: `${outstandingCount} factura${outstandingCount !== 1 ? "s" : ""} con saldo` },
+            { label: "Listo Facturar", value: readyToInvoiceAmt, color: colors.orange,  sub: `${readyCount} viaje${readyCount !== 1 ? "s" : ""} con docs, sin factura` },
+            { label: "Docs Pendientes",value: pendingDocsAmt,   color: colors.yellow,   sub: `${pendingDocsCount} viaje${pendingDocsCount !== 1 ? "s" : ""} sin docs recibidos` },
           ].map(({ label, value, color, sub }) => (
             <div key={label} style={{ background: colors.inputBg, borderRadius: 8, padding: "9px 11px", border: `1px solid ${colors.border}` }}>
               <div style={{ fontSize: 9, color, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
@@ -345,8 +331,8 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
           ))}
         </div>
 
-        {/* Stacked progress bar — denominator is netRevenue (what you'll actually collect) */}
-        {netRevenue > 0 && (
+        {/* Barra: proporción de cada etapa sobre el total del pipeline */}
+        {pipelineTotal > 0 && (
           <>
             <div style={{ display: "flex", height: 7, borderRadius: 4, overflow: "hidden", gap: 1 }}>
               {[
@@ -355,7 +341,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
                 { value: readyToInvoiceAmt, color: colors.orange + "88" },
                 { value: pendingDocsAmt,    color: colors.yellow + "55" },
               ].map(({ value, color }, i) => value > 0
-                ? <div key={i} style={{ width: `${value / netRevenue * 100}%`, background: color, minWidth: 2 }} />
+                ? <div key={i} style={{ width: `${value / pipelineTotal * 100}%`, background: color, minWidth: 2 }} />
                 : null
               )}
             </div>
@@ -372,7 +358,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
                 </span>
               ))}
               <span style={{ fontSize: 9, color: colors.textMuted, marginLeft: "auto" }}>
-                {netRevenue > 0 ? ((invoicedAmt / netRevenue) * 100).toFixed(0) : 0}% del periodo facturado
+                {((readyToInvoiceAmt + pendingDocsAmt) / pipelineTotal * 100).toFixed(0)}% sin facturar · foto de hoy (Cobrado según el período)
               </span>
             </div>
           </>
