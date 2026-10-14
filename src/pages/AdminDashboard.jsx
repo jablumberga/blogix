@@ -165,7 +165,7 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
   const cashPosition = totalCxC - totalCxP;
 
   // ── CFO Billing Pipeline ──────────────────────────────────────────────────
-  const { invoicedAmt, outstandingAmt, collectedAmt, draftAmt, readyToInvoiceAmt, pendingDocsAmt } = useMemo(() => {
+  const { invoicedAmt, outstandingAmt, collectedAmt, readyToInvoiceAmt, pendingDocsAmt } = useMemo(() => {
     const tripRevMap = new Map(trips.map(t => [t.id, t.revenue || 0]));
     // Prefer stored inv.amount (net after broker deduction) — fall back to gross recompute for old invoices
     const invAmt = (inv) => inv.amount != null ? inv.amount : (inv.tripIds || []).reduce((s, tid) => s + (tripRevMap.get(tid) || 0), 0);
@@ -187,11 +187,11 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
     }, 0);
     return {
       invoicedAmt:      periodInv.reduce((s, inv) => s + invAmt(inv), 0),
-      outstandingAmt:   periodInv.filter(i => i.status === "sent").reduce((s, i) => s + invAmt(i), 0),
+      outstandingAmt:   periodInv.filter(i => i.status === "sent" || i.status === "draft").reduce((s, i) => s + invAmt(i), 0),
       collectedAmt:     periodInv.filter(i => i.status === "paid").reduce((s, i) => s + invAmt(i), 0),
-      draftAmt:         periodInv.filter(i => i.status === "draft").reduce((s, i) => s + invAmt(i), 0),
       readyToInvoiceAmt: readyAmt,
-      pendingDocsAmt:   mt.filter(tr => tr.status === "delivered" && (tr.revenue || 0) > 0 && tr.docStatus !== "delivered" && !allInvoicedIds.has(tr.id))
+      // Docs pendientes: todo viaje del período al que la oficina aún no le recibió los documentos (sea cual sea su estado)
+      pendingDocsAmt:   mt.filter(tr => (tr.revenue || 0) > 0 && tr.docStatus !== "delivered" && !allInvoicedIds.has(tr.id))
                           .reduce((s, tr) => {
                             const cl = cMap.get(tr.clientId);
                             if (cl?.rules?.brokerPassThrough && tr.brokerId) {
@@ -330,13 +330,12 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
         </div>
 
         {/* 5-metric grid */}
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: 8, marginBottom: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 8, marginBottom: 10 }}>
           {[
-            { label: "Cobrado",        value: collectedAmt,     color: colors.green,    sub: "pagado" },
-            { label: "Por Cobrar",     value: outstandingAmt,   color: colors.cyan,     sub: "enviado" },
-            { label: "Borrador",       value: draftAmt,         color: colors.textMuted, sub: "sin enviar" },
-            { label: "Listo Facturar", value: readyToInvoiceAmt, color: colors.orange,  sub: "docs OK" },
-            { label: "Docs Pendientes",value: pendingDocsAmt,   color: colors.yellow,   sub: "sin docs" },
+            { label: "Cobrado",        value: collectedAmt,     color: colors.green,    sub: "cobro registrado" },
+            { label: "Por Cobrar",     value: outstandingAmt,   color: colors.cyan,     sub: "facturado, sin cobro" },
+            { label: "Listo Facturar", value: readyToInvoiceAmt, color: colors.orange,  sub: "docs recibidos, sin factura" },
+            { label: "Docs Pendientes",value: pendingDocsAmt,   color: colors.yellow,   sub: "sin docs recibidos" },
           ].map(({ label, value, color, sub }) => (
             <div key={label} style={{ background: colors.inputBg, borderRadius: 8, padding: "9px 11px", border: `1px solid ${colors.border}` }}>
               <div style={{ fontSize: 9, color, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
@@ -353,7 +352,6 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
               {[
                 { value: collectedAmt,      color: colors.green },
                 { value: outstandingAmt,    color: colors.cyan },
-                { value: draftAmt,          color: colors.textMuted + "88" },
                 { value: readyToInvoiceAmt, color: colors.orange + "88" },
                 { value: pendingDocsAmt,    color: colors.yellow + "55" },
               ].map(({ value, color }, i) => value > 0
@@ -365,7 +363,6 @@ export default function AdminDashboard({ t, trips, trucks, expenses, clients, dr
               {[
                 { label: "Cobrado",      color: colors.green },
                 { label: "Por Cobrar",   color: colors.cyan },
-                { label: "Borrador",     color: colors.textMuted },
                 { label: "Listo",        color: colors.orange },
                 { label: "Docs Pend.",   color: colors.yellow },
               ].map(({ label, color }) => (

@@ -148,9 +148,8 @@ for (const plate of ["International", "Hino", "Hyundai"]) { const el = page.loca
 await sleep(300); await shot(page, "F06-factura-form");
 await page.getByRole("button", { name: /Guardar|Crear/ }).last().click(); await sleep(3500);
 d = await data(); const inv = d.invoices[0];
-C("7.1 factura creada con los 3 viajes recibidos (16,500)", !!inv && inv.tripIds.length === 3 && inv.amount === 16500, JSON.stringify({ n: inv?.invoiceNumber, ids: inv?.tripIds, amt: inv?.amount }));
+C("7.1 factura creada con los 3 viajes recibidos (16,500), ya por cobrar (sin borrador)", !!inv && inv.tripIds.length === 3 && inv.amount === 16500 && inv.status === "sent", JSON.stringify({ n: inv?.invoiceNumber, ids: inv?.tripIds, amt: inv?.amount, st: inv?.status }));
 const rowI = page.locator("tr", { hasText: inv.invoiceNumber }).first();
-await rowI.getByTitle("Marcar enviada").click(); await sleep(2000);
 await rowI.getByRole("button", { name: /Cobrar/ }).click(); await sleep(400);
 await page.locator("input[type=number]").last().fill("10000");
 await page.locator("input[placeholder=opcional]").first().fill("TRF-77");

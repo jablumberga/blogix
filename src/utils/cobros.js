@@ -52,7 +52,7 @@ export function invoiceStatusWith(inv, cobros, ctx) {
   if (inv.status === "cancelled") return "cancelled";
   if (b.settled) return "paid";
   if (inv.status === "paid") return b.paid > 0 ? "sent" : "sent";
-  return inv.status || "draft";
+  return inv.status === "draft" ? "sent" : (inv.status || "sent"); // sin borradores: emitida = por cobrar
 }
 
 /** Viajes bloqueados por tener cobro (cualquier abono). */

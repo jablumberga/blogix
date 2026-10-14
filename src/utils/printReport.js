@@ -228,7 +228,7 @@ export function invoiceLines({ inv, client, trips = [], trucks = [], brokers = [
   const passThrough = client?.rules?.brokerPassThrough === true;
   const brokerDed = Number(inv.brokerDeduction) || (passThrough ? items.reduce((s, tr) => { const b = brokers.find(x => x.id === tr.brokerId); return s + (b ? Math.round((Number(tr.revenue) || 0) * (Number(b.commissionPct) || 0) / 100) : 0); }, 0) : 0);
   const total = inv.amount != null ? Number(inv.amount) : gross - brokerDed;
-  const status = inv.status === "paid" ? "COBRADA" : inv.status === "cancelled" ? "ANULADA" : inv.status === "sent" ? "ENVIADA" : "BORRADOR";
+  const status = inv.status === "paid" ? "COBRADA" : inv.status === "cancelled" ? "ANULADA" : "POR COBRAR";
   return { lines, gross, brokerDed, total, status };
 }
 
