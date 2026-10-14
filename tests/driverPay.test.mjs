@@ -13,19 +13,27 @@ const bocel = { id: 2, name: "Bocel", clientId: 1, rates: [
 const driver = { id: 1, name: "Rober", payType: "perTrip", rateSheets: [general, bocel] };
 const t1 = { id: 1, size: "T1" }, t2 = { id: 2, size: "T2" };
 
-test("T1: chofer + dieta + 1 ayudante por defecto", () => {
+test("T1: chofer + dieta repartida + 1 ayudante por defecto", () => {
   const c = calcDriverPay({ driver, trip: { province: "Dajabón", municipality: "Dajabón", clientId: 9 }, truck: t1 });
-  assert.equal(c.base, 2000); assert.equal(c.dieta, 500);
-  assert.equal(c.numHelpers, 1); assert.equal(c.helperEach, 1000);
-  assert.equal(c.driverNet, 2500); assert.equal(c.total, 3500);
+  // dieta total 500 repartida entre chofer y 1 ayudante: 250 cada uno
+  assert.equal(c.base, 2000); assert.equal(c.dietaTotal, 500); assert.equal(c.dieta, 250); assert.equal(c.dietaEach, 250);
+  assert.equal(c.numHelpers, 1); assert.equal(c.helperBase, 1000); assert.equal(c.helperEach, 1250);
+  assert.equal(c.driverNet, 2250); assert.equal(c.total, 3500);
+  // sin ayudantes: toda la dieta al chofer
+  const solo = calcDriverPay({ driver, trip: { province: "Dajabón", municipality: "Dajabón", numHelpers: 0 }, truck: t1 });
+  assert.equal(solo.dieta, 500); assert.equal(solo.helperEach, 1000); assert.equal(solo.total, 2500);
   assert.equal(c.sheetName, "General");
 });
 
 test("T2: 2 ayudantes por defecto; el viaje puede quitarlos o cambiar el pago", () => {
+  // dieta T2 600 entre 3 = 200 cada uno: chofer 2500+200, ayudantes 2 × (1200+200); total igual que antes (3100 + 2400)
   const base = calcDriverPay({ driver, trip: { province: "Dajabón", municipality: "Dajabón" }, truck: t2 });
-  assert.equal(base.numHelpers, 2); assert.equal(base.helpersTotal, 2400); assert.equal(base.total, 3100 + 2400);
+  assert.equal(base.numHelpers, 2); assert.equal(base.dieta, 200); assert.equal(base.helperEach, 1400); assert.equal(base.helpersTotal, 2800); assert.equal(base.total, 3100 + 2400);
   const none = calcDriverPay({ driver, trip: { province: "Dajabón", municipality: "Dajabón", numHelpers: 0 }, truck: t2 });
-  assert.equal(none.helpersTotal, 0); assert.equal(none.total, 3100);
+  assert.equal(none.helpersTotal, 0); assert.equal(none.dieta, 600); assert.equal(none.total, 3100);
+  // residuo de la división al chofer: 1 ayudante con dieta 601 → ayudante 300, chofer 301
+  const odd = calcDriverPay({ driver: { ...driver, rateSheets: [{ id: 1, name: "G", clientId: null, rates: [{ province: "Dajabón", municipality: "Dajabón", priceT2: 2500, dietaT2: 601, helperT2: 1200 }] }] }, trip: { province: "Dajabón", municipality: "Dajabón", numHelpers: 1 }, truck: t2 });
+  assert.equal(odd.dietaEach, 300); assert.equal(odd.dieta, 301);
   const custom = calcDriverPay({ driver, trip: { province: "Dajabón", municipality: "Dajabón", numHelpers: 1, helperPayEach: 1500 }, truck: t2 });
   assert.equal(custom.helpersTotal, 1500);
 });
@@ -41,9 +49,12 @@ test("override de tamaño en el viaje, descuentos, y ruta solo-T2 con camión T1
   const ov = calcDriverPay({ driver, trip: { province: "Dajabón", municipality: "Dajabón", tarifaOverride: "T2" }, truck: t1 });
   assert.equal(ov.size, "T2"); assert.equal(ov.base, 2500);
   const disc = calcDriverPay({ driver, trip: { province: "Dajabón", municipality: "Dajabón", discounts: [{ amount: 300 }] }, truck: t1 });
-  assert.equal(disc.driverNet, 2200); assert.equal(disc.total, 3200);
+  assert.equal(disc.driverNet, 2250 - 300); assert.equal(disc.total, 3500 - 300);
   const jim = calcDriverPay({ driver, trip: { province: "Independencia", municipality: "Jimaní" }, truck: t1 });
-  assert.equal(jim.base, 4000, "cae al precio T2 cuando T1 está en 0");
+  // Jimaní solo tiene T2: con camión T1 se usa la tarifa T2 completa (precio, dieta y ayudante) y se avisa
+  assert.equal(jim.base, 4000, "cae a la tarifa T2 cuando T1 está en 0"); assert.equal(jim.sizeFallback, true);
+  assert.equal(jim.dietaTotal, 1000); assert.equal(jim.helperBase, 1500); assert.equal(jim.numHelpers, 1, "los ayudantes siguen siendo los del tamaño real");
+  assert.equal(jim.helperEach, 1500 + 500); assert.equal(jim.dieta, 500);
 });
 
 test("sin tarifa para el destino → rateFound false y pago 0", () => {

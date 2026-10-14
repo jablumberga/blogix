@@ -36,10 +36,10 @@ test("1. Nómina: lo que se paga = suma de calcDriverPay, una sola vez por viaje
   const payroll = buildPayroll({ period: nomPeriod, drivers: [driver], trips, trucks, clients, expenses });
   const row = payroll.drivers[0];
   assert.equal(row.tripCount, 4);
-  // T1: 2000+500 = 2500 ×3 ; T2: 2500+600 = 3100 → 10600 ; ayudantes T1 1000×1 ×3 + T2 1200×2 = 5400
-  assert.equal(row.gross, 10600); assert.equal(row.helpers, 5400); assert.equal(row.net, 10600);
+  // Dieta repartida: T1 chofer 2000+250 = 2250 ×3 ; T2 2500+200 = 2700 → 9450 ; ayudantes T1 (1000+250)×1 ×3 + T2 (1200+200)×2 = 6550
+  assert.equal(row.gross, 9450); assert.equal(row.helpers, 6550); assert.equal(row.net, 9450);
   const pay = payrollPayment({ row, period: nomPeriod, expenses });
-  assert.equal(pay.driverTotal, 10600);
+  assert.equal(pay.driverTotal, 9450);
   const driverPayExps = expenses.filter(e => e.category === "driverPay");
   assert.equal(driverPayExps.length, 4, "un gasto de chofer por viaje, nunca dos");
   assert.equal(driverPayExps.reduce((s, e) => s + e.amount, 0), row.net, "los gastos pendientes suman exactamente la nómina");

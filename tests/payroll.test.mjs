@@ -29,10 +29,11 @@ test("buildPayroll: solo viajes recibidos entran; los pendientes se listan apart
   assert.deepEqual(r.trips.map(x => x.trip.id), [15, 10]);
   assert.equal(r.pendingCount, 1);
   assert.equal(r.pendingTrips[0].trip.id, 11);
-  assert.equal(r.base, 4000); assert.equal(r.dieta, 1000);
-  assert.equal(r.helpers, 2 * 1000);
+  // dieta 500 por viaje repartida con 1 ayudante: 250 al chofer, 250 al ayudante
+  assert.equal(r.base, 4000); assert.equal(r.dieta, 500);
+  assert.equal(r.helpers, 2 * 1250);
   assert.equal(r.discounts, 0); assert.equal(r.advances, 700);
-  assert.equal(r.net, 5000 - 700);
+  assert.equal(r.net, 4500 - 700);
   assert.deepEqual(r.helperNames, ["Miguel"]);
   const f = p.drivers.find(x => x.driver.id === 2);
   assert.equal(f.gross, 20000); assert.equal(f.net, 20000);
@@ -98,7 +99,7 @@ test("payrollPayment: override por viaje y override total", () => {
   let pay = payrollPayment({ row, period: pdKey, expenses: withLine });
   const l = pay.lines.find(x => x.trip.id === 15);
   assert.equal(l.overridden, true); assert.equal(l.amount, 1000);
-  assert.equal(pay.driverTotal, 1000 + 2500);
+  assert.equal(pay.driverTotal, 1000 + 2250, "el otro viaje: 2000 + 250 de dieta (la otra mitad va al ayudante)");
   const withTotal = [...withLine, { id: 3, category: "nominaTotalOverride", driverId: 1, payrollKey: payrollKey(pdKey), amount: 9000, status: "pending" }];
   pay = payrollPayment({ row, period: pdKey, expenses: withTotal });
   assert.ok(pay.override); assert.equal(pay.grossEff, 9000); assert.equal(pay.net, 9000 - 700);
