@@ -116,3 +116,28 @@ test("payrollPayment: chofer fijo se paga con un driverPay sin viaje con payroll
   const pay = payrollPayment({ row, period: pdKey, expenses: paid });
   assert.equal(pay.paid, true); assert.equal(pay.net, 20000);
 });
+
+test("adelantos: con viaje van a la quincena en que se paga ese viaje (sin driverId); los de ayudantes por el chofer bajan lo de ayudantes", () => {
+  // Trip 10 se paga en este período (docs 3 oct). Trip 11 espera documentos. Trip 12 es de la quincena siguiente.
+  const advs = [
+    { id: 1, category: "adelanto_conductor", tripId: 10, date: "2026-10-15", amount: 343.33 },   // fecha fuera del período, pero el viaje se paga aquí
+    { id: 2, category: "adelanto_ayudante", tripId: 10, date: "2026-10-15", amount: 343.33 },    // sin ayudanteId → por el chofer
+    { id: 3, category: "adelanto_ayudante", tripId: 10, date: "2026-10-15", amount: 343.33 },
+    { id: 4, category: "adelanto_conductor", tripId: 11, date: "2026-10-05", amount: 1000 },     // viaje sin documentos: espera
+    { id: 5, category: "adelanto_conductor", driverId: 1, date: "2026-10-05", amount: 200 },     // sin viaje: por fecha
+    { id: 6, category: "adelanto_conductor", driverId: 1, date: "2026-10-05", amount: 999, payrollKey: "2026-09-H2" }, // ya aplicado en otra nómina
+  ];
+  const r = buildPayroll({ period, drivers, trips, trucks, clients, expenses: advs }).drivers.find(x => x.driver.id === 1);
+  assert.equal(r.advances, 343.33 + 200, "adelanto del viaje 10 + adelanto suelto por fecha; el del viaje 11 espera; el aplicado en otra quincena no");
+  assert.deepEqual(r.advExps.map(e => e.id), [1, 5]);
+  assert.equal(r.helperAdvances, 686.66); assert.deepEqual(r.helperAdvExps.map(e => e.id), [2, 3]);
+  assert.equal(r.helpers, 2500); assert.equal(r.helpersNet, 2500 - 686.66);
+  assert.equal(r.net, 4500 - 543.33);
+  // La quincena siguiente: el adelanto del viaje 10 no se repite por fecha (el viaje ya se pagó antes y su fecha cae aquí → sí se descuenta solo si no se aplicó)
+  const next = { dateFrom: "2026-10-15", dateTo: "2026-10-31", half: 2, label: "" };
+  const r2 = buildPayroll({ period: next, drivers, trips, trucks, clients, expenses: advs }).drivers.find(x => x.driver.id === 1);
+  assert.deepEqual(r2.advExps.map(e => e.id), [1], "sin payrollKey todavía: cae por fecha en la quincena en que se registró (viaje ya pagado antes)");
+  const applied = advs.map(e => e.id === 1 || e.id === 2 || e.id === 3 ? { ...e, payrollKey: "2026-10-H1" } : e);
+  const r3 = buildPayroll({ period: next, drivers, trips, trucks, clients, expenses: applied }).drivers.find(x => x.driver.id === 1);
+  assert.deepEqual(r3.advExps.map(e => e.id), [], "una vez pagada la nómina de H1 con esos adelantos, no vuelven a salir");
+});

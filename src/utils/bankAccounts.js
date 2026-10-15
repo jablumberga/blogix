@@ -98,7 +98,10 @@ export function bankMovements({ accounts = [], expenses = [], cobros = [], trans
     if (e.status !== "paid" || !(num(e.amount) > 0)) continue;
     const id = expenseAccountId(e, accounts); if (!id) continue;
     const sup = supMap.get(e.supplierId);
-    push({ key: `expense-${e.id}`, accountId: id, type: "out", date: expenseDate(e), amount: round2(num(e.amount)), source: "expense", refId: e.id, kind: e.category,
+    // Nómina con adelanto ya entregado: del banco sale solo lo que falta (el adelanto salió cuando se dio)
+    const outAmt = Math.max(0, num(e.amount) - num(e.advanceApplied));
+    if (!(outAmt > 0)) continue;
+    push({ key: `expense-${e.id}`, accountId: id, type: "out", date: expenseDate(e), amount: round2(outAmt), source: "expense", refId: e.id, kind: e.category,
       description: e.description || (sup ? `Pago a ${sup.name}` : `Gasto #${e.id}`) });
   }
   for (const t of transfers) {

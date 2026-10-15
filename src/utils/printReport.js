@@ -191,7 +191,7 @@ export function driverPayrollHTML({ row, pay = null, period, generatedBy }) {
   const driverTotal = pay ? pay.driverTotal : row.net + row.advances;
   const grossEff = pay ? pay.grossEff : driverTotal;
   const net = pay ? pay.net : Math.max(0, driverTotal - row.advances);
-  const helpersViaDriver = row.helpers;
+  const helpersViaDriver = row.helpers, helpersNet = row.helpersNet ?? row.helpers;
   return `
     ${companyHeaderHTML("NÓMINA DEL CHOFER")}
     <table class="fields">
@@ -208,10 +208,10 @@ export function driverPayrollHTML({ row, pay = null, period, generatedBy }) {
     </table>
     <div class="box">
       ${pay?.override ? `<div>Total ajustado: <b>${fmt(grossEff)}</b>${pay.override.overrideNote ? ` <span class="small muted">(${esc(pay.override.overrideNote)})</span>` : ""}</div>` : `<div>Bruto chofer (chofer + su parte de dieta − descuentos): <b>${fmt(grossEff)}</b></div>`}
-      <div>Adelantos del período: <b>−${fmt(row.advances)}</b></div>
+      <div>Adelantos al chofer: <b>−${fmt(row.advances)}</b>${(row.advExps || []).length ? ` <span class="small muted">(${row.advExps.map(e => `${esc(e.date)}${e.tripId ? " viaje #" + e.tripId : ""} ${fmt(e.amount)}`).join(", ")})</span>` : ""}</div>
       <div style="font-size:15px">NETO A TRANSFERIR AL CHOFER: <b>${fmt(net)}</b>${pay?.paid ? ` <span class="ok">✓ PAGADO</span>` : ""}</div>
-      <div>Ayudantes que cobran por el chofer: <b>${fmt(helpersViaDriver)}</b> (${row.helperCount})${row.directHelpers ? ` · ayudantes con pago directo (no van al chofer): ${fmt(row.directHelpers)}` : ""}</div>
-      <div style="font-size:14px">TOTAL A TRANSFERIR (chofer + ayudantes por él): <b>${fmt(net + helpersViaDriver)}</b></div>
+      <div>Ayudantes que cobran por el chofer: <b>${fmt(helpersViaDriver)}</b> (${row.helperCount})${row.helperAdvances ? ` − adelantos a ayudantes ${fmt(row.helperAdvances)} = <b>${fmt(helpersNet)}</b>` : ""}${row.directHelpers ? ` · ayudantes con pago directo (no van al chofer): ${fmt(row.directHelpers)}` : ""}</div>
+      <div style="font-size:14px">TOTAL A TRANSFERIR (chofer + ayudantes por él): <b>${fmt(net + helpersNet)}</b></div>
     </div>
     <div class="small muted" style="margin-top:6px">La dieta del tarifario es del equipo y se reparte en partes iguales entre chofer y ayudantes. Cada viaje se paga en la quincena en que la oficina recibió sus documentos.${row.pendingCount ? ` ${row.pendingCount} viaje(s) pendiente(s) de documentos no incluido(s).` : ""}</div>
     <div class="sig"><div>Preparado por: ${esc(generatedBy || "")}</div><div>Recibí conforme: ${esc(d.name)}</div><div>Fecha</div></div>`;
@@ -226,7 +226,7 @@ export function payrollReportHTML({ payroll, helperPayroll = null, company = "B-
       <td class="right">${r.tripCount}</td>
       <td class="right">${fmt(r.gross)}</td><td class="right">${r.discounts ? "−" + fmt(r.discounts) : "—"}</td><td class="right">${r.advances ? "−" + fmt(r.advances) : "—"}</td>
       <td class="right"><b>${fmt(r.net)}</b></td>
-      <td class="right">${r.helperCount}</td><td class="right">${fmt(r.helpers)}</td>
+      <td class="right">${r.helperCount}</td><td class="right">${fmt(r.helpersNet ?? r.helpers)}${r.helperAdvances ? `<br><span class="small muted">${fmt(r.helpers)} − adel. ${fmt(r.helperAdvances)}</span>` : ""}</td>
       <td class="small">${r.pendingCount ? `<span class="no">${r.pendingCount} pendiente(s), no pagados</span>` : `<span class="ok">todo recibido</span>`}${r.missingRates ? ` <span class="no">${r.missingRates} sin tarifa</span>` : ""}</td>
     </tr>`).join("");
   const viaOf = (x) => x.split ? x.split.viaDriver : { count: x.calc.numHelpers, amount: x.calc.helpersTotal };
@@ -241,7 +241,7 @@ export function payrollReportHTML({ payroll, helperPayroll = null, company = "B-
     <table>
       <thead><tr><th>Chofer</th><th>Pago</th><th class="right">Viajes</th><th class="right">Bruto</th><th class="right">Desc.</th><th class="right">Adelantos</th><th class="right">Neto a pagar</th><th class="right">Ayud.</th><th class="right">Pago ayudantes</th><th>Estado</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><td colspan="2">Totales</td><td class="right">${totals.trips}</td><td class="right">${fmt(totals.gross)}</td><td class="right">−${fmt(totals.discounts)}</td><td class="right">−${fmt(totals.advances)}</td><td class="right">${fmt(totals.net)}</td><td></td><td class="right">${fmt(totals.helpers)}</td><td></td></tr></tfoot>
+      <tfoot><tr><td colspan="2">Totales</td><td class="right">${totals.trips}</td><td class="right">${fmt(totals.gross)}</td><td class="right">−${fmt(totals.discounts)}</td><td class="right">−${fmt(totals.advances)}</td><td class="right">${fmt(totals.net)}</td><td></td><td class="right">${fmt(totals.helpersNet ?? totals.helpers)}</td><td></td></tr></tfoot>
     </table>
     <div class="small muted" style="margin-top:6px">Cada viaje se paga en la quincena en que la oficina recibió sus documentos. Los pendientes se liquidan cuando se entreguen.</div>
     ${hp ? `<h2>Ayudantes con pago directo</h2>
@@ -332,59 +332,59 @@ export function invoiceSheet({ inv, client, trips = [], trucks = [], brokers = [
   return rows;
 }
 
-/** Reporte Profit First de una factura (r = buildInvoicePfReport): ingresos → gastos → comisiones y reparto → qué mover → socios. */
+/** Reporte Profit First de una factura (r = buildInvoicePfReport). Informativo: asume la factura cobrada y liquidada.
+ *  1 camiones propios · 2 sociedad · 3 comisión + gastos · 4 comisión · 5 reembolsos a OpEx · 6 Reserva / OpEx / pass-through · 7 socios. */
 export function invoicePfReportHTML({ r, generatedBy }) {
   if (!r) return "";
-  const { inv, client, tripRows, totals, collected, pending, balance, expRows, expTotals, settlements, brokerPayouts, moves, settings } = r;
+  const { inv, client, settings, sections: S } = r;
   const pct = settings.reservePct, rest = 100 - pct;
   const m = (n) => fmt(Math.round((Number(n) || 0) * 100) / 100);
   const stateLabel = inv.status === "paid" ? "COBRADA" : inv.status === "cancelled" ? "ANULADA" : "POR COBRAR";
   const row = (label, val, opts = {}) => `<tr><td${opts.indent ? ' style="padding-left:22px"' : ""}>${label}</td><td class="right"${opts.indent ? ' style="color:#555"' : ""}>${opts.bold ? `<b>${val}</b>` : val}</td></tr>`;
-  const incomeRows = tripRows.map(t => row(`${esc(t.trip.date)} · ${esc(t.truck?.plate || "—")} · ${esc(t.trip.municipality)} <span class="small muted">${esc(t.modelLabel)}${t.partner ? " · " + esc(t.partner.name) : ""}${t.brokerDeducted ? ` · broker −${m(t.brokerDeducted)}` : ""}</span>`, m(t.net))).join("");
-  const expByCat = new Map();
-  for (const e of expRows) { const k = `${e.exp.category}|${e.chargedToPartner ? e.partner?.name : ""}`; if (!expByCat.has(k)) expByCat.set(k, { cat: t_es[e.exp.category] || e.exp.category, partner: e.chargedToPartner ? e.partner?.name : null, amount: 0, pending: 0 }); const x = expByCat.get(k); x.amount += e.amount; if (!e.paid) x.pending += e.amount; }
-  const expenseRows = [...expByCat.values()].map(x => row(`${esc(x.cat)} <span class="small muted">${x.partner ? `reembolsable: se le descuenta a ${esc(x.partner)}` : "costo de la empresa"}${x.pending ? ` · ${m(x.pending)} pendiente` : ""}</span>`, m(x.amount))).join("");
-  const reimb = settlements.reduce((s, x) => s + x.s.reimbursement, 0);
-  const shareRows = settlements.map(x => { const s = x.s; return s.model === "profit_share"
-    ? row(`${esc(x.partner.name)} · reparto ${s.partnerSharePct}/${100 - s.partnerSharePct} <span class="small muted">utilidad ${m(s.periodResult)} (flete ${m(s.netRevenue)} − gastos ${m(s.reimbursement)})</span>`, `socio ${m(s.partnerShare)} · empresa ${m(s.companyShare)}`)
-    : row(`${esc(x.partner.name)} · comisión ${s.commissionPct} % <span class="small muted">sobre ${m(s.grossRevenue)}</span>`, `empresa ${m(s.commission)}`); }).join("")
-    + brokerPayouts.map(b => row(`${esc(b.broker.name)} · comisión de broker`, m(b.amount))).join("");
-  const companyIncome = totals.real + settlements.reduce((s, x) => s + x.rel.released, 0);
-  const passThrough = moves.onSettle.toPartners + moves.onSettle.toBrokers;
-  const pfRows = `
-    ${row(`<b>RESERVA</b> <span class="small muted">${pct} % del ingreso de la empresa (Tax · Profit · Owner's Comp)</span>`, m(moves.totalReserve), { bold: true })}
-    ${row(`al cobrar <span class="small muted">${pending.amount > 0 ? `${m(collected.reserve)} ya cobrado + ${m(pending.reserve)} cuando entre el saldo` : "Income → Reserva"}</span>`, m(collected.reserve + pending.reserve), { indent: true })}
-    ${row(`al liquidar <span class="small muted">de lo que la empresa retiene de los socios · OpEx → Reserva, a mano en Banco</span>`, m(moves.onSettle.reserve), { indent: true })}
-    ${row(`<b>OPEX</b> <span class="small muted">${rest} % del ingreso de la empresa · de aquí salen los gastos</span>`, m(moves.totalOpexIn), { bold: true })}
-    ${row(`al cobrar <span class="small muted">Income → OpEx</span>`, m(collected.opex + pending.opex), { indent: true })}
-    ${row(`al liquidar <span class="small muted">se queda en OpEx, incluye los reembolsos de gastos</span>`, m(moves.onSettle.opex), { indent: true })}
-    ${row(`<b>PASS-THROUGH</b> <span class="small muted">no es de la empresa · entra a OpEx apartado y de ahí se paga</span>`, m(passThrough), { bold: true })}
-    ${row(`socios`, m(moves.onSettle.toPartners), { indent: true })}
-    ${brokerPayouts.length ? row(`brokers`, m(moves.onSettle.toBrokers), { indent: true }) : ""}`;
-  const partnerRows = settlements.map(x => { const s = x.s, rel = x.rel; const ps = s.model === "profit_share";
-    return `<tr><td><b>${esc(x.partner.name)}</b> <span class="small muted">${esc(MODEL_LABEL_PF[s.model] || s.model)} · quincena ${esc(x.period.label)} · ${x.status === "paid" ? "ya transferida" : "pendiente"}</span><br>
-      <span class="small muted">${ps ? `flete ${m(s.netRevenue)} − gastos que pagó la empresa ${m(s.reimbursement)} = utilidad ${m(s.periodResult)} × ${s.partnerSharePct} %` : `flete ${m(s.netRevenue)} − comisión ${m(s.commission)}${s.reimbursement ? ` − gastos que pagó la empresa ${m(s.reimbursement)}` : ""}`}${x.fixedTotal ? ` · menos cargos fijos de la quincena ${m(x.fixedTotal)} (${x.fixed.map(c => esc(c.name)).join(", ")})` : ""}${s.truckLossOut > 0 ? ` · camión en pérdida ${m(s.truckLossOut)}: la financia la empresa` : ""}</span></td>
-      <td class="right"><b>${m(rel.transfer)}</b>${x.fixedTotal ? `<br><span class="small muted">${m(Math.max(0, rel.transfer - x.fixedTotal))} tras cargos fijos</span>` : ""}</td></tr>`; }).join("")
-    + brokerPayouts.map(b => `<tr><td><b>${esc(b.broker.name)}</b> <span class="small muted">broker${b.paid ? ` · ya pagado ${m(b.paid)}` : ""}</span></td><td class="right"><b>${m(b.amount - b.paid)}</b></td></tr>`).join("");
+  const tripRow = (t) => row(`${esc(t.trip.date)} · ${esc(t.truck?.plate || "—")} · ${esc(t.trip.municipality)}${t.brokerDeducted ? ` <span class="small muted">broker −${m(t.brokerDeducted)}</span>` : ""}`, m(t.net));
+  const fixedNote = (b) => b.fixedTotal ? ` + cargos fijos ${m(b.fixedTotal)} (${b.fixed.map(c => esc(c.name)).join(", ")})` : "";
+  let n = 0; const h2 = (t) => `<h2>${++n}. ${t}</h2>`;
+  const parts = [];
+  // 1. Camiones propios
+  if (S.own.trips.length) parts.push(h2("Camiones propios") + `<table><tbody>${S.own.trips.map(tripRow).join("")}</tbody>
+    <tfoot>${row("Total camiones propios · 100 % de la empresa", m(S.own.total), { bold: true })}${row(`Reserva ${pct} %`, m(S.own.reserve), { indent: true })}${row(`OpEx ${rest} %`, m(S.own.opex), { indent: true })}</tfoot></table>`);
+  // 2. Sociedad (reparto de utilidad)
+  if (S.profit_share.list.length) parts.push(h2("Sociedad · reparto de utilidad") + S.profit_share.list.map(b => `<table><tbody>${b.trips.map(tripRow).join("")}</tbody>
+    <tfoot>${row(`<b>${esc(b.partner.name)}</b> · flete ${m(b.netRevenue)} − gastos que pagó la empresa ${m(b.reimbursement)} = utilidad`, m(b.periodResult), { bold: true })}
+    ${row(`socio ${b.partnerSharePct} %`, m(b.partnerShare), { indent: true })}${row(`empresa ${100 - b.partnerSharePct} %${fixedNote(b)}${b.truckLossOut > 0 ? ` · camión en pérdida ${m(b.truckLossOut)}: la financia la empresa` : ""}`, m(b.companyIncome), { indent: true })}
+    ${row(`los gastos ${m(b.reimbursement)} se reembolsan a OpEx → sección reembolsos`, "", { indent: true })}</tfoot></table>`).join(""));
+  // 3. Comisión + gastos
+  if (S.commission_expenses.list.length) parts.push(h2("Comisión + gastos") + `<div class="small muted" style="margin-bottom:4px">La empresa cobra su comisión y además le descuenta al socio los gastos que pagó por él (van en reembolsos).</div>` + S.commission_expenses.list.map(b => `<table><tbody>${b.trips.map(tripRow).join("")}</tbody>
+    <tfoot>${row(`<b>${esc(b.partner.name)}</b> · flete`, m(b.netRevenue), { bold: true })}${row(`comisión ${b.commissionPct} % → empresa${fixedNote(b)}`, m(b.companyIncome), { indent: true })}${row(`gastos que pagó la empresa → se le descuentan`, m(b.reimbursement), { indent: true })}</tfoot></table>`).join(""));
+  // 4. Comisión
+  if (S.commission.list.length) parts.push(h2("Comisión") + S.commission.list.map(b => `<table><tbody>${b.trips.map(tripRow).join("")}</tbody>
+    <tfoot>${row(`<b>${esc(b.partner.name)}</b> · flete`, m(b.netRevenue), { bold: true })}${row(`comisión ${b.commissionPct} % → empresa${fixedNote(b)}`, m(b.companyIncome), { indent: true })}</tfoot></table>`).join(""));
+  // 5. Reembolsos a OpEx
+  if (S.reimbursements.groups.length) parts.push(h2("Gastos que se reembolsan a OpEx") + `<table><tbody>${S.reimbursements.groups.map(g => row(`<b>${esc(g.partner.name)}</b> <span class="small muted">${g.lines.map(l => `${esc(t_es[l.category] || l.category)} ${m(l.amount)}`).join(" + ")}</span>`, m(g.total))).join("")}</tbody>
+    <tfoot>${row("Total reembolsos · salieron de OpEx y vuelven a OpEx íntegros", m(S.reimbursements.total), { bold: true })}</tfoot></table>`);
+  // 6. Profit First
+  const pf = S.pf;
+  const incomeParts = [S.own.trips.length ? `propios ${m(S.own.total)}` : "", S.profit_share.list.length ? `parte en sociedad ${m(S.profit_share.companyIncome)}` : "", (S.commission_expenses.list.length || S.commission.list.length) ? `comisiones ${m(S.commission_expenses.companyIncome + S.commission.companyIncome)}` : ""].filter(Boolean).join(" + ");
+  parts.push(h2("Profit First · qué mover a cada cuenta") + `<table><tbody>
+    ${row(`Ingreso de la empresa <span class="small muted">${incomeParts}</span>`, m(pf.companyIncome))}
+    ${row(`<b>RESERVA</b> <span class="small muted">${pct} % del ingreso de la empresa (Tax · Profit · Owner's Comp)</span>`, m(pf.reserve), { bold: true })}
+    ${row(`<b>OPEX</b> <span class="small muted">${rest} % del ingreso de la empresa ${m(pf.opexPct)}${S.reimbursements.total ? ` + reembolsos ${m(S.reimbursements.total)}` : ""}</span>`, m(pf.opex), { bold: true })}
+    ${pf.passThrough ? row(`<b>PASS-THROUGH</b> <span class="small muted">no es de la empresa: socios ${m(pf.toPartners)}${pf.toBrokers ? ` · brokers ${m(pf.toBrokers)}` : ""}</span>`, m(pf.passThrough), { bold: true }) : ""}
+    </tbody><tfoot>${row("Total = ingresos de la factura", m(pf.total), { bold: true })}</tfoot></table>`);
+  // 7. Socios
+  const blocks = [...S.profit_share.list, ...S.commission_expenses.list, ...S.commission.list];
+  if (blocks.length || S.brokers.length) parts.push(h2("Qué transferir a cada socio") + `<table><thead><tr><th>Socio</th><th class="right">A transferir</th></tr></thead><tbody>
+    ${blocks.map(b => `<tr><td><b>${esc(b.partner.name)}</b> <span class="small muted">${esc(MODEL_LABEL_PF[b.model] || b.model)} · quincena ${esc(b.period.label)} · ${b.status === "paid" ? "ya transferida" : "pendiente"}</span><br>
+      <span class="small muted">${b.model === "profit_share" ? `utilidad ${m(b.periodResult)} × ${b.partnerSharePct} %` : `flete ${m(b.netRevenue)} − comisión ${m(b.commission)}${b.reimbursement ? ` − gastos que pagó la empresa ${m(b.reimbursement)}` : ""}`}${b.fixedTotal ? ` − cargos fijos ${m(b.fixedTotal)}` : ""}</span></td><td class="right"><b>${m(b.transfer)}</b></td></tr>`).join("")}
+    ${S.brokers.map(b => `<tr><td><b>${esc(b.broker.name)}</b> <span class="small muted">broker${b.paid ? ` · ya pagado ${m(b.paid)}` : ""}</span></td><td class="right"><b>${m(b.amount)}</b></td></tr>`).join("")}
+    </tbody><tfoot>${row("Total pass-through", m(pf.passThrough), { bold: true })}</tfoot></table>`);
   return `
     ${companyHeaderHTML("PROFIT FIRST — FACTURA")}
     <table class="fields">
-      <tr><td>Factura:</td><td><b>${esc(inv.invoiceNumber || "#" + inv.id)}</b> · ${esc(client?.companyName || "—")} · ${esc(inv.date || "")} · ${stateLabel}</td></tr>
-      <tr><td>Cobro:</td><td>${m(r.invoiceAmount)} · cobrado ${m(balance.paid)} · saldo ${m(balance.balance)}</td></tr>
+      <tr><td>Factura:</td><td><b>${esc(inv.invoiceNumber || "#" + inv.id)}</b> · ${esc(client?.companyName || "—")} · ${esc(inv.date || "")} · ${stateLabel} · ${m(r.invoiceAmount)}</td></tr>
     </table>
-    <h2>1. Ingresos</h2>
-    <table><tbody>${incomeRows}</tbody><tfoot>${row("Total ingresos (flete neto)", m(totals.net), { bold: true })}</tfoot></table>
-    <h2>2. Gastos de estos viajes</h2>
-    <table><tbody>${expenseRows || row(`<span class="muted">Sin gastos registrados</span>`, "—")}</tbody>
-      <tfoot>${row("Total gastos", m(expTotals.total), { bold: true })}${row(`se reembolsan a la empresa al liquidar a los socios`, m(reimb), { indent: true })}${row(`costo de la empresa`, m(expTotals.total - reimb), { indent: true })}${expTotals.pending ? row(`pendientes de pagar <span class="small muted">nómina ${m(expTotals.payrollPending)} · suplidores a crédito ${m(expTotals.supplierCredit)}</span>`, m(expTotals.pending), { indent: true }) : ""}</tfoot></table>
-    <h2>3. Comisiones y reparto</h2>
-    <table><tbody>${shareRows || row(`<span class="muted">Camiones propios: todo el ingreso es de la empresa</span>`, "—")}</tbody>
-      <tfoot>${row(`Ingreso de la empresa <span class="small muted">camiones propios ${m(tripRows.filter(t => !t.partner).reduce((s, t) => s + t.real, 0))} + comisiones y su parte ${m(settlements.reduce((s, x) => s + (x.s.model === "profit_share" ? (x.s.companyShare || 0) : (x.s.commission || 0)), 0))} + reembolsos ${m(reimb)}</span>`, m(companyIncome), { bold: true })}${row("Para socios y brokers", m(passThrough), { bold: true })}</tfoot></table>
-    <h2>4. Profit First — qué mover a cada cuenta</h2>
-    <table><tbody>${pfRows}</tbody><tfoot>${row("Total = ingresos de la factura", m(moves.totalReserve + moves.totalOpexIn + passThrough), { bold: true })}</tfoot></table>
-    <h2>5. Socios: qué se le paga a cada quien por esta factura</h2>
-    <table><thead><tr><th>Socio</th><th class="right">A transferir</th></tr></thead><tbody>${partnerRows || `<tr><td class="muted" colspan="2">No hay socios ni brokers en esta factura.</td></tr>`}</tbody></table>
-    <div class="box" style="margin-top:10px"><div style="font-size:14px">Margen de la empresa en esta factura <span class="small muted">(ingreso de la empresa ${m(companyIncome)} − gastos ${m(expTotals.total)})</span>: <b>${m(moves.margin)}</b></div></div>
-    <div class="small muted" style="margin-top:6px">Regla: lo de socios y brokers se aparta; del ingreso de la empresa, ${pct} % a Reserva y ${rest} % a OpEx. Generado ${new Date().toLocaleString("es-DO")}${generatedBy ? ` por ${esc(generatedBy)}` : ""}.</div>`;
+    <div class="small muted" style="margin-bottom:6px">Informativo: asume la factura cobrada y los socios liquidados. Los gastos de camiones propios salen de OpEx y no se restan aquí.</div>
+    ${parts.join("")}
+    <div class="small muted" style="margin-top:6px">Regla: lo de socios y brokers pasa de largo; del ingreso de la empresa, ${pct} % a Reserva y ${rest} % a OpEx; los reembolsos reponen OpEx íntegros. Generado ${new Date().toLocaleString("es-DO")}${generatedBy ? ` por ${esc(generatedBy)}` : ""}.</div>`;
 }
 const MODEL_LABEL_PF = { own: "Camión propio", commission: "Comisión", commission_expenses: "Comisión + gastos", profit_share: "Reparto de utilidad" };

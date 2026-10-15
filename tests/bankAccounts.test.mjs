@@ -130,3 +130,13 @@ test("validaciones: transferencia, cuenta nueva, borrar o desactivar", () => {
   assert.equal(nextTransferId([{ id: 3 }, { id: 9 }]), 10);
   assert.equal(roleAccount(accounts, "cash").id, "cash");
 });
+
+test("nómina con adelanto aplicado: de OpEx sale solo lo que falta; el adelanto salió cuando se dio", () => {
+  const exps = [
+    { id: 20, category: "adelanto_conductor", amount: 500, status: "paid", paymentMethod: "transfer", date: "2026-10-05", payrollKey: "2026-10-H1" },
+    { id: 21, category: "driverPay", amount: 2500, advanceApplied: 500, status: "paid", paymentMethod: "transfer", paidDate: "2026-10-08" },
+    { id: 22, category: "helper", amount: 1000, advanceApplied: 1000, status: "paid", paymentMethod: "transfer", paidDate: "2026-10-08" }, // todo adelantado: no sale nada más
+  ];
+  const mv = bankMovements({ accounts, expenses: exps, cobros: [], transfers: [], invoices: [], clients: [] });
+  assert.deepEqual(mv.opex.map(m => [m.key, m.amount]).sort(), [["expense-20", 500], ["expense-21", 2000]]);
+});

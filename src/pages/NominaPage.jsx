@@ -34,7 +34,7 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
   const [editingTotal, setEditingTotal] = useState(false);
   const d = row.driver;
   const payLabel = row.payType === "fixed" ? `Fijo ${fmt(row.fixedAmount)}` : row.payType === "percentage" ? `${d.percentageAmount || 0}% del flete` : "Por viaje (tarifario)";
-  const totalOut = pay.net + row.helpers;
+  const totalOut = pay.net + row.helpersNet;
 
   return <Card style={{ marginBottom: 10, borderLeft: `4px solid ${pay.paid ? colors.green : pay.partial ? colors.orange : colors.border}` }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
@@ -61,7 +61,7 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
           {!pay.override && row.advances > 0 && <div style={{ fontSize: 10, color: colors.textMuted }}>Bruto {fmt(pay.driverTotal)} · adelantos −{fmt(row.advances)}</div>}
           <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>{pay.paid ? "PAGADO" : "A TRANSFERIR"}</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: pay.paid ? colors.green : pay.override ? PURPLE : colors.orange }}>{fmt(pay.net)}</div>
-          {row.helpers > 0 && <div style={{ fontSize: 10, color: colors.cyan }}>+ ayudantes {fmt(row.helpers)} ({row.helperCount})</div>}
+          {row.helpers > 0 && <div style={{ fontSize: 10, color: colors.cyan }}>+ ayudantes {fmt(row.helpersNet)} ({row.helperCount}){row.helperAdvances > 0 ? <span style={{ color: colors.textMuted }}> · {fmt(row.helpers)} − adelantos {fmt(row.helperAdvances)}</span> : null}</div>}
         </div>
         {!pay.paid && <>
           <button onClick={() => setEditingTotal(t => !t)} title="Override del total" style={smallBtn(pay.override ? PURPLE + "22" : "transparent", pay.override ? PURPLE : colors.textMuted, `1px solid ${pay.override ? PURPLE + "60" : colors.border}`)}><Pencil size={11} /> Total</button>
@@ -121,7 +121,8 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
           <Td colSpan={5} bold>Totales</Td><Td align="right">{fmt(row.base)}</Td><Td align="right">{fmt(row.dieta)}</Td><Td align="right" color={colors.red}>{row.discounts ? "−" + fmt(row.discounts) : "—"}</Td><Td align="right" bold>{fmt(pay.driverTotal)}</Td><Td align="right" bold color={colors.cyan}>{fmt(row.helpers)}</Td><Td></Td>
         </tr></tfoot>
       </table>
-      {row.advances > 0 && <div style={{ fontSize: 11, color: colors.orange, marginTop: 6 }}>Adelantos del período: −{fmt(row.advances)} (ya pagados en efectivo; se descuentan del neto).</div>}
+      {row.advances > 0 && <div style={{ fontSize: 11, color: colors.orange, marginTop: 6 }}>Adelantos al chofer: −{fmt(row.advances)} (ya entregados; se descuentan del neto){row.advExps.some(e => e.tripId) ? " · " + row.advExps.filter(e => e.tripId).map(e => `viaje #${e.tripId} ${fmt(e.amount)}`).join(", ") : ""}.</div>}
+      {row.helperAdvances > 0 && <div style={{ fontSize: 11, color: colors.orange, marginTop: 4 }}>Adelantos a ayudantes (por el chofer): −{fmt(row.helperAdvances)} → ayudantes a transferir {fmt(row.helpersNet)}.</div>}
       {row.helperNames.length > 0 && <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>Ayudantes: {row.helperNames.join(", ")}</div>}
       {row.directHelpers > 0 && <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>Ayudantes con pago directo en sus viajes: {fmt(row.directHelpers)} (se pagan en la sección Ayudantes, no al chofer).</div>}
     </div>}
@@ -196,8 +197,8 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
   const helperPayroll = useMemo(() => buildHelperPayroll({ period, ayudantes, drivers, trips, trucks, clients, expenses }), [period, ayudantes, drivers, trips, trucks, clients, expenses]);
   const helperRows = useMemo(() => helperPayroll.rows.map(row => ({ row, pay: helperPayrollPayment({ row, period, expenses }) })), [helperPayroll, period, expenses]);
 
-  const pendingTotal = rows.filter(r => !r.pay.paid).reduce((s, r) => s + r.pay.net + r.row.helpers, 0) + helperRows.filter(r => !r.pay.paid).reduce((s, r) => s + r.row.net, 0);
-  const paidTotal = rows.filter(r => r.pay.paid).reduce((s, r) => s + r.pay.net + r.row.helpers, 0) + helperRows.filter(r => r.pay.paid).reduce((s, r) => s + r.row.net, 0);
+  const pendingTotal = rows.filter(r => !r.pay.paid).reduce((s, r) => s + r.pay.net + r.row.helpersNet, 0) + helperRows.filter(r => !r.pay.paid).reduce((s, r) => s + r.row.net, 0);
+  const paidTotal = rows.filter(r => r.pay.paid).reduce((s, r) => s + r.pay.net + r.row.helpersNet, 0) + helperRows.filter(r => r.pay.paid).reduce((s, r) => s + r.row.net, 0);
   // Saldos reales de las cuentas del Banco: la nómina sale de OpEx
   const pf = useMemo(() => { const b = bankOverview({ bankAccount, expenses, cobros, transfers: bankTransfers, settings: pfSettings, todayStr: today() }); return { opexAvailable: b.opexBalance, opexCommitted: b.opexCommitted, reserve: b.reserveBalance }; }, [bankAccount, expenses, cobros, bankTransfers, pfSettings]);
   const afterPay = pf.opexAvailable - pendingTotal;
@@ -245,13 +246,21 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
           () => ({ category: "helper", tripId: x.trip.id, driverId: d.id, supplierId: null, date: x.trip.date, description: `Ayudantes (${x.split.viaDriver.count}) · ${x.trip.municipality}` }),
           e => (e.status === "paid" ? {} : { amount: x.split.viaDriver.amount, status: "paid", paidDate: date, paymentMethod: method, payrollKey: key }));
       });
+      // Adelantos descontados en esta nómina: quedan amarrados a ella y el gasto de nómina sabe cuánto ya salió
+      // antes (advanceApplied), para que Banco no cuente ese dinero dos veces
+      const advIds = new Set(row.advExps.map(e => e.id)), hAdvIds = new Set(row.helperAdvExps.map(e => e.id));
+      next = next.map(e => advIds.has(e.id) || hAdvIds.has(e.id) ? { ...e, payrollKey: key, appliedDriverId: d.id } : e);
+      const spread = (match, total) => { let left = total; next = next.map(e => { if (!left || !match(e)) return e; const a = Math.min(left, Number(e.amount) || 0); left -= a; return { ...e, advanceApplied: a }; }); };
+      spread(e => e.category === "driverPay" && e.driverId === d.id && e.status === "paid" && (row.trips.some(x => x.trip.id === e.tripId) || (!e.tripId && e.payrollKey === key)), row.advances);
+      spread(e => e.category === "helper" && e.status === "paid" && (e.ayudanteId == null || e.ayudanteId === "") && row.trips.some(x => x.trip.id === e.tripId), row.helperAdvances);
       return next;
     });
   };
 
-  const markUnpaid = ({ pay }) => {
+  const markUnpaid = ({ row, pay }) => {
     const ids = new Set([...pay.payExps, ...pay.helperExps, ...(pay.override ? [pay.override] : [])].filter(e => e.payrollKey === key || e.tripId).map(e => e.id));
-    setExpenses(prev => prev.map(e => ids.has(e.id) && e.status === "paid" ? { ...e, status: "pending", paidDate: null } : e));
+    setExpenses(prev => prev.map(e => ids.has(e.id) && e.status === "paid" ? { ...e, status: "pending", paidDate: null, advanceApplied: undefined }
+      : (e.category === "adelanto_conductor" || e.category === "adelanto_ayudante") && e.payrollKey === key && e.appliedDriverId === row.driver.id ? { ...e, payrollKey: undefined, appliedDriverId: undefined } : e));
   };
 
   // ── Ayudantes directos: un gasto «helper» con su ayudanteId por viaje ────────
@@ -348,7 +357,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
 
     {rows.length === 0 && helperRows.length === 0 && <Card><div style={{ textAlign: "center", padding: 40, color: colors.textMuted, fontSize: 13 }}>No hay viajes recibidos ni salarios fijos en este corte.</div></Card>}
     {rows.map(({ row, pay }) => <DriverCard key={row.driver.id} row={row} pay={pay} period={period} isMobile={isMobile}
-      onMarkPaid={() => markPaid({ row, pay })} onMarkUnpaid={() => markUnpaid({ pay })}
+      onMarkPaid={() => markPaid({ row, pay })} onMarkUnpaid={() => markUnpaid({ row, pay })}
       onLineOverride={(l, a, n) => lineOverride(row, l, a, n)} onTotalOverride={(a, n) => totalOverride(row, pay, a, n)} onClearTotalOverride={() => clearTotalOverride(row)}
       onPrint={() => printDriver(row)} onPrintPayroll={() => printDriverPayroll(row, pay)} />)}
     {helperRows.length > 0 && <>

@@ -31,6 +31,28 @@ export function docsComplete(trip, client) {
 
 const inPeriod = (date, pd) => !!date && date >= pd.dateFrom && date <= pd.dateTo;
 
+/**
+ * ¿Este adelanto se descuenta en esta nómina? Solo los entregados (status paid). Reglas (en orden):
+ *  - ya se aplicó en una nómina pagada (payrollKey) → solo en esa.
+ *  - viene con viaje del chofer → se descuenta en la quincena en que se paga ESE viaje (docs recibidos);
+ *    si el viaje ya se pagó en una quincena anterior y el adelanto se registró después, por su fecha.
+ *    Sin documentos todavía, espera con el viaje.
+ *  - sin viaje → por la fecha del adelanto, al chofer/ayudante que diga el gasto.
+ * `paid` = viajes pagados en este período ({trip, payDate}); `mine` = todos los viajes de la persona.
+ */
+export function advanceApplies(e, { period, key, paid = [], mine = [] }) {
+  if (e.status && e.status !== "paid") return false; // un adelanto que no se ha entregado no se descuenta
+  if (e.payrollKey) return e.payrollKey === key;
+  const linked = e.tripId != null ? mine.find(t => t.id === Number(e.tripId)) : null;
+  if (linked) {
+    const x = paid.find(p => p.trip.id === linked.id);
+    if (x) return true;
+    const pd = linked.payDate; // null = sin documentos: espera
+    return !!pd && pd < period.dateFrom && inPeriod(e.date, period);
+  }
+  return inPeriod(e.date, period);
+}
+
 /** Fecha que decide en qué quincena se paga un viaje: la de recepción de documentos (o la del viaje si no se registró). */
 export function payrollDate(trip, client) {
   if (!docsComplete(trip, client)) return null;
@@ -70,7 +92,14 @@ export function buildPayroll({ period, drivers = [], trips = [], trucks = [], cl
     // Sin documentos, por fecha de viaje → esperan (no se pagan)
     const pendingTrips = mine.map(enrich).filter(x => !x.docsOk && inPeriod(x.trip.date, period)).sort(byDate);
     const allTrips = [...dTrips, ...pendingTrips].sort(byDate);
-    const advances = expenses.filter(e => e.category === "adelanto_conductor" && e.driverId === driver.id && inPeriod(e.date, period)).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    // Adelantos: del chofer (driverId) o de un viaje suyo (tripId); los de ayudantes sin ayudanteId van por el chofer
+    const key = payrollKey(period);
+    const mineInfo = mine.map(tr => ({ id: tr.id, payDate: payrollDate(tr, clientMap.get(tr.clientId)) }));
+    const isMineAdv = (e) => (e.driverId != null && Number(e.driverId) === driver.id) || (e.tripId != null && mine.some(tr => tr.id === Number(e.tripId)));
+    const advExps = expenses.filter(e => e.category === "adelanto_conductor" && isMineAdv(e) && advanceApplies(e, { period, key, paid: dTrips, mine: mineInfo }));
+    const helperAdvExps = expenses.filter(e => e.category === "adelanto_ayudante" && (e.ayudanteId == null || e.ayudanteId === "") && isMineAdv(e) && advanceApplies(e, { period, key, paid: dTrips, mine: mineInfo }));
+    const advances = advExps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const helperAdvances = helperAdvExps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const base      = dTrips.reduce((s, x) => s + x.calc.base, 0);
     const dieta     = dTrips.reduce((s, x) => s + x.calc.dieta, 0);
     const discounts = dTrips.reduce((s, x) => s + x.calc.discounts, 0);
@@ -80,20 +109,21 @@ export function buildPayroll({ period, drivers = [], trips = [], trucks = [], cl
     const fixed = driver.payType === "fixed" ? (Number(driver.fixedAmount) || 0) : 0;
     const gross = driver.payType === "fixed" ? fixed : base + dieta;
     const net = Math.max(0, gross - discounts - advances);
+    const helpersNet = Math.max(0, helpers - helperAdvances);
     const helperNames = [...new Set(dTrips.flatMap(x => (x.trip.helpers || []).filter(h => !isDirectLine(h)).map(h => h.name).filter(Boolean)))];
     const missingRates = dTrips.filter(x => driver.payType === "perTrip" && !x.calc.rateFound).length;
     if (allTrips.length === 0 && driver.payType !== "fixed") continue;
     rows.push({ driver, payType: driver.payType, fixedAmount: fixed, trips: dTrips, tripCount: dTrips.length,
       pendingTrips, pendingCount: pendingTrips.length, allTrips,
-      base, dieta, discounts, advances, helpers, helperCount, helperNames, directHelpers, gross, net, missingRates,
+      base, dieta, discounts, advances, advExps, helpers, helperAdvances, helperAdvExps, helpersNet, helperCount, helperNames, directHelpers, gross, net, missingRates,
       docsPending: pendingTrips.length });
   }
 
   const totals = rows.reduce((acc, r) => ({
     trips: acc.trips + r.tripCount, gross: acc.gross + r.gross, discounts: acc.discounts + r.discounts,
-    advances: acc.advances + r.advances, net: acc.net + r.net, helpers: acc.helpers + r.helpers,
-    total: acc.total + r.net + r.helpers,
-  }), { trips: 0, gross: 0, discounts: 0, advances: 0, net: 0, helpers: 0, total: 0 });
+    advances: acc.advances + r.advances, net: acc.net + r.net, helpers: acc.helpers + r.helpers, helperAdvances: acc.helperAdvances + r.helperAdvances, helpersNet: acc.helpersNet + r.helpersNet,
+    total: acc.total + r.net + r.helpersNet,
+  }), { trips: 0, gross: 0, discounts: 0, advances: 0, net: 0, helpers: 0, helperAdvances: 0, helpersNet: 0, total: 0 });
 
   return { period, drivers: rows, totals };
 }
@@ -185,12 +215,15 @@ export function buildHelperPayroll({ period, ayudantes = [], drivers = [], trips
   for (const raw of [...(ayudantes || []).filter(Boolean), ...orphans]) {
     const ayudante = normalizeAyudante(raw);
     const got = byHelper.get(ayudante.id) || { lines: [], pending: [] };
-    const advances = expenses.filter(e => e.category === "adelanto_ayudante" && Number(e.ayudanteId) === ayudante.id && inPeriod(e.date, period)).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const key = payrollKey(period);
+    const mineInfo = trips.filter(tr => (tr.helpers || []).some(h => Number(h?.ayudanteId) === ayudante.id)).map(tr => ({ id: tr.id, payDate: payrollDate(tr, clientMap.get(tr.clientId)) }));
+    const advExps = expenses.filter(e => e.category === "adelanto_ayudante" && Number(e.ayudanteId) === ayudante.id && advanceApplies(e, { period, key, paid: got.lines, mine: mineInfo }));
+    const advances = advExps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
     if (got.lines.length === 0 && got.pending.length === 0 && advances === 0) continue;
     const tripsPaid = got.lines.sort(byDate), pendingTrips = got.pending.sort(byDate);
     const gross = tripsPaid.reduce((s, x) => s + x.amount, 0);
     rows.push({ ayudante, trips: tripsPaid, tripCount: tripsPaid.length, pendingTrips, pendingCount: pendingTrips.length,
-      gross, advances, net: Math.max(0, gross - advances) });
+      gross, advances, advExps, net: Math.max(0, gross - advances) });
   }
   rows.sort((a, b) => (a.ayudante.name || "").localeCompare(b.ayudante.name || ""));
   const totals = rows.reduce((t, r) => ({ trips: t.trips + r.tripCount, gross: t.gross + r.gross, advances: t.advances + r.advances, net: t.net + r.net }), { trips: 0, gross: 0, advances: 0, net: 0 });

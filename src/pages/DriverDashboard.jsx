@@ -3,7 +3,8 @@ import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown, C
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
 import { needsRate } from "../utils/tripPending.js";
-import { calcDriverPay, DEFAULT_HELPERS, tripSize } from "../utils/driverPay.js";
+import { calcDriverPay, DEFAULT_HELPERS, tripSize, tripCrew } from "../utils/driverPay.js";
+import { buildPayroll, payrollPayment, payrollDate } from "../utils/payroll.js";
 import { crewSlots, buildHelperLines, helperExpensePlan, planToNewExpenses, clientHelpersMode, clientSkipsHelpers, isDirectLine } from "../utils/ayudantes.js";
 import HelperSlots from "../components/HelperSlots.jsx";
 import ReceiptCapture from "../components/ReceiptCapture.jsx";
@@ -152,46 +153,32 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
 
   const allMyTrips = trips.filter(tr => tr.driverId === driverObj?.id);
 
-  const adelantoExps = (expenses || []).filter(e =>
-    e.category === "adelanto_conductor" &&
-    (e.driverId === driverObj?.id || allMyTrips.some(tr => tr.id === e.tripId))
-  );
-  const overrideExps = (expenses || []).filter(e =>
-    e.category === "nominaTotalOverride" && e.driverId === driverObj?.id
-  );
-
+  // Mi nómina = exactamente lo que calcula la oficina (misma quincena de documentos recibidos, misma tripulación,
+  // mismos adelantos). Un viaje se paga en la quincena en que la oficina recibió sus documentos.
+  const myAdvances = (expenses || []).filter(e => (e.category === "adelanto_conductor" || (e.category === "adelanto_ayudante" && (e.ayudanteId == null || e.ayudanteId === ""))) &&
+    (e.driverId === driverObj?.id || (e.tripId && allMyTrips.some(tr => tr.id === Number(e.tripId)))));
+  const overrideExps = (expenses || []).filter(e => e.category === "nominaTotalOverride" && e.driverId === driverObj?.id);
   const periodSeedDates = [
-    ...allMyTrips.map(tr => tr.date),
-    ...adelantoExps.map(e => e.date).filter(Boolean),
-    ...overrideExps.map(e => e.date).filter(Boolean),
+    ...allMyTrips.map(tr => tr.date), ...allMyTrips.map(tr => payrollDate(tr, clients.find(c => c.id === tr.clientId))).filter(Boolean),
+    ...myAdvances.map(e => e.date).filter(Boolean), ...overrideExps.map(e => e.date).filter(Boolean),
   ];
   const allPeriods = genPeriods(periodSeedDates);
-  const activePeriods = allPeriods.filter(pd =>
-    allMyTrips.some(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo) ||
-    adelantoExps.some(e => e.date >= pd.dateFrom && e.date <= pd.dateTo) ||
-    overrideExps.some(e => e.date >= pd.dateFrom && e.date <= pd.dateTo)
-  );
+  const corteOf = (pd) => {
+    const row = driverObj ? buildPayroll({ period: pd, drivers: [driverObj], trips, trucks, clients, expenses }).drivers[0] : null;
+    return row ? { row, pay: payrollPayment({ row, period: pd, expenses }) } : null;
+  };
+  const cortes = allPeriods.map(pd => ({ pd, corte: corteOf(pd) })).filter(x => x.corte && (x.corte.row.allTrips.length > 0 || x.corte.row.advances > 0 || x.corte.row.helperAdvances > 0));
+  const activePeriods = cortes.map(x => x.pd);
 
   const pendingDocs = allMyTrips.filter(tr => tr.docStatus === "pending").length;
   const completed = allMyTrips.filter(tr => tr.status === "delivered").length;
   const selectedClient = clients.find(c => c.id === Number(form.clientId));
 
-  // Read stored driverPay expense — avoids retroactive changes if salaryType is updated
-  const calcPay = (tr) =>
-    (expenses || []).find(e => e.category === "driverPay" && e.tripId === tr.id)?.amount ?? 0;
-  const totalBruto = activePeriods.reduce((sum, pd) => {
-    const override = (expenses || []).find(e =>
-      e.category === "nominaTotalOverride" && e.driverId === driverObj?.id &&
-      e.date >= pd.dateFrom && e.date <= pd.dateTo
-    );
-    if (override) return sum + override.amount;
-    if (driverObj?.salaryType === "fixed") return sum + (driverObj.fixedAmount || 0);
-    return sum + allMyTrips.filter(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo).reduce((s, tr) => s + calcPay(tr), 0);
-  }, 0);
-  const totalHelpers = driverObj?.salaryType === "perTrip" ? 0 : allMyTrips.reduce((s, tr) => s + (tr.helpers || []).reduce((h, x) => h + (x.pay || 0), 0), 0);
-  const totalDescuentos = allMyTrips.reduce((s, tr) => s + (tr.discounts || []).reduce((d, x) => d + (x.amount || 0), 0), 0);
-  const totalAdelantos = (expenses || []).filter(e => e.category === "adelanto_conductor" && (e.driverId === driverObj?.id || (e.tripId && allMyTrips.some(tr => tr.id === e.tripId)))).reduce((s, e) => s + (e.amount || 0), 0);
-  const totalNeto = Math.max(0, totalBruto - totalHelpers - totalDescuentos - totalAdelantos);
+  const totalBruto = cortes.reduce((s, x) => s + x.corte.pay.grossEff, 0);
+  const totalHelpers = cortes.reduce((s, x) => s + x.corte.row.helpersNet, 0);
+  const totalDescuentos = cortes.reduce((s, x) => s + x.corte.row.discounts, 0);
+  const totalAdelantos = cortes.reduce((s, x) => s + x.corte.row.advances, 0);
+  const totalNeto = cortes.reduce((s, x) => s + x.corte.pay.net, 0);
 
   return <div>
     <PageHeader title={`${t.dashboard} — ${driverObj?.name || ""}`} action={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Btn variant="warning" onClick={() => setShowReceipt(true)} data-open-receipt><Camera size={14} /> Foto de gasto</Btn><Btn onClick={openNew}><Plus size={14} /> {t.newTrip}</Btn></div>} />
@@ -206,8 +193,8 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
     <Card style={{ marginBottom: 16 }}>
       <h3 style={{ margin: "0 0 12px", fontSize: 15, display: "flex", alignItems: "center", gap: 6 }}><Banknote size={16} color={colors.green} /> {t.payrollSummary}</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12 }}>
-        <div><div style={{ fontSize: 11, color: colors.textMuted }}>{driverObj?.salaryType === "fixed" ? "Salario Fijo" : driverObj?.salaryType === "porcentaje" ? `Comisión (${driverObj.percentageAmount || 0}%)` : "Pago por Viaje"}</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.green }}>{fmt(totalBruto)}</div></div>
-        {totalHelpers > 0 && <div><div style={{ fontSize: 11, color: colors.textMuted }}>Ayudantes</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.orange }}>− {fmt(totalHelpers)}</div></div>}
+        <div><div style={{ fontSize: 11, color: colors.textMuted }}>{driverObj?.payType === "fixed" || driverObj?.salaryType === "fixed" ? "Salario Fijo" : driverObj?.payType === "percentage" || driverObj?.salaryType === "porcentaje" ? `Comisión (${driverObj.percentageAmount || 0}%)` : "Chofer + dieta (viajes recibidos)"}</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.green }}>{fmt(totalBruto)}</div></div>
+        {totalHelpers > 0 && <div><div style={{ fontSize: 11, color: colors.textMuted }}>Ayudantes (por ti)</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.cyan }}>+ {fmt(totalHelpers)}</div></div>}
         {totalAdelantos > 0 && <div><div style={{ fontSize: 11, color: colors.textMuted }}>Adelantos</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.red }}>− {fmt(totalAdelantos)}</div></div>}
         {totalDescuentos > 0 && <div><div style={{ fontSize: 11, color: colors.textMuted }}>Descuentos</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.red }}>− {fmt(totalDescuentos)}</div></div>}
         <div><div style={{ fontSize: 11, color: colors.textMuted }}>{t.netPay}</div><div style={{ fontSize: 20, fontWeight: 700, color: colors.cyan }}>{fmt(totalNeto)}</div></div>
@@ -303,48 +290,68 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
     {activePeriods.length === 0
       ? <Card><div style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", padding: 32 }}>{t.noTrips}</div></Card>
       : activePeriods.map((pd, idx) => (
-        <DriverCorteCard key={`${pd.mStr}-${pd.half}`} pd={pd} driverObj={driverObj} myTrips={allMyTrips} expenses={expenses} trucks={trucks} clients={clients} t={t} defaultOpen={idx === 0} setTrips={setTrips} allTrips={trips} driversAll={drivers} />
+        <DriverCorteCard key={`${pd.mStr}-${pd.half}`} pd={pd} corte={cortes[idx].corte} driverObj={driverObj} myTrips={allMyTrips} expenses={expenses} trucks={trucks} clients={clients} t={t} defaultOpen={idx === 0} setTrips={setTrips} allTrips={trips} driversAll={drivers} />
       ))
     }
   </div>;
 }
 
-function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t, defaultOpen, setTrips, allTrips, driversAll = [] }) {
+function DriverCorteCard({ pd, corte, driverObj, myTrips, expenses, trucks, clients, t, defaultOpen, setTrips, allTrips, driversAll = [] }) {
   const [open, setOpen] = useState(defaultOpen);
-  const periodTrips = myTrips.filter(tr => tr.date >= pd.dateFrom && tr.date <= pd.dateTo);
-
-  // Read stored driverPay expense — avoids retroactive changes if salaryType is updated
-  const calcBruto = driverObj?.salaryType === "fixed"
-    ? (driverObj.fixedAmount || 0)
-    : periodTrips.reduce((s, tr) => s + ((expenses || []).find(e => e.category === "driverPay" && e.tripId === tr.id)?.amount ?? 0), 0);
-
-  const totalOverrideExp = (expenses || []).find(e =>
-    e.category === "nominaTotalOverride" &&
-    e.driverId === driverObj?.id &&
-    e.date >= pd.dateFrom && e.date <= pd.dateTo
-  );
-  const brutoPay = totalOverrideExp ? totalOverrideExp.amount : calcBruto;
-
-  const helperPay = driverObj?.salaryType === "perTrip" ? 0 : periodTrips.reduce((s, tr) => s + (tr.helpers || []).filter(x => !isDirectLine(x)).reduce((h, x) => h + (x.pay || 0), 0), 0);
-  const discountsTotal = periodTrips.reduce((s, tr) => s + (tr.discounts || []).reduce((d, x) => d + (x.amount || 0), 0), 0);
-
-  const adelantoExps = (expenses || []).filter(e =>
-    e.category === "adelanto_conductor" &&
-    (e.driverId === driverObj?.id || (e.tripId && periodTrips.some(tr => tr.id === e.tripId))) &&
-    e.date >= pd.dateFrom && e.date <= pd.dateTo
-  );
-  const adelantos = adelantoExps.reduce((s, e) => s + (e.amount || 0), 0);
-
-  const isPaid = (expenses || []).some(e =>
-    (e.category === "driverPay" || e.category === "nominaTotalOverride") &&
-    e.driverId === driverObj?.id &&
-    e.date >= pd.dateFrom && e.date <= pd.dateTo &&
-    e.status === "paid"
-  );
-
-  const netoAPagar = Math.max(0, brutoPay - helperPay - adelantos - discountsTotal);
-  const statusColor = isPaid ? colors.green : colors.yellow;
-  const statusLabel = isPaid ? "Pagado" : "Pendiente";
+  const { row, pay } = corte;
+  const isPaid = pay.paid;
+  const statusColor = isPaid ? colors.green : pay.partial ? colors.orange : colors.yellow;
+  const statusLabel = isPaid ? "Pagado" : pay.partial ? "Parcial" : "Pendiente";
+  const netoAPagar = pay.net;
+  const totalConAyud = pay.net + row.helpersNet;
+  const nextStatus = { pending: "in_transit", in_transit: "delivered" };
+  const handleStatusAdvance = (trip) => {
+    const next = nextStatus[trip.status];
+    if (!next) return;
+    if (next === "delivered" && !window.confirm("¿Confirmar entrega? Esta acción no se puede deshacer.")) return;
+    setTrips(allTrips.map(x => x.id === trip.id ? { ...x, status: next } : x));
+  };
+  const advOfTrip = (id) => [...row.advExps, ...row.helperAdvExps].filter(e => Number(e.tripId) === id);
+  const renderTrip = (x, pending) => {
+    const tr = x.trip, line = pay.lines.find(l => l.trip.id === tr.id);
+    const crew = tripCrew(tr, x.calc, driverObj);
+    const chofer = crew[0], ayuds = crew.slice(1);
+    const viaDriver = ayuds.filter(a => !a.direct);
+    const tripDiscounts = x.calc.discounts || 0;
+    const stColor = tr.status === "delivered" ? colors.green : tr.status === "in_transit" ? colors.yellow : tr.status === "cancelled" ? colors.textMuted : colors.accent;
+    const noRate = x.calc.payType === "perTrip" && !x.calc.rateFound;
+    return <Fragment key={tr.id}>
+      <tr style={{ borderBottom: `1px solid ${colors.border}11`, opacity: pending ? 0.75 : 1 }}>
+        <Td>{tr.date}{pending && <div style={{ fontSize: 10, color: colors.orange, fontWeight: 600 }}>espera documentos</div>}</Td>
+        <Td>{tr.municipality}, {tr.province}</Td>
+        <Td>{x.client?.companyName || "—"}{needsRate(tr) && <div style={{ fontSize: 10, color: colors.orange, fontWeight: 600 }} data-trip-pending>tarifa pendiente (la completa la oficina)</div>}{tr.joint && <div style={{ fontSize: 10, color: colors.purple || "#9b7fe8", fontWeight: 700 }}>⛓ conjunto{tr.jointAuto ? " (lo registró tu compañero)" : tr.jointDriverId ? ` con ${driversAll.find(d => d.id === tr.jointDriverId)?.name || "compañero"}` : ""}</div>}</Td>
+        <Td align="right" bold color={colors.green}>{noRate ? <span style={{ fontSize: 10, color: colors.orange }}>sin tarifa</span> : fmt(chofer.base)}</Td>
+        <Td align="right" color={chofer.dieta > 0 ? colors.accent : colors.textMuted}>{chofer.dieta > 0 ? fmt(chofer.dieta) : "—"}</Td>
+        <Td align="right" bold>{line && line.overridden ? <span title="ajustado por la oficina">{fmt(line.amount)}</span> : fmt(x.calc.driverNet)}</Td>
+        <Td align="right" color={viaDriver.length ? colors.cyan : colors.textMuted} style={{ lineHeight: 1.4 }}>
+          {ayuds.length ? ayuds.map(a => <div key={a.idx} style={{ fontSize: 11 }}>{a.name}: {fmt(a.base)}{a.dieta ? ` + ${fmt(a.dieta)}` : ""} = <b>{fmt(a.total)}</b>{a.direct ? <span style={{ color: colors.textMuted }}> (directo)</span> : null}</div>) : "—"}
+        </Td>
+        <Td align="right" style={{ lineHeight: 1.4, verticalAlign: "top" }}>
+          {tripDiscounts > 0 ? <div style={{ color: colors.red, fontWeight: 600 }}>− {fmt(tripDiscounts)}</div> : null}
+          {advOfTrip(tr.id).map(e => <div key={e.id} style={{ fontSize: 10, color: colors.orange }}>↳ Adel. {e.category === "adelanto_ayudante" ? "ayud. " : ""}− {fmt(e.amount)}</div>)}
+          {tripDiscounts === 0 && advOfTrip(tr.id).length === 0 ? <span style={{ color: colors.textMuted }}>—</span> : null}
+        </Td>
+        <Td align="center">
+          <button onClick={() => handleStatusAdvance(tr)} disabled={!nextStatus[tr.status]}
+            style={{ padding: "10px 14px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 600, minHeight: 44, minWidth: 88, cursor: nextStatus[tr.status] ? "pointer" : "default", background: stColor + "22", color: stColor }}>
+            {tr.status === "delivered" ? t.delivered : tr.status === "in_transit" ? t.inTransit : tr.status === "cancelled" ? (t.cancelled || "Cancelado") : t.pending}
+          </button>
+        </Td>
+      </tr>
+      {(tr.discounts || []).filter(d => d.amount > 0).map((d, i) => (
+        <tr key={`disc-${tr.id}-${i}`} style={{ background: colors.red + "08" }}>
+          <Td></Td><Td colSpan={6} style={{ fontSize: 11, color: colors.red, paddingLeft: 20 }}>↳ Descuento: {d.desc || "—"}</Td>
+          <Td align="right" style={{ fontSize: 11, color: colors.red }}>− {fmt(d.amount)}</Td><Td></Td>
+        </tr>
+      ))}
+    </Fragment>;
+  };
+  const allAdv = [...row.advExps.map(e => ({ ...e, who: "chofer" })), ...row.helperAdvExps.map(e => ({ ...e, who: "ayudantes" }))].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 
   return (
     <Card style={{ marginBottom: 12 }}>
@@ -353,13 +360,13 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
           <ChevronDown size={16} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", color: colors.textMuted }} />
           <div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{pd.label}</div>
-            <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>{periodTrips.length} viaje{periodTrips.length !== 1 ? "s" : ""}</div>
+            <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>{row.tripCount} viaje{row.tripCount !== 1 ? "s" : ""} recibido{row.tripCount !== 1 ? "s" : ""}{row.pendingCount ? ` · ${row.pendingCount} esperando documentos` : ""}</div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontWeight: 700, fontSize: 16, color: colors.cyan }}>{fmt(netoAPagar)}</div>
-            <div style={{ fontSize: 10, color: colors.textMuted }}>Neto a recibir</div>
+            <div style={{ fontSize: 10, color: colors.textMuted }}>Neto a recibir{row.helpersNet > 0 ? ` · + ayud. ${fmt(row.helpersNet)}` : ""}</div>
           </div>
           <span style={{ padding: "3px 10px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: statusColor + "22", color: statusColor }}>{statusLabel}</span>
         </div>
@@ -367,97 +374,34 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
 
       {open && (
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${colors.border}33` }}>
-          {periodTrips.length > 0 && <>
+          {row.allTrips.length > 0 && <>
             <div style={{ fontSize: 11, fontWeight: 600, color: colors.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Viajes</div>
             <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 14 }}>
               <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-                <Th>{t.date}</Th><Th>{t.destination}</Th><Th>{t.client}</Th><Th align="right">Chofer</Th><Th align="right">Dieta</Th><Th align="right">Ayudante*</Th><Th align="right">Descuentos</Th><Th align="center">{t.status}</Th>
+                <Th>{t.date}</Th><Th>{t.destination}</Th><Th>{t.client}</Th><Th align="right">Chofer</Th><Th align="right">Dieta</Th><Th align="right">Neto chofer</Th><Th align="right">Ayudantes (base + dieta)</Th><Th align="right">Desc. / Adel.</Th><Th align="center">{t.status}</Th>
               </tr></thead>
               <tbody>
-                {periodTrips.slice().sort((a, b) => a.date.localeCompare(b.date)).map(tr => {
-                  const cl = clients.find(c => c.id === tr.clientId);
-                  const trRate = driverObj?.salaryType === "perTrip" ? (driverObj.rates || []).find(r => r.province === tr.province && r.municipality === tr.municipality) : null;
-                  const trTk = trucks.find(t2 => t2.id === tr.truckId);
-                  const trSize = (tr.tarifaOverride && tr.tarifaOverride !== "custom") ? tr.tarifaOverride : (trTk?.size || "T1");
-                  const basePay = trRate
-                    ? (trSize === "T2" ? (trRate.priceT2 ?? trRate.priceT1 ?? 0) : (trRate.priceT1 ?? 0))
-                    : ((expenses || []).find(e => e.category === "driverPay" && e.tripId === tr.id)?.amount ?? 0);
-                  const dieta = trRate ? (trSize === "T2" ? (trRate.dietaT2 || 0) : (trRate.dietaT1 || 0)) : 0;
-                  const ayudanteRef = trRate ? (trSize === "T2" ? (trRate.helperT2 || 0) * 2 : (trRate.helperT1 || 0)) : 0;
-                  const tripHelpers = (tr.helpers || []).filter(x => !isDirectLine(x)).reduce((s, x) => s + (x.pay || 0), 0);
-                  const tripDiscounts = (tr.discounts || []).reduce((s, x) => s + (x.amount || 0), 0);
-                  const stColor = tr.status === "delivered" ? colors.green : tr.status === "in_transit" ? colors.yellow : tr.status === "cancelled" ? colors.textMuted : colors.accent;
-                  const nextStatus = { pending: "in_transit", in_transit: "delivered" };
-                  const handleStatusAdvance = (trip) => {
-                    const next = nextStatus[trip.status];
-                    if (!next) return;
-                    if (next === "delivered") {
-                      if (!window.confirm("¿Confirmar entrega? Esta acción no se puede deshacer.")) return;
-                    }
-                    setTrips(allTrips.map(x => x.id === trip.id ? { ...x, status: next } : x));
-                  };
-                  return <Fragment key={tr.id}>
-                    <tr style={{ borderBottom: `1px solid ${colors.border}11` }}>
-                      <Td>{tr.date}</Td>
-                      <Td>{tr.municipality}, {tr.province}</Td>
-                      <Td>{cl?.companyName || "—"}{needsRate(tr) && <div style={{ fontSize: 10, color: colors.orange, fontWeight: 600 }} data-trip-pending>tarifa pendiente (la completa la oficina)</div>}{tr.joint && <div style={{ fontSize: 10, color: colors.purple || "#9b7fe8", fontWeight: 700 }}>⛓ conjunto{tr.jointAuto ? " (lo registró tu compañero)" : tr.jointDriverId ? ` con ${driversAll.find(d => d.id === tr.jointDriverId)?.name || "compañero"}` : ""}</div>}</Td>
-                      <Td align="right" bold color={colors.green}>
-                        {driverObj?.salaryType === "fixed" ? <span style={{ fontSize: 10, color: colors.textMuted }}>Fijo</span> : basePay > 0 ? fmt(basePay) : <span style={{ fontSize: 10, color: colors.orange }}>—</span>}
-                      </Td>
-                      <Td align="right" color={dieta > 0 ? colors.accent : colors.textMuted}>{dieta > 0 ? fmt(dieta) : "—"}</Td>
-                      <Td align="right" color={ayudanteRef > 0 ? colors.cyan : colors.textMuted}>{ayudanteRef > 0 ? fmt(ayudanteRef) : "—"}</Td>
-                      {(() => {
-                        const linkedAdel = adelantoExps.find(e => e.tripId === tr.id);
-                        const adelAmt = linkedAdel ? linkedAdel.amount : 0;
-                        const showHelpers = driverObj?.salaryType !== "perTrip" && tripHelpers > 0;
-                        if (!showHelpers && tripDiscounts === 0 && adelAmt === 0) return <Td align="right" color={colors.textMuted}>—</Td>;
-                        return <Td align="right" style={{ lineHeight: 1.4, verticalAlign: "top" }}>
-                          {showHelpers && <div style={{ color: colors.orange, fontWeight: 600 }}>− {fmt(tripHelpers)}</div>}
-                          {tripDiscounts > 0 && <div style={{ color: colors.red, fontWeight: 600 }}>− {fmt(tripDiscounts)}</div>}
-                          {adelAmt > 0 && <div style={{ fontSize: 10, color: colors.orange }}>↳ Adel − {fmt(adelAmt)}</div>}
-                        </Td>;
-                      })()}
-                      <Td align="center">
-                        <button onClick={() => handleStatusAdvance(tr)} disabled={!nextStatus[tr.status]}
-                          style={{ padding: "10px 14px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 600, minHeight: 44, minWidth: 88, cursor: nextStatus[tr.status] ? "pointer" : "default", background: stColor + "22", color: stColor }}>
-                          {tr.status === "delivered" ? t.delivered : tr.status === "in_transit" ? t.inTransit : tr.status === "cancelled" ? (t.cancelled || "Cancelado") : t.pending}
-                        </button>
-                      </Td>
-                    </tr>
-                    {(tr.discounts || []).filter(d => d.amount > 0).map((d, i) => (
-                      <tr key={`disc-${tr.id}-${i}`} style={{ background: colors.red + "08" }}>
-                        <Td></Td><Td colSpan={5} style={{ fontSize: 11, color: colors.red, paddingLeft: 20 }}>↳ Descuento: {d.desc || "—"}</Td>
-                        <Td align="right" style={{ fontSize: 11, color: colors.red }}>− {fmt(d.amount)}</Td><Td></Td>
-                      </tr>
-                    ))}
-                    {(() => {
-                      const linkedAdel = adelantoExps.find(e => e.tripId === tr.id);
-                      if (!linkedAdel) return null;
-                      return <tr key={`adv-${tr.id}`} style={{ background: colors.orange + "08" }}>
-                        <Td></Td><Td colSpan={5} style={{ fontSize: 11, color: colors.orange, paddingLeft: 20 }}>↳ Adelanto vinculado</Td>
-                        <Td align="right" style={{ fontSize: 11, color: colors.orange }}>− {fmt(linkedAdel.amount)}</Td><Td></Td>
-                      </tr>;
-                    })()}
-                  </Fragment>;
-                })}
+                {row.trips.map(x => renderTrip(x, false))}
+                {row.pendingTrips.map(x => renderTrip(x, true))}
               </tbody>
             </table>
             </div>
+            {row.pendingCount > 0 && <div style={{ fontSize: 11, color: colors.orange, marginBottom: 10 }}>Los viajes que esperan documentos no entran en este neto: se pagan en la quincena en que la oficina los reciba.</div>}
           </>}
 
-          {adelantoExps.length > 0 && <>
-            <div style={{ fontSize: 11, fontWeight: 600, color: colors.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Adelantos Recibidos</div>
+          {allAdv.length > 0 && <>
+            <div style={{ fontSize: 11, fontWeight: 600, color: colors.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Adelantos recibidos</div>
             <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 14 }}>
               <tbody>
-                {adelantoExps.map(e => {
-                  const linkedTrip = e.tripId ? myTrips.find(tr => tr.id === e.tripId) : null;
+                {allAdv.map(e => {
+                  const linkedTrip = e.tripId ? myTrips.find(tr => tr.id === Number(e.tripId)) : null;
                   return (
                     <tr key={e.id} style={{ borderBottom: `1px solid ${colors.border}11` }}>
                       <Td>{e.date}</Td>
                       <Td>
-                        <span>{e.description || "Adelanto"}</span>
+                        <span>{e.description || "Adelanto"} <span style={{ fontSize: 10, color: colors.textMuted }}>({e.who})</span></span>
                         {linkedTrip && <><br /><span style={{ fontSize: 10, color: colors.textMuted }}>↳ Viaje {linkedTrip.date}: {linkedTrip.municipality}, {linkedTrip.province}</span></>}
                       </Td>
                       <Td align="right" bold color={colors.red}>− {fmt(e.amount)}</Td>
@@ -471,21 +415,23 @@ function DriverCorteCard({ pd, driverObj, myTrips, expenses, trucks, clients, t,
 
           <div style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${colors.border}33`, paddingTop: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-              <span style={{ color: colors.textMuted }}>{totalOverrideExp ? "✏️ Override (ajuste admin)" : driverObj?.salaryType === "fixed" ? "Salario Fijo" : driverObj?.salaryType === "porcentaje" ? `Comisión (${driverObj.percentageAmount || 0}%)` : "Pago por Viajes"}</span>
+              <span style={{ color: colors.textMuted }}>{pay.override ? "✏️ Ajuste de la oficina" : row.payType === "fixed" ? "Salario fijo" : row.payType === "percentage" ? `Comisión (${driverObj?.percentageAmount || 0}%)` : "Chofer + dieta (viajes recibidos)"}</span>
               <div style={{ textAlign: "right" }}>
-                {totalOverrideExp && <div style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(calcBruto)}</div>}
-                <span style={{ color: totalOverrideExp ? "#9b7fe8" : colors.green, fontWeight: 600 }}>{fmt(brutoPay)}</span>
+                {pay.override && <div style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(pay.driverTotal)}</div>}
+                <span style={{ color: pay.override ? "#9b7fe8" : colors.green, fontWeight: 600 }}>{fmt(pay.grossEff)}</span>
               </div>
             </div>
-            {helperPay > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Ayudantes</span><span style={{ color: colors.orange, fontWeight: 600 }}>− {fmt(helperPay)}</span></div>}
-            {adelantos > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Adelantos</span><span style={{ color: colors.red, fontWeight: 600 }}>− {fmt(adelantos)}</span></div>}
-            {discountsTotal > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Descuentos</span><span style={{ color: colors.red, fontWeight: 600 }}>− {fmt(discountsTotal)}</span></div>}
+            {row.discounts > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Descuentos (ya restados)</span><span style={{ color: colors.red, fontWeight: 600 }}>− {fmt(row.discounts)}</span></div>}
+            {row.advances > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Adelantos al chofer</span><span style={{ color: colors.red, fontWeight: 600 }}>− {fmt(row.advances)}</span></div>}
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, borderTop: `1px solid ${colors.border}44`, paddingTop: 8, marginTop: 2 }}>
-              <span>Neto a Recibir</span><span style={{ color: colors.cyan }}>{fmt(netoAPagar)}</span>
+              <span>Neto chofer</span><span style={{ color: colors.cyan }}>{fmt(netoAPagar)}</span>
             </div>
+            {row.helpers > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Ayudantes que cobran por ti ({row.helperCount}){row.helperAdvances > 0 ? ` · ${fmt(row.helpers)} − adelantos ${fmt(row.helperAdvances)}` : ""}</span><span style={{ color: colors.cyan, fontWeight: 600 }}>+ {fmt(row.helpersNet)}</span></div>}
+            {row.directHelpers > 0 && <div style={{ fontSize: 11, color: colors.textMuted }}>Ayudantes con pago directo (no pasan por ti): {fmt(row.directHelpers)}</div>}
+            {row.helpers > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700 }}><span>Total a recibir (chofer + ayudantes)</span><span style={{ color: colors.cyan }}>{fmt(totalConAyud)}</span></div>}
           </div>
         </div>
       )}
     </Card>
   );
-          }
+}
