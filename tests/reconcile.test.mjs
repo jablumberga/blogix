@@ -48,11 +48,11 @@ test("1. Nómina: lo que se paga = suma de calcDriverPay, una sola vez por viaje
 
 test("2. Cobro: pass-through + Reserva + OpEx = cobro, al centavo", () => {
   const pt = cobroPassThrough({ tripIds: [1, 2, 3, 4], trips, trucks, partners, clients, brokers: [] });
-  // propio 0 · comisión 90000 · com+gastos 90000 · reparto 60000
-  assert.equal(pt.partner, 240000); assert.equal(pt.broker, 0);
+  // propio 0 · los 3 camiones de socio: todo su flete apartado hasta liquidar
+  assert.equal(pt.partner, 300000); assert.equal(pt.broker, 0);
   const pf = allocateCobro({ amount: 400000, tripIds: [1, 2, 3, 4], trips, trucks, partners, clients, brokers: [] });
   assert.equal(pf.passThrough + pf.reserve + pf.opex, 400000);
-  assert.equal(pf.real, 160000); assert.equal(pf.reserve, 32000); assert.equal(pf.opex, 128000);
+  assert.equal(pf.real, 100000); assert.equal(pf.reserve, 20000); assert.equal(pf.opex, 80000);
 });
 
 test("3. Liquidación: pool − transferido − devuelto a OpEx = 0 en los 3 modelos; gastos cargados una sola vez", () => {
@@ -60,7 +60,8 @@ test("3. Liquidación: pool − transferido − devuelto a OpEx = 0 en los 3 mod
     const s = computeSettlement({ partner: p, period, trips, expenses, trucks, clients, brokers: [], drivers: [driver] });
     const rel = settlementRelease(s);
     assert.equal(rel.pool - rel.transfer - rel.released, 0, `${p.name}: nada queda sin destino ni se cuenta dos veces`);
-    assert.equal(rel.releasedToReserve + rel.releasedToOpex, rel.released, `${p.name}: lo retenido se reparte completo 20/80`);
+    assert.equal(rel.releasedToReserve + rel.releasedToOpex, rel.released, `${p.name}: lo retenido se reparte completo`);
+    assert.equal(rel.releasedToReserve, Math.round(rel.companyIncome * 0.2 * 100) / 100, `${p.name}: Reserva = 20 % SOLO del ingreso de la empresa`);
     // lo que se descuenta al socio son gastos reales, cada uno una vez
     const ids = s.expenseLines.map(e => e.id);
     assert.equal(new Set(ids).size, ids.length);
@@ -68,15 +69,15 @@ test("3. Liquidación: pool − transferido − devuelto a OpEx = 0 en los 3 mod
   });
   const [com, comG, rep] = results;
   // Modelo 1: socio paga su operación → nada se le descuenta salvo cargos fijos. 100000 − 10000 − 2000 = 88000
-  assert.equal(com.s.expensesTotal, 0); assert.equal(com.s.fixedTotal, 2000); assert.equal(com.s.toTransfer, 88000); assert.equal(com.rel.released, 2000); assert.equal(com.rel.releasedToReserve, 400); assert.equal(com.rel.releasedToOpex, 1600);
+  assert.equal(com.s.expensesTotal, 0); assert.equal(com.s.fixedTotal, 2000); assert.equal(com.s.toTransfer, 88000); assert.equal(com.rel.released, 12000); assert.equal(com.rel.companyIncome, 12000); assert.equal(com.rel.releasedToReserve, 2400); assert.equal(com.rel.releasedToOpex, 9600); void(com.rel.releasedToOpex, 1600);
   // Modelo 2: comisión 10000 + chofer 3100 + ayudantes 2400 + combustible 10000 descontados → 74500
-  assert.equal(comG.s.expensesTotal, 15500); assert.equal(comG.s.toTransfer, 74500); assert.equal(comG.rel.released, 15500); assert.equal(comG.rel.releasedToReserve, 3100);
+  assert.equal(comG.s.expensesTotal, 15500); assert.equal(comG.s.toTransfer, 74500); assert.equal(comG.rel.released, 25500); assert.equal(comG.rel.reimbursement, 15500); assert.equal(comG.rel.companyIncome, 10000); assert.equal(comG.rel.releasedToReserve, 2000); assert.equal(comG.rel.releasedToOpex, 23500);
   // Modelo 3: reembolso primero (chofer 2500 + ayudante 1000 + combustible 10000 = 13500), utilidad 86500 → socio 60 % = 51900
   assert.equal(rep.s.reimbursement, 13500); assert.equal(rep.s.net, 86500); assert.equal(rep.s.toTransfer, 51900);
-  assert.equal(rep.rel.pool, 60000); assert.equal(rep.rel.released, 8100, "60 % de los gastos vuelve del pool; el otro 40 % ya era ingreso real al cobrar");
-  // Identidad del modelo 3: empresa total = reembolso + 40 % de la utilidad = lo asignado al cobrar (40 % de 100k) + lo devuelto
-  const empresa = rep.s.reimbursement + rep.s.companyShare;           // 13500 + 34600 = 48100
-  assert.equal(empresa, 40000 + rep.rel.released);                    // 40000 + 8100 = 48100 ✓
+  // ingreso − gastos = 86500 → socio 60 % 51900 / empresa 40 % 34600 → Reserva 20 % de 34600 = 6920; reembolso 13500 íntegro a OpEx
+  assert.equal(rep.rel.pool, 100000); assert.equal(rep.rel.released, 13500 + 34600); assert.equal(rep.rel.companyIncome, 34600); assert.equal(rep.rel.reimbursement, 13500);
+  assert.equal(rep.rel.releasedToReserve, 6920); assert.equal(rep.rel.releasedToOpex, 13500 + 34600 - 6920);
+  assert.equal(rep.s.reimbursement + rep.s.companyShare, rep.rel.released, "la empresa retiene exactamente reembolso + su 40 %");
 });
 
 test("4. Cuentas Profit First: Income = pass-through + Reserva + OpEx; OpEx entra − sale = disponible; nada doble", () => {
@@ -93,15 +94,15 @@ test("4. Cuentas Profit First: Income = pass-through + Reserva + OpEx; OpEx entr
   const b = accountBalances({ cobros, expenses: exps });
   assert.equal(b.income, 400000);
   assert.equal(b.passThrough + (b.reserve + b.opexIn - b.passThroughReleased), 400000, "el cobro se reparte una sola vez");
-  // Ingreso real total de la empresa = lo real al cobrar (160000) + lo retenido en liquidaciones (25600); Reserva = 20 % exacto
-  assert.equal(b.real, 160000 + 25600);
-  assert.equal(b.reserve, Math.round(b.real * 0.2));
-  assert.equal(b.passThrough, 240000);
+  // Retenido en liquidaciones 12000 + 25500 + 48100 = 85600; ingreso de la empresa 12000 + 10000 + 34600 = 56600 → Reserva 11320
+  assert.equal(b.real, 100000 + 85600);
+  assert.equal(b.reserve, 20000 + 2400 + 2000 + 6920);
+  assert.equal(b.passThrough, 300000);
   assert.equal(b.passThroughOut, 88000 + 74500 + 51900);
-  assert.equal(b.passThroughReleased, 2000 + 15500 + 8100);
+  assert.equal(b.passThroughReleased, 12000 + 25500 + 48100);
   assert.equal(b.passThroughPending, 0, "después de liquidar no queda nada apartado sin destino");
-  // OpEx: entró 128000 + 80 % de 25600 retenido; salió nómina 16000 + combustible 40000
-  assert.equal(b.opexIn, 128000 + 25600 * 0.8);
+  // OpEx: entró 80000 + lo retenido menos su Reserva (los reembolsos completos); salió nómina 16000 + combustible 40000
+  assert.equal(b.opexIn, 80000 + 85600 - 11320);
   assert.equal(b.opexOut, 10600 + 5400 + 40000);
   assert.equal(b.opexAvailable, b.opexIn - b.opexOut);
   assert.equal(b.opexCommitted, 0);
@@ -114,7 +115,8 @@ test("5. Un gasto cargado al socio no se cobra dos veces: sale de OpEx una vez y
   const s = computeSettlement({ partner: p, period, trips, expenses, trucks, clients, brokers: [], drivers: [driver] });
   const charged = s.expenseLines.reduce((a, e) => a + e.amount, 0);
   const rel = settlementRelease(s);
-  assert.equal(rel.released, charged, "retiene exactamente lo que la empresa pagó, ni más ni menos");
+  assert.equal(rel.released, charged + s.commission + s.fixedTotal, "retiene lo que la empresa pagó (reembolso) más su comisión y cargos fijos");
+  assert.equal(rel.reimbursement, charged, "el reembolso repone OpEx íntegro, sin pasar por Reserva");
   assert.equal(s.companyReceives, s.commission + s.reimbursement + s.fixedTotal);
   assert.equal(s.netRevenue, s.toTransfer + s.companyReceives, "ingreso del camión = lo del socio + lo de la empresa, sin sobrante");
 });

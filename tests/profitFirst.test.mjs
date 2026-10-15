@@ -19,16 +19,14 @@ test("allocateIncome: pass-through mayor que el cobro se recorta", () => {
   assert.equal(a.passThrough, 1000); assert.equal(a.real, 0); assert.equal(a.opex, 0);
 });
 
-test("tripPassThrough: comisión (empresa 10 % del bruto) → socio 90 %; reparto 60/40 → socio 60 %; broker", () => {
+test("tripPassThrough: camión de socio → se aparta TODO el flete neto (lo de la empresa se reparte al liquidar); broker", () => {
   const trip = { revenue: 10000, brokerId: 5 }; const truck = { id: 1, partnerId: 7 };
-  assert.equal(tripPassThrough({ trip: { revenue: 10000 }, truck, partner: { id: 7, model: "commission", companyPct: 10 } }).partner, 9000);
-  assert.equal(tripPassThrough({ trip: { revenue: 10000 }, truck, partner: { id: 7, model: "profit_share", partnerSharePct: 60 } }).partner, 6000);
-  // broker normal: se aparta su comisión; socio sobre el neto menos comisión del bruto
+  assert.equal(tripPassThrough({ trip: { revenue: 10000 }, truck, partner: { id: 7, model: "commission", companyPct: 10 } }).partner, 10000);
+  assert.equal(tripPassThrough({ trip: { revenue: 10000 }, truck, partner: { id: 7, model: "profit_share", partnerSharePct: 60 } }).partner, 10000);
   const b = tripPassThrough({ trip, truck, partner: { id: 7, model: "commission", companyPct: 10 }, broker: { id: 5, commissionPct: 10 } });
-  assert.equal(b.broker, 1000); assert.equal(b.partner, 9000 - 1000); assert.equal(b.total, 9000);
-  // broker pass-through (ya venía descontado): no se aparta, pero sí reduce la base del socio
+  assert.equal(b.broker, 1000); assert.equal(b.partner, 9000); assert.equal(b.total, 10000);
   const c = tripPassThrough({ trip, truck, partner: { id: 7, model: "commission", companyPct: 10 }, broker: { id: 5, commissionPct: 10 }, brokerPassThrough: true });
-  assert.equal(c.broker, 0); assert.equal(c.partner, 8000);
+  assert.equal(c.broker, 0); assert.equal(c.partner, 9000);
   assert.equal(tripPassThrough({ trip, truck: { id: 1, partnerId: null }, partner: { id: 7, model: "commission", companyPct: 10 } }).partner, 0, "camión propio: nada al socio");
 });
 
@@ -37,22 +35,27 @@ test("cobroPassThrough + allocateCobro: mezcla de camión propio y de socio", ()
   const trucks = [{ id: 1, partnerId: null }, { id: 2, partnerId: 7 }];
   const partners = [{ id: 7, model: "commission", companyPct: 10 }];
   const pt = cobroPassThrough({ tripIds: [1, 2], trips, trucks, partners, clients: [], brokers: [] });
-  assert.equal(pt.partner, 9000); assert.equal(pt.total, 9000);
+  assert.equal(pt.partner, 10000); assert.equal(pt.total, 10000);
   const pf = allocateCobro({ amount: 20000, tripIds: [1, 2], trips, trucks, partners, clients: [], brokers: [] });
-  assert.equal(pf.real, 11000); assert.equal(pf.reserve, 2200); assert.equal(pf.opex, 8800); assert.equal(pf.passThroughPartner, 9000);
+  assert.equal(pf.real, 10000); assert.equal(pf.reserve, 2000); assert.equal(pf.opex, 8000); assert.equal(pf.passThroughPartner, 10000);
 });
 
-test("settlementRelease: lo apartado menos lo transferido es ingreso real y se reparte 20/80", () => {
-  // comisión 10 %: neto 100k, comisión 10k → pool 90k; gastos reembolsables 25k + GPS 2k → transfiere 63k → retiene 27k
-  const r = settlementRelease({ model: "commission", netRevenue: 100000, commission: 10000, toTransfer: 63000 });
-  assert.equal(r.pool, 90000); assert.equal(r.released, 27000); assert.equal(r.releasedToReserve, 5400); assert.equal(r.releasedToOpex, 21600);
-  // reparto 60/40: neto 100k → pool 60k; gastos 20k → utilidad 80k → socio 48k → retiene 12k
-  const r2 = settlementRelease({ model: "profit_share", netRevenue: 100000, partnerSharePct: 60, toTransfer: 48000 });
-  assert.equal(r2.pool, 60000); assert.equal(r2.released, 12000); assert.equal(r2.releasedToOpex, 9600);
-  // socio debe (toTransfer negativo): todo el pool se retiene
-  assert.equal(settlementRelease({ model: "commission", netRevenue: 10000, commission: 1000, toTransfer: -500 }).released, 9000);
-  // % configurable
-  assert.equal(settlementRelease({ model: "commission", netRevenue: 10000, commission: 0, toTransfer: 0 }, { reservePct: 30 }).releasedToReserve, 3000);
+test("settlementRelease: 20 % solo del ingreso de la empresa; los reembolsos reponen OpEx completos", () => {
+  // reparto 60/40: neto 100k, gastos 20k → utilidad 80k → socio 48k / empresa 32k → Reserva 6,400; OpEx 25,600 + 20k reembolso
+  const r2 = settlementRelease({ model: "profit_share", netRevenue: 100000, partnerSharePct: 60, toTransfer: 48000, companyShare: 32000, reimbursement: 20000 });
+  assert.equal(r2.pool, 100000); assert.equal(r2.released, 52000); assert.equal(r2.companyIncome, 32000); assert.equal(r2.reimbursement, 20000);
+  assert.equal(r2.releasedToReserve, 6400); assert.equal(r2.releasedToOpex, 45600);
+  // comisión + gastos 10 %: neto 100k, comisión 10k, reembolsables 25k + GPS 2k → transfiere 63k; ingreso empresa 12k → Reserva 2,400
+  const r = settlementRelease({ model: "commission_expenses", netRevenue: 100000, commission: 10000, fixedTotal: 2000, reimbursement: 25000, toTransfer: 63000 });
+  assert.equal(r.pool, 100000); assert.equal(r.released, 37000); assert.equal(r.companyIncome, 12000); assert.equal(r.releasedToReserve, 2400); assert.equal(r.releasedToOpex, 34600);
+  // comisión simple 10 %: sin gastos; ingreso empresa = comisión → 20 %
+  const c = settlementRelease({ model: "commission", netRevenue: 100000, commission: 10000, fixedTotal: 0, toTransfer: 90000 });
+  assert.equal(c.released, 10000); assert.equal(c.releasedToReserve, 2000); assert.equal(c.releasedToOpex, 8000);
+  // camión en pérdida (reparto): no se transfiere nada, utilidad 0 → Reserva 0, todo lo cobrado repone OpEx
+  const loss = settlementRelease({ model: "profit_share", netRevenue: 10000, partnerSharePct: 60, toTransfer: 0, companyShare: 0, reimbursement: 12000 });
+  assert.equal(loss.released, 10000); assert.equal(loss.releasedToReserve, 0); assert.equal(loss.releasedToOpex, 10000);
+  assert.equal(settlementRelease({ model: "commission", netRevenue: 10000, commission: 1000, toTransfer: -500 }).released, 10000);
+  assert.equal(settlementRelease({ model: "commission", netRevenue: 10000, commission: 1000, toTransfer: 9000 }, { reservePct: 30 }).releasedToReserve, 300);
 });
 
 test("accountBalances: suma asignaciones y resta gastos OpEx pagados; pass-through y override no cuentan", () => {

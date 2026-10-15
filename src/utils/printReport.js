@@ -332,61 +332,59 @@ export function invoiceSheet({ inv, client, trips = [], trucks = [], brokers = [
   return rows;
 }
 
-/** Reporte Profit First de una factura (r = buildInvoicePfReport): una página, de lo general a "qué mover". */
+/** Reporte Profit First de una factura (r = buildInvoicePfReport): ingresos → gastos → comisiones y reparto → qué mover → socios. */
 export function invoicePfReportHTML({ r, generatedBy }) {
   if (!r) return "";
-  const { inv, client, tripRows, totals, collected, pending, balance, expTotals, settlements, brokerPayouts, moves, settings } = r;
+  const { inv, client, tripRows, totals, collected, pending, balance, expRows, expTotals, settlements, brokerPayouts, moves, settings } = r;
   const pct = settings.reservePct, rest = 100 - pct;
   const m = (n) => fmt(Math.round((Number(n) || 0) * 100) / 100);
   const stateLabel = inv.status === "paid" ? "COBRADA" : inv.status === "cancelled" ? "ANULADA" : "POR COBRAR";
-  const trucksHtml = tripRows.map(t => `<tr><td>${esc(t.truck?.plate || "—")} <span class="small muted">#${esc(t.trip.id)} ${esc(t.trip.date)} · ${esc(t.trip.municipality)}</span></td>
-    <td>${esc(t.modelLabel)}${t.partner ? ` · ${esc(t.partner.name)}` : ""}<br><span class="small muted">${esc(t.modelDetail)}</span></td>
-    <td class="right">${m(t.net)}</td><td class="right">${t.partnerSetAside + t.brokerSetAside ? m(t.partnerSetAside + t.brokerSetAside) : "—"}</td><td class="right"><b>${m(t.real)}</b></td></tr>`).join("");
-  const partnersHtml = settlements.map(x => { const s = x.s, rel = x.rel; const ps = s.model === "profit_share";
-    const how = ps ? `flete ${m(s.netRevenue)} − gastos que pagó la empresa ${m(s.reimbursement)} = utilidad ${m(s.periodResult)} → socio ${s.partnerSharePct} %`
-      : `flete ${m(s.netRevenue)} − comisión ${s.commissionPct} % ${m(s.commission)}${s.reimbursement ? ` − gastos que pagó la empresa ${m(s.reimbursement)}` : ""}`;
-    return `<tr><td><b>${esc(x.partner.name)}</b> <span class="small muted">${esc(MODEL_LABEL_PF[s.model] || s.model)} · quincena ${esc(x.period.label)} · ${x.status === "paid" ? "ya transferida" : "pendiente"}</span><br><span class="small muted">${how}${x.fixedTotal ? ` · cargos fijos de la quincena aparte: ${m(x.fixedTotal)}` : ""}</span></td>
-      <td class="right"><b>${m(rel.transfer)}</b></td><td class="right">${m(rel.released)}</td><td class="right"><b>${m(rel.releasedToReserve)}</b></td><td class="right">${m(rel.releasedToOpex)}</td></tr>`; }).join("");
-  const brokersHtml = brokerPayouts.map(b => `<tr><td><b>${esc(b.broker.name)}</b> <span class="small muted">broker</span></td><td class="right"><b>${m(b.amount - b.paid)}</b></td><td class="right">—</td><td class="right">—</td><td class="right">—</td></tr>`).join("");
+  const row = (label, val, opts = {}) => `<tr><td${opts.indent ? ' style="padding-left:22px"' : ""}>${label}</td><td class="right"${opts.indent ? ' style="color:#555"' : ""}>${opts.bold ? `<b>${val}</b>` : val}</td></tr>`;
+  const incomeRows = tripRows.map(t => row(`${esc(t.trip.date)} · ${esc(t.truck?.plate || "—")} · ${esc(t.trip.municipality)} <span class="small muted">${esc(t.modelLabel)}${t.partner ? " · " + esc(t.partner.name) : ""}${t.brokerDeducted ? ` · broker −${m(t.brokerDeducted)}` : ""}</span>`, m(t.net))).join("");
+  const expByCat = new Map();
+  for (const e of expRows) { const k = `${e.exp.category}|${e.chargedToPartner ? e.partner?.name : ""}`; if (!expByCat.has(k)) expByCat.set(k, { cat: t_es[e.exp.category] || e.exp.category, partner: e.chargedToPartner ? e.partner?.name : null, amount: 0, pending: 0 }); const x = expByCat.get(k); x.amount += e.amount; if (!e.paid) x.pending += e.amount; }
+  const expenseRows = [...expByCat.values()].map(x => row(`${esc(x.cat)} <span class="small muted">${x.partner ? `reembolsable: se le descuenta a ${esc(x.partner)}` : "costo de la empresa"}${x.pending ? ` · ${m(x.pending)} pendiente` : ""}</span>`, m(x.amount))).join("");
+  const reimb = settlements.reduce((s, x) => s + x.s.reimbursement, 0);
+  const shareRows = settlements.map(x => { const s = x.s; return s.model === "profit_share"
+    ? row(`${esc(x.partner.name)} · reparto ${s.partnerSharePct}/${100 - s.partnerSharePct} <span class="small muted">utilidad ${m(s.periodResult)} (flete ${m(s.netRevenue)} − gastos ${m(s.reimbursement)})</span>`, `socio ${m(s.partnerShare)} · empresa ${m(s.companyShare)}`)
+    : row(`${esc(x.partner.name)} · comisión ${s.commissionPct} % <span class="small muted">sobre ${m(s.grossRevenue)}</span>`, `empresa ${m(s.commission)}`); }).join("")
+    + brokerPayouts.map(b => row(`${esc(b.broker.name)} · comisión de broker`, m(b.amount))).join("");
+  const companyIncome = totals.real + settlements.reduce((s, x) => s + x.rel.released, 0);
+  const passThrough = moves.onSettle.toPartners + moves.onSettle.toBrokers;
+  const pfRows = `
+    ${row(`<b>RESERVA</b> <span class="small muted">${pct} % del ingreso de la empresa (Tax · Profit · Owner's Comp)</span>`, m(moves.totalReserve), { bold: true })}
+    ${row(`al cobrar <span class="small muted">${pending.amount > 0 ? `${m(collected.reserve)} ya cobrado + ${m(pending.reserve)} cuando entre el saldo` : "Income → Reserva"}</span>`, m(collected.reserve + pending.reserve), { indent: true })}
+    ${row(`al liquidar <span class="small muted">de lo que la empresa retiene de los socios · OpEx → Reserva, a mano en Banco</span>`, m(moves.onSettle.reserve), { indent: true })}
+    ${row(`<b>OPEX</b> <span class="small muted">${rest} % del ingreso de la empresa · de aquí salen los gastos</span>`, m(moves.totalOpexIn), { bold: true })}
+    ${row(`al cobrar <span class="small muted">Income → OpEx</span>`, m(collected.opex + pending.opex), { indent: true })}
+    ${row(`al liquidar <span class="small muted">se queda en OpEx, incluye los reembolsos de gastos</span>`, m(moves.onSettle.opex), { indent: true })}
+    ${row(`<b>PASS-THROUGH</b> <span class="small muted">no es de la empresa · entra a OpEx apartado y de ahí se paga</span>`, m(passThrough), { bold: true })}
+    ${row(`socios`, m(moves.onSettle.toPartners), { indent: true })}
+    ${brokerPayouts.length ? row(`brokers`, m(moves.onSettle.toBrokers), { indent: true }) : ""}`;
+  const partnerRows = settlements.map(x => { const s = x.s, rel = x.rel; const ps = s.model === "profit_share";
+    return `<tr><td><b>${esc(x.partner.name)}</b> <span class="small muted">${esc(MODEL_LABEL_PF[s.model] || s.model)} · quincena ${esc(x.period.label)} · ${x.status === "paid" ? "ya transferida" : "pendiente"}</span><br>
+      <span class="small muted">${ps ? `flete ${m(s.netRevenue)} − gastos que pagó la empresa ${m(s.reimbursement)} = utilidad ${m(s.periodResult)} × ${s.partnerSharePct} %` : `flete ${m(s.netRevenue)} − comisión ${m(s.commission)}${s.reimbursement ? ` − gastos que pagó la empresa ${m(s.reimbursement)}` : ""}`}${x.fixedTotal ? ` · menos cargos fijos de la quincena ${m(x.fixedTotal)} (${x.fixed.map(c => esc(c.name)).join(", ")})` : ""}${s.truckLossOut > 0 ? ` · camión en pérdida ${m(s.truckLossOut)}: la financia la empresa` : ""}</span></td>
+      <td class="right"><b>${m(rel.transfer)}</b>${x.fixedTotal ? `<br><span class="small muted">${m(Math.max(0, rel.transfer - x.fixedTotal))} tras cargos fijos</span>` : ""}</td></tr>`; }).join("")
+    + brokerPayouts.map(b => `<tr><td><b>${esc(b.broker.name)}</b> <span class="small muted">broker${b.paid ? ` · ya pagado ${m(b.paid)}` : ""}</span></td><td class="right"><b>${m(b.amount - b.paid)}</b></td></tr>`).join("");
   return `
     ${companyHeaderHTML("PROFIT FIRST — FACTURA")}
     <table class="fields">
       <tr><td>Factura:</td><td><b>${esc(inv.invoiceNumber || "#" + inv.id)}</b> · ${esc(client?.companyName || "—")} · ${esc(inv.date || "")} · ${stateLabel}</td></tr>
-      <tr><td>Monto:</td><td>${m(r.invoiceAmount)} · cobrado ${m(balance.paid)} · saldo ${m(balance.balance)}</td></tr>
-      <tr><td>Regla:</td><td>lo de socios y brokers se aparta; del resto (ingreso real) ${pct} % a Reserva y ${rest} % a OpEx. Al liquidar, lo que no se le transfiere al socio es ingreso real y se reparte igual.</td></tr>
+      <tr><td>Cobro:</td><td>${m(r.invoiceAmount)} · cobrado ${m(balance.paid)} · saldo ${m(balance.balance)}</td></tr>
     </table>
-
-    <h2>1. De dónde sale el dinero</h2>
-    <table><thead><tr><th>Camión · viaje</th><th>Modelo</th><th class="right">Flete</th><th class="right">Apartado</th><th class="right">Ingreso real</th></tr></thead>
-      <tbody>${trucksHtml}</tbody>
-      <tfoot><tr><td colspan="2">Factura</td><td class="right">${m(totals.net)}</td><td class="right">${m(totals.partnerSetAside + totals.brokerSetAside)}</td><td class="right"><b>${m(totals.real)}</b></td></tr></tfoot>
-    </table>
-
-    <h2>2. Qué mover</h2>
-    <table><thead><tr><th style="width:34%">Al cobrar</th><th class="right">Cobrado ${m(collected.amount)}</th>${pending.amount > 0 ? `<th class="right">Falta ${m(pending.amount)}</th>` : ""}<th class="right">Factura completa</th></tr></thead><tbody>
-      <tr><td>Income → <b>Reserva</b> (${pct} % del ingreso real)</td><td class="right"><b>${m(collected.reserve)}</b></td>${pending.amount > 0 ? `<td class="right muted">${m(pending.reserve)}</td>` : ""}<td class="right">${m(totals.reserveFull)}</td></tr>
-      <tr><td>Income → <b>OpEx</b> (${rest} % del ingreso real)</td><td class="right"><b>${m(collected.opex)}</b></td>${pending.amount > 0 ? `<td class="right muted">${m(pending.opex)}</td>` : ""}<td class="right">${m(totals.opexFull)}</td></tr>
-      <tr><td>Income → OpEx, <b>apartado</b> para socios y brokers (no se gasta)</td><td class="right">${m(collected.passThrough)}</td>${pending.amount > 0 ? `<td class="right muted">${m(pending.passThrough)}</td>` : ""}<td class="right">${m(totals.partnerSetAside + totals.brokerSetAside)}</td></tr>
-    </tbody></table>
-
-    ${settlements.length || brokerPayouts.length ? `<table style="margin-top:10px"><thead><tr><th style="width:34%">Al liquidar la quincena (de lo apartado)</th><th class="right">Transferir al socio</th><th class="right">La empresa retiene</th><th class="right">→ Reserva ${pct} %</th><th class="right">→ OpEx</th></tr></thead>
-      <tbody>${partnersHtml}${brokersHtml}</tbody>
-      <tfoot><tr><td>Total</td><td class="right"><b>${m(moves.onSettle.toPartners + moves.onSettle.toBrokers)}</b></td><td class="right">${m(moves.onSettle.reserve + moves.onSettle.opex)}</td><td class="right"><b>${m(moves.onSettle.reserve)}</b></td><td class="right">${m(moves.onSettle.opex)}</td></tr></tfoot>
-    </table>
-    <div class="small muted" style="margin-top:4px">Lo apartado ya está en OpEx: de ahí se transfiere al socio y el "→ Reserva" se mueve a mano en Banco (OpEx → Reserva).</div>` : `<div class="small muted">Todos los viajes son de camiones propios: no hay liquidación de socios.</div>`}
-
-    <table style="margin-top:10px"><thead><tr><th style="width:34%">Pendiente de pagar por estos viajes (sale de OpEx)</th><th class="right">Monto</th></tr></thead><tbody>
-      <tr><td>Nómina de choferes y ayudantes</td><td class="right">${m(moves.payrollPending)}</td></tr>
-      <tr><td><b>Suplidores</b> a crédito (apartar en la cuenta Suplidores)</td><td class="right"><b>${m(moves.suppliers)}</b></td></tr>
-      <tr><td>Otros gastos pendientes</td><td class="right">${m(moves.otherPending)}</td></tr>
-      <tr><td class="muted">Ya pagado por estos viajes</td><td class="right muted">${m(expTotals.paid)}</td></tr>
-    </tbody></table>
-
-    <div class="box" style="margin-top:10px">
-      <div>Reserva que genera esta factura (al cobrar ${m(collected.reserve + pending.reserve)} + al liquidar ${m(moves.onSettle.reserve)}): <b>${m(moves.totalReserve)}</b></div>
-      <div>Gastos de la empresa en estos viajes: ${m(expTotals.total)} (${m(expTotals.chargedToPartner)} se recuperan de los socios)</div>
-      <div style="font-size:14px">Margen de la empresa en esta factura: <b>${m(moves.margin)}</b></div>
-    </div>
-    <div class="small muted" style="margin-top:6px">Generado ${new Date().toLocaleString("es-DO")}${generatedBy ? ` por ${esc(generatedBy)}` : ""} · verificación: flete ${m(r.check.net)} = apartado ${m(totals.partnerSetAside + totals.brokerSetAside)} + ingreso real ${m(totals.real)}.</div>`;
+    <h2>1. Ingresos</h2>
+    <table><tbody>${incomeRows}</tbody><tfoot>${row("Total ingresos (flete neto)", m(totals.net), { bold: true })}</tfoot></table>
+    <h2>2. Gastos de estos viajes</h2>
+    <table><tbody>${expenseRows || row(`<span class="muted">Sin gastos registrados</span>`, "—")}</tbody>
+      <tfoot>${row("Total gastos", m(expTotals.total), { bold: true })}${row(`se reembolsan a la empresa al liquidar a los socios`, m(reimb), { indent: true })}${row(`costo de la empresa`, m(expTotals.total - reimb), { indent: true })}${expTotals.pending ? row(`pendientes de pagar <span class="small muted">nómina ${m(expTotals.payrollPending)} · suplidores a crédito ${m(expTotals.supplierCredit)}</span>`, m(expTotals.pending), { indent: true }) : ""}</tfoot></table>
+    <h2>3. Comisiones y reparto</h2>
+    <table><tbody>${shareRows || row(`<span class="muted">Camiones propios: todo el ingreso es de la empresa</span>`, "—")}</tbody>
+      <tfoot>${row(`Ingreso de la empresa <span class="small muted">camiones propios ${m(tripRows.filter(t => !t.partner).reduce((s, t) => s + t.real, 0))} + comisiones y su parte ${m(settlements.reduce((s, x) => s + (x.s.model === "profit_share" ? (x.s.companyShare || 0) : (x.s.commission || 0)), 0))} + reembolsos ${m(reimb)}</span>`, m(companyIncome), { bold: true })}${row("Para socios y brokers", m(passThrough), { bold: true })}</tfoot></table>
+    <h2>4. Profit First — qué mover a cada cuenta</h2>
+    <table><tbody>${pfRows}</tbody><tfoot>${row("Total = ingresos de la factura", m(moves.totalReserve + moves.totalOpexIn + passThrough), { bold: true })}</tfoot></table>
+    <h2>5. Socios: qué se le paga a cada quien por esta factura</h2>
+    <table><thead><tr><th>Socio</th><th class="right">A transferir</th></tr></thead><tbody>${partnerRows || `<tr><td class="muted" colspan="2">No hay socios ni brokers en esta factura.</td></tr>`}</tbody></table>
+    <div class="box" style="margin-top:10px"><div style="font-size:14px">Margen de la empresa en esta factura <span class="small muted">(ingreso de la empresa ${m(companyIncome)} − gastos ${m(expTotals.total)})</span>: <b>${m(moves.margin)}</b></div></div>
+    <div class="small muted" style="margin-top:6px">Regla: lo de socios y brokers se aparta; del ingreso de la empresa, ${pct} % a Reserva y ${rest} % a OpEx. Generado ${new Date().toLocaleString("es-DO")}${generatedBy ? ` por ${esc(generatedBy)}` : ""}.</div>`;
 }
 const MODEL_LABEL_PF = { own: "Camión propio", commission: "Comisión", commission_expenses: "Comisión + gastos", profit_share: "Reparto de utilidad" };
