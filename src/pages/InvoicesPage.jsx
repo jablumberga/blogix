@@ -7,6 +7,7 @@ import { invoiceHTML, invoiceSheet, openPrintWindow, invoicePfReportHTML } from 
 import { DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 import { invoiceBalance, buildAbono, invoiceStatusWith, invoiceCancelBlock } from "../utils/cobros.js";
 import { buildInvoicePfReport } from "../utils/pfReport.js";
+import { tripNetRevenue } from "../utils/partnerModels.js";
 import SortBar from "../components/SortBar.jsx";
 import { sortRecords, DEFAULT_SORT } from "../utils/sortList.js";
 import CobroModal from "../components/CobroModal.jsx";
@@ -329,18 +330,26 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
     : (inv.tripIds || []).reduce((s, tid) => s + (tripRevMap.get(tid) || 0), 0);
 
   // ── Summary stats ────────────────────────────────────────────────────────
+  // Las tarjetas respetan el filtro de cliente. «Listo para facturar» y «Docs pendientes» usan la misma regla del
+  // pipeline del panel: viajes sin factura, con documentos recibidos por oficina (listo) o sin recibir (pendiente).
   const stats = useMemo(() => {
-    const active = invoices.filter(inv => inv.status !== "cancelled");
+    const byClient = (clientId) => filterClient === "all" || Number(clientId) === Number(filterClient);
+    const active = invoices.filter(inv => inv.status !== "cancelled" && byClient(inv.clientId));
     const pending = active.filter(inv => inv.status !== "paid");
-    const overdue = pending.filter(inv => inv.dueDate && inv.dueDate < todayStr);
     const bal = (inv) => invoiceBalance(inv, cobros, { trips, clients, brokers }).balance;
+    const invoicedIds = new Set(invoices.filter(inv => inv.status !== "cancelled").flatMap(inv => inv.tripIds || []));
+    const cMap = new Map(clients.map(c => [c.id, c])), bMap = new Map((brokers || []).map(b => [b.id, b]));
+    const unbilled = trips.filter(tr => tr.status !== "cancelled" && (tr.revenue || 0) > 0 && !invoicedIds.has(tr.id) && byClient(tr.clientId));
+    const net = (list) => list.reduce((s, tr) => s + tripNetRevenue(tr, cMap, bMap), 0);
+    const ready = unbilled.filter(tr => tr.docStatus === "delivered"), noDocs = unbilled.filter(tr => tr.docStatus !== "delivered");
     return {
       totalInvoiced: active.reduce((s, inv) => s + invAmt(inv), 0),
-      totalPending:  pending.reduce((s, inv) => s + bal(inv), 0),
-      totalOverdue:  overdue.reduce((s, inv) => s + bal(inv), 0),
+      totalPending:  pending.reduce((s, inv) => s + bal(inv), 0), pendingCount: pending.length,
+      ready: net(ready), readyCount: ready.length,
+      noDocs: net(noDocs), noDocsCount: noDocs.length,
       count: active.length,
     };
-  }, [invoices, cobros, tripRevMap, todayStr]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [invoices, cobros, tripRevMap, trips, clients, brokers, filterClient]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Filtered list ────────────────────────────────────────────────────────
   const INVOICE_SORTS = [["date", "Fecha"], ["invoiceNumber", "# factura"], ["client", "Cliente"], ["amount", "Monto"], ["balance", "Saldo"], ["dueDate", "Vencimiento"], ["status", "Estado"], ["trips", "Nº de viajes"]].map(([key, label]) => ({ key, label }));
@@ -357,10 +366,10 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
 
     {/* Stats */}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 16 }}>
-      <StatCard icon={FileText}      label="Total Facturado"  value={fmt(stats.totalInvoiced)} color={colors.accent} />
-      <StatCard icon={Clock}         label="Por Cobrar"       value={fmt(stats.totalPending)}  color={colors.orange} />
-      <StatCard icon={AlertCircle}   label="Vencidas"         value={fmt(stats.totalOverdue)}  color={colors.red} />
-      <StatCard icon={CheckCircle2}  label="Facturas Activas" value={String(stats.count)}      color={colors.green} />
+      <StatCard icon={FileText}      label={`Total Facturado${filterClient !== "all" ? " · " + (clients.find(c => c.id === Number(filterClient))?.companyName || "") : ""}`} value={fmt(stats.totalInvoiced)} color={colors.accent} sub={`${stats.count} factura${stats.count !== 1 ? "s" : ""}`} />
+      <StatCard icon={Clock}         label="Por Cobrar"           value={fmt(stats.totalPending)} color={colors.orange} sub={`${stats.pendingCount} factura${stats.pendingCount !== 1 ? "s" : ""} con saldo`} />
+      <StatCard icon={CheckCircle2}  label="Listo para Facturar"  value={fmt(stats.ready)}        color={colors.green}  sub={`${stats.readyCount} viaje${stats.readyCount !== 1 ? "s" : ""} con docs, sin factura`} />
+      <StatCard icon={AlertCircle}   label="Docs Pendientes"      value={fmt(stats.noDocs)}       color={colors.yellow} sub={`${stats.noDocsCount} viaje${stats.noDocsCount !== 1 ? "s" : ""} sin docs recibidos`} />
     </div>
 
     {/* Filters */}
