@@ -41,7 +41,7 @@ export function buildCompanionTrip({ trip, companionDriverId, companionTruckId, 
   // Cliente que no lleva ayudantes o los paga él: 0 ayudantes a cargo de la empresa
   if (clientSkipsHelpers(client)) companion.numHelpers = 0;
   const calc = calcDriverPay({ driver, trip: companion, truck, clientId: companion.clientId });
-  companion.numHelpers = calc.numHelpers; companion.helperPayEach = calc.helperEach;
+  companion.numHelpers = calc.numHelpers; companion.helperPayEach = null; // el tarifario del compañero decide; nunca se congela el valor de hoy
   // Tripulación fija del camión del compañero (si tiene); el resto, por el chofer como siempre
   const already = new Set((trip.helpers || []).map(h => Number(h?.ayudanteId)).filter(Boolean));
   const crew0 = crewSlots(truck, ayudantes);

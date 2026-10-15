@@ -17,6 +17,7 @@ test("compañero: misma referencia/fecha/cliente/destino, tarifa de SU camión (
   assert.equal(b.trip.revenue, 45000, "T2 cobra la tarifa T2 del cliente"); assert.equal(b.revenueEstimated, false);
   assert.equal(b.trip.joint, true); assert.equal(b.trip.jointWith, 10); assert.equal(b.trip.jointAuto, true);
   assert.equal(b.trip.numHelpers, 2, "T2 → 2 ayudantes por defecto");
+  assert.equal(b.trip.helperPayEach, null, "no se congela el pago de ayudante: el tarifario decide (un 0 congelado dejaba a los ayudantes sin cobrar)");
   assert.deepEqual(b.expenses.map(e => [e.id, e.category, e.amount, e.driverId, e.tripId]), [[50, "driverPay", 2600 + 200, 2, 11], [51, "helper", 2 * (1200 + 200), 2, 11]], "dieta 600 repartida entre chofer y 2 ayudantes");
   assert.equal(clientRateFor(clients[0], trip, trucks[0]), 30000);
 });
