@@ -44,11 +44,12 @@ export function allocateIncome({ amount = 0, passThrough = 0, reimbursement = 0,
 }
 
 /**
- * Parte del ingreso de un viaje que NO es de la empresa (va al socio o al broker).
+ * Parte del ingreso de un viaje que NO se reparte todavía (va al socio o al broker).
  *  - broker pass-through (cliente con brokerPassThrough): ya venía descontado del cobro → no se aparta
  *  - broker normal: se aparta su comisión (se le paga aparte, gasto pass-through)
- *  - socio: lo que nominalmente le toca según el modelo; los gastos que la empresa
- *    le descuente después vuelven a OpEx en la liquidación (settlementRelease).
+ *  - camión de socio: se aparta TODO el flete neto. Lo de la empresa (comisión, cargos fijos o su % de la utilidad)
+ *    solo se conoce al liquidar la quincena y ahí pasa por el Profit First (settlementRelease); los reembolsos de
+ *    gastos que la empresa adelantó vuelven íntegros a OpEx.
  */
 export function tripPassThrough({ trip, truck, partner, broker, brokerPassThrough = false }) {
   const revenue = Number(trip?.revenue) || 0;
@@ -58,10 +59,7 @@ export function tripPassThrough({ trip, truck, partner, broker, brokerPassThroug
   const netRevenue = revenue - brokerPart;          // lo que realmente llega por el viaje
   const brokerSetAside = brokerPassThrough ? 0 : brokerPart;
   let partnerPart = 0;
-  if (partner && truck && truck.partnerId === partner.id) {
-    if (partner.model === "profit_share") partnerPart = Math.round(netRevenue * (Number(partner.partnerSharePct) || 0) / 100);
-    else partnerPart = Math.max(0, netRevenue - Math.round(revenue * (Number(partner.companyPct) || 0) / 100));
-  }
+  if (partner && truck && truck.partnerId === partner.id) partnerPart = Math.max(0, netRevenue);
   return { partner: partnerPart, broker: brokerSetAside, total: partnerPart + brokerSetAside };
 }
 
@@ -94,21 +92,29 @@ export function allocateCobro({ amount, tripIds, trips, trucks, partners, client
 }
 
 /**
- * Liquidación de socio: lo apartado como pass-through para esa quincena (pool) vs lo que
- * realmente se transfiere. La diferencia (gastos reembolsados, cargos fijos) es ingreso real
- * de la empresa y se reparte igual que cualquier ingreso: % a Reserva, el resto a OpEx.
+ * Liquidación de socio (Profit First sobre lo que la empresa GANA, no sobre el flete):
+ *   pool      = todo el flete neto de la quincena, apartado al cobrar
+ *   transfer  = lo que de verdad se le transfiere al socio
+ *   released  = pool − transfer = reembolsos de gastos + ingreso de la empresa
+ *   ingreso de la empresa = su % de la utilidad (reparto) o comisión + cargos fijos (comisión)
+ *   Reserva   = % Profit First SOLO del ingreso de la empresa; los reembolsos reponen OpEx completos
  */
 export function settlementPool(s) {
   if (!s) return 0;
-  if (s.model === "profit_share") return Math.round((s.netRevenue || 0) * (Number(s.partnerSharePct) || 0) / 100);
-  return Math.max(0, (s.netRevenue || 0) - (s.commission || 0));
+  return Math.max(0, Number(s.netRevenue) || 0);
+}
+export function settlementCompanyIncome(s) {
+  if (!s) return 0;
+  if (s.model === "profit_share") return Math.max(0, Number(s.companyShare) || 0);
+  return Math.max(0, (Number(s.commission) || 0) + (Number(s.fixedTotal) || 0));
 }
 export function settlementRelease(s, settings = DEFAULT_PF_SETTINGS) {
   const pool = settlementPool(s);
   const transfer = Math.max(0, Number(s?.toTransfer) || 0);
   const released = round2(Math.max(0, pool - transfer));
-  const releasedToReserve = round2(released * (Number(settings?.reservePct) || 0) / 100);
-  return { pool, transfer, released, releasedToReserve, releasedToOpex: round2(released - releasedToReserve) };
+  const companyIncome = round2(Math.min(released, settlementCompanyIncome(s)));
+  const releasedToReserve = round2(companyIncome * (Number(settings?.reservePct) || 0) / 100);
+  return { pool, transfer, released, companyIncome, reimbursement: round2(Math.max(0, released - companyIncome)), releasedToReserve, releasedToOpex: round2(released - releasedToReserve) };
 }
 
 /** Asignación de un cobro ya registrado (usa la guardada; si no existe, estima sin pass-through). */

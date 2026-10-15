@@ -147,7 +147,7 @@ function SettlementCard({ s, partner, status, notDelivered = 0, isPartnerView, o
           ? <FRow label="Pérdida del camión → pasa a la siguiente quincena (no la paga el socio)" value={s.carryOut} valueColor={colors.orange} />
           : <FRow label="Queda debiendo el socio → pasa a la siguiente quincena" value={s.carryOut} valueColor={colors.red} />)}
         {!isPartnerView && <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, background: PURPLE + "14", fontSize: 11, color: colors.textMuted, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <PiggyBank size={12} color={PURPLE} /><b style={{ color: PURPLE }}>Profit First:</b> apartado para el socio al cobrar {fmt(rel.pool)} · se transfiere {fmt(rel.transfer)} · la empresa retiene {fmt(rel.released)} → <span style={{ color: PURPLE }}>Reserva {fmt(rel.releasedToReserve)}</span> · <span style={{ color: colors.cyan }}>OpEx {fmt(rel.releasedToOpex)}</span>.
+          <PiggyBank size={12} color={PURPLE} /><b style={{ color: PURPLE }}>Profit First:</b> apartado al cobrar {fmt(rel.pool)} · se transfiere al socio {fmt(rel.transfer)} · la empresa retiene {fmt(rel.released)}{rel.reimbursement ? <> = reembolso de gastos {fmt(rel.reimbursement)} (repone OpEx) + ingreso de la empresa {fmt(rel.companyIncome)}</> : null} → <span style={{ color: PURPLE }}>Reserva {fmt(rel.releasedToReserve)}</span> · <span style={{ color: colors.cyan }}>OpEx {fmt(rel.releasedToOpex)}</span> <span title="El 20 % se aparta solo de lo que la empresa gana (comisión, cargos fijos o su parte de la utilidad); los reembolsos reponen OpEx completos. El traspaso OpEx → Reserva se hace a mano en Banco.">ⓘ</span>
         </div>}
       </div>
 

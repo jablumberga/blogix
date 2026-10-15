@@ -169,14 +169,14 @@ d = await data();
 let bal = invoiceBalance(d.invoices[0], d.cobros, { trips: d.trips, clients: d.clients, brokers: d.brokers });
 C("7.2 abono 10,000 → saldo 6,500, factura sigue enviada", bal.paid === 10000 && bal.balance === 6500 && d.invoices[0].status === "sent");
 const ab1 = d.cobros[0];
-// pass-through esperado: Joan (Eudy profit_share 50 % de 5500 = 2750) + Emil (Robinson comisión 20 % → socio 4400) = 7150 total; proporcional 10000/16500
-const ptFull = 2750 + 4400;
+// pass-through esperado (método B): los 2 viajes de camiones de socio se apartan completos (5500 + 5500 = 11000); proporcional 10000/16500
+const ptFull = 5500 + 5500;
 C("7.3 Profit First del abono: pass-through proporcional, 20 % del real a Reserva", Math.abs(ab1.pf.passThrough - Math.round(ptFull * 10000 / 16500 * 100) / 100) < 1 && Math.abs(ab1.pf.reserve - (10000 - ab1.pf.passThrough) * 0.2) < 0.05, `pt=${ab1.pf.passThrough} real=${ab1.pf.real} res=${ab1.pf.reserve} opex=${ab1.pf.opex}`);
 await rowI.getByRole("button", { name: /Cobrar/ }).click(); await sleep(400);
 await page.getByRole("button", { name: "Registrar cobro" }).last().click(); await sleep(3000);
 d = await data(); bal = invoiceBalance(d.invoices[0], d.cobros, { trips: d.trips, clients: d.clients, brokers: d.brokers });
 C("7.4 segundo abono salda la factura → cobrada", bal.balance === 0 && d.invoices[0].status === "paid" && d.cobros.length === 2);
-C("7.5 suma de pass-through de los 2 abonos = pass-through total (7,150)", Math.abs(d.cobros.reduce((s, c) => s + c.pf.passThrough, 0) - ptFull) < 0.05, String(d.cobros.reduce((s, c) => s + c.pf.passThrough, 0)));
+C("7.5 suma de pass-through de los 2 abonos = pass-through total (11,000)", Math.abs(d.cobros.reduce((s, c) => s + c.pf.passThrough, 0) - ptFull) < 0.05, String(d.cobros.reduce((s, c) => s + c.pf.passThrough, 0)));
 await shot(page, "F07-factura-cobrada");
 
 // ── 8. LIQUIDACIONES: Eudy (profit share) y Robinson (comisión + gastos + GPS) ────
@@ -198,8 +198,10 @@ d = await data();
 const ps = d.expenses.filter(e => e.category === "partner_settlement");
 C("8.5 liquidaciones transferidas → gastos pass-through pagados (200 y 1,600), sin gastos en 0", ps.length === 2 && ps.some(e => e.amount === 200) && ps.some(e => e.amount === 1600), ps.map(e => `${e.partnerId}:${e.amount}:${e.status}`).join(", "));
 const psE = ps.find(e => e.amount === 200), psR = ps.find(e => e.amount === 1600);
-C("8.6 lo retenido se libera 20/80: Eudy pool 2,750 − 200 = 2,550 → 510 Reserva / 2,040 OpEx", psE?.released === 2550 && psE?.releasedToReserve === 510 && psE?.releasedToOpex === 2040, JSON.stringify({ r: psE?.released, rr: psE?.releasedToReserve, ro: psE?.releasedToOpex }));
-C("8.7 Robinson pool 4,400 − 1,600 = 2,800 → 560 / 2,240", psR?.released === 2800 && psR?.releasedToReserve === 560 && psR?.releasedToOpex === 2240);
+// B: Eudy retiene 5,500 − 200 = 5,300 = reembolso 5,100 (repone OpEx) + su mitad 200 → Reserva 40 / OpEx 5,260
+C("8.6 Eudy: lo retenido 5,300 = reembolso 5,100 a OpEx + parte empresa 200 → Reserva 40 / OpEx 5,260", psE?.released === 5300 && psE?.releasedToReserve === 40 && psE?.releasedToOpex === 5260, JSON.stringify({ r: psE?.released, rr: psE?.releasedToReserve, ro: psE?.releasedToOpex }));
+// B: Robinson retiene 5,500 − 1,600 = 3,900 = reembolso 1,800 + comisión 1,100 + GPS 1,000 → Reserva 20 % de 2,100 = 420 / OpEx 3,480
+C("8.7 Robinson: lo retenido 3,900 = reembolso 1,800 a OpEx + comisión y GPS 2,100 → Reserva 420 / OpEx 3,480", psR?.released === 3900 && psR?.releasedToReserve === 420 && psR?.releasedToOpex === 3480, JSON.stringify({ r: psR?.released, rr: psR?.releasedToReserve, ro: psR?.releasedToOpex }));
 C("8.8 estados de liquidación guardados como paid (incluye quincena solo-GPS que arrastra)", Object.values(d.settlementStatus).filter(v => v === "paid").length >= 2, JSON.stringify(d.settlementStatus));
 
 // ── 9. GUARDAS cruzadas ──────────────────────────────────────────────────────────
