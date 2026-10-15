@@ -1,372 +1,372 @@
 {
-  "name": "General",
-  "note": "Tarifario de choferes vigente desde 2026-10-04. Columnas: provincia, municipio, chofer, ayudante (cada uno), dieta total del equipo (se reparte chofer + ayudantes). Destinos que solo existen en un tamaño quedan en 0 en el otro (el app usa la tarifa del tamaño que exista).",
-  "T1": [
-    [
-      "Santiago",
-      "Santiago de los Caballeros",
-      1000,
-      1000,
-      0
-    ],
-    [
-      "Santiago",
-      "Tamboril",
-      1000,
-      1000,
-      0
-    ],
-    [
-      "Santiago",
-      "Villa González",
-      1000,
-      1000,
-      300
-    ],
-    [
-      "Espaillat",
-      "Moca",
-      1000,
-      1000,
-      300
-    ],
-    [
-      "Valverde",
-      "Esperanza",
-      1200,
-      1100,
-      300
-    ],
-    [
-      "Santiago",
-      "Navarrete",
-      1000,
-      1000,
-      300
-    ],
-    [
-      "Hermanas Mirabal",
-      "Salcedo",
-      1200,
-      1100,
-      300
-    ],
-    [
-      "Hermanas Mirabal",
-      "Villa Tapia",
-      1200,
-      1100,
-      300
-    ],
-    [
-      "La Vega",
-      "La Vega",
-      1300,
-      1200,
-      300
-    ],
-    [
-      "Valverde",
-      "Mao",
-      1500,
-      1300,
-      300
-    ],
-    [
-      "Monseñor Nouel",
-      "Bonao",
-      1500,
-      1300,
-      300
-    ],
-    [
-      "Sánchez Ramírez",
-      "Cotuí",
-      1500,
-      1300,
-      300
-    ],
-    [
-      "Duarte",
-      "San Francisco de Macorís",
-      1600,
-      1300,
-      300
-    ],
-    [
-      "María Trinidad Sánchez",
-      "Nagua",
-      1800,
-      1300,
-      300
-    ],
-    [
-      "Samaná",
-      "Santa Bárbara de Samaná",
-      2200,
-      1400,
-      400
-    ],
-    [
-      "La Vega",
-      "Jarabacoa",
-      1400,
-      1000,
-      300
-    ],
-    [
-      "Puerto Plata",
-      "Puerto Plata",
-      1500,
-      1200,
-      400
-    ],
-    [
-      "Puerto Plata",
-      "Cabarete",
-      1500,
-      1200,
-      400
-    ],
-    [
-      "Espaillat",
-      "Gaspar Hernández",
-      1500,
-      1200,
-      400
-    ],
-    [
-      "La Vega",
-      "Constanza",
-      2100,
-      1500,
-      400
-    ],
-    [
-      "Santiago Rodríguez",
-      "Villa Los Almácigos",
-      1800,
-      1300,
-      400
-    ],
-    [
-      "Monte Cristi",
-      "Monte Cristi",
-      2200,
-      1500,
-      400
-    ],
-    [
-      "Dajabón",
-      "Dajabón",
-      2200,
-      1500,
-      400
-    ],
-    [
-      "Dajabón",
-      "Restauración",
-      2200,
-      1500,
-      400
-    ],
-    [
-      "Santo Domingo / Distrito Nacional",
-      "Santo Domingo de Guzmán",
-      2200,
-      1500,
-      400
-    ],
-    [
-      "Santo Domingo / Distrito Nacional",
-      "Santo Domingo Este",
-      2200,
-      1500,
-      400
-    ],
-    [
-      "Santo Domingo / Distrito Nacional",
-      "Santo Domingo Norte",
-      2200,
-      1500,
-      400
-    ],
-    [
-      "Santo Domingo / Distrito Nacional",
-      "Santo Domingo Oeste",
-      2200,
-      1500,
-      400
-    ],
-    [
-      "Santo Domingo / Distrito Nacional",
-      "Centro Distribución Santo Domingo",
-      2200,
-      1500,
-      400
-    ]
+ "name": "General",
+ "note": "Tarifario de choferes vigente desde 2026-10-04. Columnas: provincia, municipio, chofer, ayudante (cada uno), dieta total del equipo (se reparte chofer + ayudantes). Destinos que solo existen en un tamaño quedan en 0 en el otro (el app usa la tarifa del tamaño que exista). · T2 corregido 2026-10-15 (chofer/ayudante/dieta según tabla de Alexander)",
+ "T1": [
+  [
+   "Santiago",
+   "Santiago de los Caballeros",
+   1000,
+   1000,
+   0
   ],
-  "T2": [
-    [
-      "Santiago",
-      "Santiago de los Caballeros",
-      2000,
-      1500,
-      0
-    ],
-    [
-      "Santiago",
-      "Navarrete",
-      1200,
-      900,
-      500
-    ],
-    [
-      "Valverde",
-      "Esperanza",
-      1700,
-      1300,
-      500
-    ],
-    [
-      "La Vega",
-      "La Vega",
-      1700,
-      1300,
-      500
-    ],
-    [
-      "Valverde",
-      "Mao",
-      1700,
-      1300,
-      500
-    ],
-    [
-      "Duarte",
-      "San Francisco de Macorís",
-      1700,
-      1300,
-      500
-    ],
-    [
-      "La Vega",
-      "Constanza",
-      1700,
-      1300,
-      600
-    ],
-    [
-      "Espaillat",
-      "Gaspar Hernández",
-      1700,
-      1300,
-      600
-    ],
-    [
-      "Samaná",
-      "Santa Bárbara de Samaná",
-      1700,
-      1300,
-      600
-    ],
-    [
-      "Santiago Rodríguez",
-      "San Ignacio de Sabaneta",
-      1700,
-      1300,
-      500
-    ],
-    [
-      "Puerto Plata",
-      "Puerto Plata",
-      1700,
-      1300,
-      500
-    ],
-    [
-      "Puerto Plata",
-      "Cabarete",
-      1700,
-      1300,
-      500
-    ],
-    [
-      "Santo Domingo / Distrito Nacional",
-      "Santo Domingo de Guzmán",
-      1700,
-      1300,
-      1000
-    ],
-    [
-      "Santo Domingo / Distrito Nacional",
-      "Santo Domingo Este",
-      1700,
-      1300,
-      1000
-    ],
-    [
-      "Santo Domingo / Distrito Nacional",
-      "Santo Domingo Norte",
-      1700,
-      1300,
-      1000
-    ],
-    [
-      "Santo Domingo / Distrito Nacional",
-      "Santo Domingo Oeste",
-      1700,
-      1300,
-      1000
-    ],
-    [
-      "Santo Domingo / Distrito Nacional",
-      "Centro Distribución Santo Domingo",
-      1700,
-      1300,
-      1000
-    ],
-    [
-      "Dajabón",
-      "Dajabón",
-      1700,
-      1300,
-      1000
-    ],
-    [
-      "Dajabón",
-      "Restauración",
-      1700,
-      1300,
-      1000
-    ],
-    [
-      "Elías Piña",
-      "Comendador",
-      1700,
-      1500,
-      1500
-    ],
-    [
-      "Independencia",
-      "Jimaní",
-      1700,
-      1500,
-      1500
-    ],
-    [
-      "Pedernales",
-      "Pedernales",
-      1700,
-      1500,
-      1500
-    ],
-    [
-      "San Juan",
-      "San Juan de la Maguana",
-      1700,
-      1500,
-      1500
-    ]
+  [
+   "Santiago",
+   "Tamboril",
+   1000,
+   1000,
+   0
+  ],
+  [
+   "Santiago",
+   "Villa González",
+   1000,
+   1000,
+   300
+  ],
+  [
+   "Espaillat",
+   "Moca",
+   1000,
+   1000,
+   300
+  ],
+  [
+   "Valverde",
+   "Esperanza",
+   1200,
+   1100,
+   300
+  ],
+  [
+   "Santiago",
+   "Navarrete",
+   1000,
+   1000,
+   300
+  ],
+  [
+   "Hermanas Mirabal",
+   "Salcedo",
+   1200,
+   1100,
+   300
+  ],
+  [
+   "Hermanas Mirabal",
+   "Villa Tapia",
+   1200,
+   1100,
+   300
+  ],
+  [
+   "La Vega",
+   "La Vega",
+   1300,
+   1200,
+   300
+  ],
+  [
+   "Valverde",
+   "Mao",
+   1500,
+   1300,
+   300
+  ],
+  [
+   "Monseñor Nouel",
+   "Bonao",
+   1500,
+   1300,
+   300
+  ],
+  [
+   "Sánchez Ramírez",
+   "Cotuí",
+   1500,
+   1300,
+   300
+  ],
+  [
+   "Duarte",
+   "San Francisco de Macorís",
+   1600,
+   1300,
+   300
+  ],
+  [
+   "María Trinidad Sánchez",
+   "Nagua",
+   1800,
+   1300,
+   300
+  ],
+  [
+   "Samaná",
+   "Santa Bárbara de Samaná",
+   2200,
+   1400,
+   400
+  ],
+  [
+   "La Vega",
+   "Jarabacoa",
+   1400,
+   1000,
+   300
+  ],
+  [
+   "Puerto Plata",
+   "Puerto Plata",
+   1500,
+   1200,
+   400
+  ],
+  [
+   "Puerto Plata",
+   "Cabarete",
+   1500,
+   1200,
+   400
+  ],
+  [
+   "Espaillat",
+   "Gaspar Hernández",
+   1500,
+   1200,
+   400
+  ],
+  [
+   "La Vega",
+   "Constanza",
+   2100,
+   1500,
+   400
+  ],
+  [
+   "Santiago Rodríguez",
+   "Villa Los Almácigos",
+   1800,
+   1300,
+   400
+  ],
+  [
+   "Monte Cristi",
+   "Monte Cristi",
+   2200,
+   1500,
+   400
+  ],
+  [
+   "Dajabón",
+   "Dajabón",
+   2200,
+   1500,
+   400
+  ],
+  [
+   "Dajabón",
+   "Restauración",
+   2200,
+   1500,
+   400
+  ],
+  [
+   "Santo Domingo / Distrito Nacional",
+   "Santo Domingo de Guzmán",
+   2200,
+   1500,
+   400
+  ],
+  [
+   "Santo Domingo / Distrito Nacional",
+   "Santo Domingo Este",
+   2200,
+   1500,
+   400
+  ],
+  [
+   "Santo Domingo / Distrito Nacional",
+   "Santo Domingo Norte",
+   2200,
+   1500,
+   400
+  ],
+  [
+   "Santo Domingo / Distrito Nacional",
+   "Santo Domingo Oeste",
+   2200,
+   1500,
+   400
+  ],
+  [
+   "Santo Domingo / Distrito Nacional",
+   "Centro Distribución Santo Domingo",
+   2200,
+   1500,
+   400
   ]
+ ],
+ "T2": [
+  [
+   "Santiago",
+   "Santiago de los Caballeros",
+   1200,
+   900,
+   0
+  ],
+  [
+   "Santiago",
+   "Navarrete",
+   1200,
+   900,
+   500
+  ],
+  [
+   "Valverde",
+   "Esperanza",
+   1500,
+   1000,
+   500
+  ],
+  [
+   "La Vega",
+   "La Vega",
+   1500,
+   1000,
+   500
+  ],
+  [
+   "Valverde",
+   "Mao",
+   1700,
+   1000,
+   500
+  ],
+  [
+   "Duarte",
+   "San Francisco de Macorís",
+   1700,
+   1000,
+   500
+  ],
+  [
+   "La Vega",
+   "Constanza",
+   2100,
+   1500,
+   600
+  ],
+  [
+   "Espaillat",
+   "Gaspar Hernández",
+   2000,
+   1200,
+   600
+  ],
+  [
+   "Samaná",
+   "Santa Bárbara de Samaná",
+   2500,
+   1300,
+   600
+  ],
+  [
+   "Santiago Rodríguez",
+   "San Ignacio de Sabaneta",
+   2000,
+   1100,
+   500
+  ],
+  [
+   "Puerto Plata",
+   "Puerto Plata",
+   2000,
+   1100,
+   500
+  ],
+  [
+   "Puerto Plata",
+   "Cabarete",
+   2000,
+   1100,
+   500
+  ],
+  [
+   "Santo Domingo / Distrito Nacional",
+   "Santo Domingo de Guzmán",
+   2500,
+   1400,
+   1000
+  ],
+  [
+   "Santo Domingo / Distrito Nacional",
+   "Santo Domingo Este",
+   2500,
+   1400,
+   1000
+  ],
+  [
+   "Santo Domingo / Distrito Nacional",
+   "Santo Domingo Norte",
+   2500,
+   1400,
+   1000
+  ],
+  [
+   "Santo Domingo / Distrito Nacional",
+   "Santo Domingo Oeste",
+   2500,
+   1400,
+   1000
+  ],
+  [
+   "Santo Domingo / Distrito Nacional",
+   "Centro Distribución Santo Domingo",
+   2500,
+   1400,
+   1000
+  ],
+  [
+   "Dajabón",
+   "Dajabón",
+   2500,
+   1400,
+   1000
+  ],
+  [
+   "Dajabón",
+   "Restauración",
+   2500,
+   1400,
+   1000
+  ],
+  [
+   "Elías Piña",
+   "Comendador",
+   4000,
+   1500,
+   1500
+  ],
+  [
+   "Independencia",
+   "Jimaní",
+   4000,
+   1500,
+   1500
+  ],
+  [
+   "Pedernales",
+   "Pedernales",
+   4000,
+   1500,
+   1500
+  ],
+  [
+   "San Juan",
+   "San Juan de la Maguana",
+   4000,
+   1500,
+   1500
+  ]
+ ]
 }
