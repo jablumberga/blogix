@@ -62,6 +62,7 @@ d = await data(); const t1 = d.trips.find(t => t.invoiceRef === "BOC-1001");
 C("2.1 Rober registró viaje con tarifa del cliente (T1 5,500)", !!t1 && t1.revenue === 5500 && t1.driverId === 1 && t1.truckId === 1, JSON.stringify(t1 || {}).slice(0, 100));
 let ex1 = d.expenses.filter(e => e.tripId === t1?.id);
 C("2.2 pago de chofer según su tarifario (900 + 1 ayudante 700) creado pendiente", ex1.some(e => e.category === "driverPay" && e.amount === 900 && e.status === "pending") && ex1.some(e => e.category === "helper" && e.amount === 700), ex1.map(e => `${e.category}:${e.amount}:${e.status}`).join(", "));
+C("2.2b el viaje guarda helperPayEach = null (tarifario decide; nunca un 0 congelado)", t1?.helperPayEach === null, String(t1?.helperPayEach));
 C("2.3 el chofer no ve claves ni datos ajenos", !JSON.stringify(await data("Rober")).includes("$2b$"));
 await logout();
 
@@ -326,6 +327,13 @@ dialogs.length = 0; answers = [true];
 await page.locator("tr", { hasText: inv.invoiceNumber }).first().locator("button[title='Eliminar (factura por error)']").click(); await sleep(800);
 d = await data();
 C("14.4 eliminar esa factura también se bloquea", d.invoices.length === 1 && d.invoices[0].status === "paid" && /No se puede eliminar/.test(dialogs[0] || ""), dialogs[0]?.slice(0, 100));
+// ── 15. Editar y re-guardar un viaje no congela el pago de ayudante en 0 ─────────
+await nav(page, "Viajes"); await sleep(800);
+await page.locator("tr", { hasText: "BOC-1001" }).first().locator("button[title='Editar']").click(); await sleep(600);
+await (await inputByLabel(page, "Carga")).fill("arroz auditoría"); await sleep(300);
+await page.getByRole("button", { name: "Guardar" }).first().click(); await sleep(3500);
+d = await data(); const t1b = d.trips.find(t => t.invoiceRef === "BOC-1001");
+C("15.1 tras editar, helperPayEach sigue null y el ayudante sigue cobrando 700 (sin duplicar)", t1b?.cargo === "arroz auditoría" && t1b?.helperPayEach === null && d.expenses.filter(e => e.tripId === t1b?.id && e.category === "helper").length === 1 && d.expenses.find(e => e.tripId === t1b?.id && e.category === "helper")?.amount === 700, `hpe=${t1b?.helperPayEach} helpers=${d.expenses.filter(e => e.tripId === t1b?.id && e.category === "helper").map(e => e.amount + ":" + e.status)}`);
 await logout();
 
 console.log("pageerrors:", errs.length ? errs : "ninguno");

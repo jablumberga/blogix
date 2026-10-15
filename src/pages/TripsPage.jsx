@@ -98,7 +98,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const openEdit = (tr) => {
     // Casillas de ayudantes desde las líneas guardadas; un viaje sin ayudantes de la lista queda exactamente como estaba
     const usesList = linesUseList(tr.helpers);
-    setForm({ ...tr, helperIds: usesList ? (tr.helpers || []).map(h => (h?.ayudanteId != null ? Number(h.ayudanteId) : null)) : [],
+    setForm({ ...tr, helperPayEach: tr.helperPayEach == null ? "" : tr.helperPayEach, helperIds: usesList ? (tr.helpers || []).map(h => (h?.ayudanteId != null ? Number(h.ayudanteId) : null)) : [],
       ...(usesList && !tr.helperNames ? { helperNames: (tr.helpers || []).map(h => (h?.ayudanteId != null ? h.name : "")) } : {}) });
     setEditId(tr.id); setShowForm(true); setRateMsg(""); setFormError("");
     if (needsRate(tr)) {
@@ -237,7 +237,10 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
       if (!window.confirm("El chofer no tiene tarifa para este destino: el viaje se guardará SIN pago de chofer. ¿Continuar?")) return;
     }
     const numHelpers = form.numHelpers === null || form.numHelpers === "" ? (payPreview?.numHelpers ?? 0) : Number(form.numHelpers);
-    const helperPayEach = form.helperPayEach === "" ? (payPreview?.helperEach ?? 0) : Number(form.helperPayEach);
+    // Sin monto escrito: el tarifario del chofer decide (se guarda null, nunca se congela el 0 de "sin tarifa");
+    // las líneas de ayudantes llevan el valor de hoy sólo como referencia.
+    const helperOverride = form.helperPayEach !== "" && form.helperPayEach != null;
+    const helperPayEach = helperOverride ? Number(form.helperPayEach) : (payPreview?.helperEach ?? 0);
     // Con ayudantes de la lista: líneas con su id (directo o por el chofer); sin ellos, exactamente como antes
     const usesList = (form.helperIds || []).slice(0, numHelpers).some(Boolean);
     const prevSaved = editId ? trips.find(tr => tr.id === editId) : null;
@@ -254,7 +257,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     const { helperIds: _hIds, ...formData } = form; // las casillas no se guardan: el viaje guarda sus líneas
     const data = { ...formData, truckId: Number(form.truckId), driverId: Number(form.driverId), clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null,
       odoStart: Number(form.odoStart) || null, odoEnd: Number(form.odoEnd) || null,
-      weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, numHelpers, helperPayEach, helperNames, helpers: helpersArr,
+      weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, numHelpers, helperPayEach: helperOverride ? helperPayEach : null, helperNames, helpers: helpersArr,
       discounts: (form.discounts || []).filter(d => Number(d.amount) > 0),
       jointDriverId: form.joint && form.jointDriverId ? Number(form.jointDriverId) : null, jointTruckId: form.joint && form.jointTruckId ? Number(form.jointTruckId) : null };
     // Viaje conjunto registrado aquí: se crea el viaje del compañero y sus gastos
@@ -737,7 +740,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                     </Td>
                     <Td align="right">
                       <div style={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
-                        <button onClick={() => openEdit(tr)} style={{ padding: "10px", borderRadius: 5, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", minHeight: 44, minWidth: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><Pencil size={12} /></button>
+                        <button onClick={() => openEdit(tr)} title={t.edit || "Editar"} style={{ padding: "10px", borderRadius: 5, border: "none", background: "transparent", color: colors.textMuted, cursor: "pointer", minHeight: 44, minWidth: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><Pencil size={12} /></button>
                         <button onClick={() => deleteTrip(tr)} title={isLocked(tr.id) ? lockReason(tr.id) : "Eliminar"} style={{ opacity: isLocked(tr.id) ? 0.35 : 1, padding: "10px", borderRadius: 5, border: "none", background: "transparent", color: colors.red, cursor: "pointer", minHeight: 44, minWidth: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={12} /></button>
                       </div>
                     </Td>

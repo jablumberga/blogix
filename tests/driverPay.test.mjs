@@ -103,3 +103,13 @@ test("tripCrew: una línea por persona, dieta repartida; chofer / ayudante 1 / a
   const solo = tripCrew({ ...trip, numHelpers: 0, helpers: [] }, calcDriverPay({ driver, trip: { ...trip, numHelpers: 0 }, truck: t2 }), driver);
   assert.equal(solo.length, 1); assert.equal(solo[0].dieta, 600);
 });
+
+test("helperPayEach: null/'' = por tarifario; 0 explícito = ayudantes sin pago (por eso el formulario ya no congela el 0)", () => {
+  const base = { province: "Dajabón", municipality: "Dajabón", clientId: 9, numHelpers: 2 };
+  for (const v of [null, undefined, ""]) {
+    const c = calcDriverPay({ driver, trip: { ...base, helperPayEach: v }, truck: t2 });
+    assert.equal(c.helperEach, 1200 + 200, `helperPayEach=${JSON.stringify(v)} → tarifario`); assert.equal(c.helpersTotal, 2800);
+  }
+  const z = calcDriverPay({ driver, trip: { ...base, helperPayEach: 0 }, truck: t2 });
+  assert.equal(z.helperEach, 0); assert.equal(z.helpersTotal, 0, "un 0 guardado como override deja a los ayudantes sin cobrar");
+});

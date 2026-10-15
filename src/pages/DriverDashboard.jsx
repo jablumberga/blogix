@@ -106,14 +106,15 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
     const tkH = trucks.find(t2 => t2.id === Number(form.truckId));
     const preH = driverObj ? calcDriverPay({ driver: driverObj, trip: { ...form, revenue: Number(form.revenue) || 0, numHelpers: form.numHelpers === null || form.numHelpers === "" ? null : Number(form.numHelpers), helperPayEach: form.helperPayEach === "" ? null : Number(form.helperPayEach) }, truck: tkH, clientId: Number(form.clientId) }) : null;
     const numHelpers = form.numHelpers === null || form.numHelpers === "" ? (preH?.numHelpers ?? 0) : Number(form.numHelpers);
-    const helpersPay = form.helperPayEach === "" ? (preH?.helperEach ?? 0) : Number(form.helperPayEach) || 0;
+    const helperOverride = form.helperPayEach !== "" && form.helperPayEach != null; // sin monto: el tarifario decide (se guarda null)
+    const helpersPay = helperOverride ? Number(form.helperPayEach) || 0 : (preH?.helperEach ?? 0);
     // Ayudantes de la lista (directos o por el chofer) u otros con nombre; sin elegir ninguno, como siempre
     const usesList = (form.helperIds || []).slice(0, numHelpers).some(Boolean) || (form.helperNames || []).slice(0, numHelpers).some(Boolean);
     const helpersArr = usesList
       ? buildHelperLines({ count: numHelpers, pay: helpersPay, helperIds: form.helperIds, helperNames: form.helperNames, ayudantes })
       : Array.from({ length: numHelpers }, (_, i) => ({ name: `Ayudante ${i + 1}`, pay: helpersPay }));
     const { helperIds: _hIds, ...formData } = form;
-    const data = { ...formData, ...(usesList ? { helperNames: helpersArr.map((h, i) => (form.helperIds?.[i] ? h.name : (form.helperNames?.[i] || ""))) } : {}), numHelpers, helperPayEach: helpersPay, odoStart: Number(form.odoStart) || null, odoEnd: Number(form.odoEnd) || null, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr,
+    const data = { ...formData, ...(usesList ? { helperNames: helpersArr.map((h, i) => (form.helperIds?.[i] ? h.name : (form.helperNames?.[i] || ""))) } : {}), numHelpers, helperPayEach: helperOverride ? helpersPay : null, odoStart: Number(form.odoStart) || null, odoEnd: Number(form.odoEnd) || null, truckId: Number(form.truckId), driverId: driverObj?.id, clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null, weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, helpers: helpersArr,
       jointDriverId: form.joint && form.jointDriverId ? Number(form.jointDriverId) : null, jointTruckId: form.joint && form.jointTruckId ? Number(form.jointTruckId) : null,
       createdAt: new Date().toISOString(), history: [{ at: new Date().toISOString(), by: driverObj?.name || "", action: "creado (panel chofer)" }] };
     const newId = nxId(trips);
