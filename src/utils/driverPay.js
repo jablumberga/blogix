@@ -53,10 +53,17 @@ export function findRate(sheet, province, municipality) {
   return (sheet.rates || []).find(r => r.province === province && r.municipality === municipality) || null;
 }
 
-/** Tamaño efectivo del viaje: override T1/T2 del viaje, si no el del camión. */
+/** Tamaño para la TARIFA DEL CLIENTE: override T1/T2 del viaje, si no el del camión. */
 export function tripSize(trip, truck) {
   const ov = trip?.tarifaOverride;
   if (ov === "T1" || ov === "T2") return ov;
+  return truck?.size === "T2" ? "T2" : "T1";
+}
+/**
+ * Tamaño para la NÓMINA: siempre el del camión con el que se hizo el viaje. No importa qué camión tenga
+ * asignado el chofer ni si al cliente se le cobró con otra tarifa: si viajó en T2 cobra T2, y viceversa.
+ */
+export function paySize(trip, truck) {
   return truck?.size === "T2" ? "T2" : "T1";
 }
 
@@ -69,7 +76,7 @@ export function tripSize(trip, truck) {
  */
 export function calcDriverPay({ driver, trip, truck, clientId }) {
   const d = normalizeDriver(driver);
-  const size = tripSize(trip, truck);
+  const size = paySize(trip, truck);
   // Descuentos: cada uno dice a quién va (who: "driver" | "helper:<i>"); sin who = al chofer (como siempre)
   const discountsOf = (who) => (trip?.discounts || []).filter(x => (x?.who || "driver") === who).reduce((s, x) => s + (Number(x.amount) || 0), 0);
   const discounts = discountsOf("driver");

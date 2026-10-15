@@ -6,7 +6,7 @@ import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2,
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today } from "../utils/helpers.js";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
-import { calcDriverPay, describeDriverPay, normalizeDriver, tripSize, DEFAULT_HELPERS } from "../utils/driverPay.js";
+import { calcDriverPay, describeDriverPay, normalizeDriver, tripSize, paySize, DEFAULT_HELPERS } from "../utils/driverPay.js";
 import { TRIP_DOCS, docsComplete } from "../utils/payroll.js";
 import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
 import { needsRate, takeTripsFilter } from "../utils/tripPending.js";
@@ -545,7 +545,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.border}22` }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, marginBottom: 6 }}>Chofer y ayudantes</div>
           {(() => {
-            const sz = tripSize(form, trucks.find(tk => tk.id === Number(form.truckId)));
+            const sz = paySize(form, trucks.find(tk => tk.id === Number(form.truckId)));
             const n = form.numHelpers === null || form.numHelpers === "" ? (payPreview?.numHelpers ?? DEFAULT_HELPERS[sz]) : Number(form.numHelpers);
             return <>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>

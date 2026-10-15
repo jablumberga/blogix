@@ -45,9 +45,9 @@ test("el tarifario del cliente del viaje gana sobre el general", () => {
   assert.equal(getRateSheet(driver, 77).name, "General");
 });
 
-test("override de tamaño en el viaje, descuentos, y ruta solo-T2 con camión T1", () => {
+test("el override de tarifa del cliente NO cambia la nómina (manda el camión), descuentos, y ruta solo-T2 con camión T1", () => {
   const ov = calcDriverPay({ driver, trip: { province: "Dajabón", municipality: "Dajabón", tarifaOverride: "T2" }, truck: t1 });
-  assert.equal(ov.size, "T2"); assert.equal(ov.base, 2500);
+  assert.equal(ov.size, "T1"); assert.equal(ov.base, 2000);
   const disc = calcDriverPay({ driver, trip: { province: "Dajabón", municipality: "Dajabón", discounts: [{ amount: 300 }] }, truck: t1 });
   assert.equal(disc.driverNet, 2250 - 300); assert.equal(disc.total, 3500 - 300);
   const jim = calcDriverPay({ driver, trip: { province: "Independencia", municipality: "Jimaní" }, truck: t1 });
@@ -129,4 +129,12 @@ test("override del chofer, override por ayudante y descuentos dirigidos (chofer 
   // sin overrides ni who: igual que siempre (descuento al chofer)
   const c0 = calcDriverPay({ driver, trip: { province: "Dajabón", municipality: "Dajabón", clientId: 9, numHelpers: 2, discounts: [{ amount: 300 }] }, truck: t2 });
   assert.equal(c0.driverNet, 2500 + 200 - 300); assert.deepEqual(c0.helperPays, [1400, 1400]);
+});
+
+test("la nómina paga por el camión del viaje: T2 cobra T2 aunque al cliente se le cobrara tarifa T1 (override) o el chofer tenga otro camión asignado", () => {
+  const trip = { province: "Dajabón", municipality: "Dajabón", clientId: 9, tarifaOverride: "T1" };
+  const c = calcDriverPay({ driver: { ...driver, truckId: 1 }, trip, truck: t2 });
+  assert.equal(c.size, "T2"); assert.equal(c.base, 2500); assert.equal(c.numHelpers, 2, "2 ayudantes por defecto en T2");
+  const c1 = calcDriverPay({ driver, trip: { ...trip, tarifaOverride: "T2" }, truck: t1 });
+  assert.equal(c1.size, "T1"); assert.equal(c1.base, 2000);
 });
