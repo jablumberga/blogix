@@ -54,7 +54,7 @@ test("reparto: el directo cobra aparte, el resto va al chofer", () => {
   const trip = { ...base, helpers: buildHelperLines({ count: 2, pay: 400, helperIds: [1, 2], ayudantes }) };
   const calc = calcDriverPay({ driver, trip, truck: trucks[0], clientId: 5 });
   const s = splitTripHelpers(trip, calc);
-  assert.deepEqual(s.direct, [{ ayudanteId: 1, name: "Pedro", amount: 400 }]);
+  assert.deepEqual(s.direct, [{ ayudanteId: 1, name: "Pedro", amount: 400, idx: 0 }]);
   assert.equal(s.viaDriver.count, 1); assert.equal(s.viaDriver.amount, 400); assert.equal(s.directTotal, 400);
   // si el viaje lleva menos ayudantes que líneas, solo cuentan los primeros
   const s1 = splitTripHelpers({ ...trip, numHelpers: 1 }, calcDriverPay({ driver, trip: { ...trip, numHelpers: 1 }, truck: trucks[0], clientId: 5 }));

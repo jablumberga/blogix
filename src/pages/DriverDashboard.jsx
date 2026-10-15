@@ -329,7 +329,7 @@ function DriverCorteCard({ pd, corte, driverObj, myTrips, expenses, trucks, clie
         <Td align="right" color={chofer.dieta > 0 ? colors.accent : colors.textMuted}>{chofer.dieta > 0 ? fmt(chofer.dieta) : "—"}</Td>
         <Td align="right" bold>{line && line.overridden ? <span title="ajustado por la oficina">{fmt(line.amount)}</span> : fmt(x.calc.driverNet)}</Td>
         <Td align="right" color={viaDriver.length ? colors.cyan : colors.textMuted} style={{ lineHeight: 1.4 }}>
-          {ayuds.length ? ayuds.map(a => <div key={a.idx} style={{ fontSize: 11 }}>{a.name}: {fmt(a.base)}{a.dieta ? ` + ${fmt(a.dieta)}` : ""} = <b>{fmt(a.total)}</b>{a.direct ? <span style={{ color: colors.textMuted }}> (directo)</span> : null}</div>) : "—"}
+          {ayuds.length ? ayuds.map(a => <div key={a.idx} style={{ fontSize: 11 }}>{a.name}: {fmt(a.base)}{a.dieta ? ` + ${fmt(a.dieta)}` : ""}{a.discount ? <span style={{ color: colors.red }}> − {fmt(a.discount)}</span> : null} = <b>{fmt(a.net)}</b>{a.direct ? <span style={{ color: colors.textMuted }}> (directo)</span> : null}</div>) : "—"}
         </Td>
         <Td align="right" style={{ lineHeight: 1.4, verticalAlign: "top" }}>
           {tripDiscounts > 0 ? <div style={{ color: colors.red, fontWeight: 600 }}>− {fmt(tripDiscounts)}</div> : null}
