@@ -3,9 +3,10 @@ import { Plus, X, Pencil, Trash2, FileText, CheckCircle2, Clock, Send, Ban, Aler
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, getPeriodInfo, today } from "../utils/helpers.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td } from "../components/ui/index.jsx";
-import { invoiceHTML, invoiceSheet, openPrintWindow } from "../utils/printReport.js";
+import { invoiceHTML, invoiceSheet, openPrintWindow, invoicePfReportHTML } from "../utils/printReport.js";
 import { DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 import { invoiceBalance, buildAbono, invoiceStatusWith, invoiceCancelBlock } from "../utils/cobros.js";
+import { buildInvoicePfReport } from "../utils/pfReport.js";
 import SortBar from "../components/SortBar.jsx";
 import { sortRecords, DEFAULT_SORT } from "../utils/sortList.js";
 import CobroModal from "../components/CobroModal.jsx";
@@ -112,7 +113,7 @@ function TripSelectRow({ trip, client, drivers, trucks, isSelected, isIneligible
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, partners = [], pfSettings = DEFAULT_PF_SETTINGS, isMobile, bankAccount = null, bankTransfers = [], bankReconciliation = {}, expenses = [] }) {
+export default function InvoicesPage({ t, invoices, setInvoices, trips, clients, brokers, drivers, trucks, cobros, setCobros, partners = [], pfSettings = DEFAULT_PF_SETTINGS, isMobile, bankAccount = null, bankTransfers = [], bankReconciliation = {}, expenses = [], suppliers = [], settlementStatus = {}, user = null }) {
 
   const todayStr = today();
 
@@ -444,6 +445,7 @@ export default function InvoicesPage({ t, invoices, setInvoices, trips, clients,
                           ✓ Cobrar
                         </button>
                       )}
+                      <button onClick={() => openPrintWindow(`Profit First ${inv.invoiceNumber || inv.id}`, invoicePfReportHTML({ r: buildInvoicePfReport({ inv, trips, trucks, partners, clients, brokers, expenses, cobros, drivers, suppliers, settlementStatus, bankAccount, pfSettings }), generatedBy: user?.name }))} title="Reporte Profit First de esta factura (PDF)" data-pf-report style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid #9b7fe8`, background: "#9b7fe818", color: "#9b7fe8", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>PF</button>
                       <button onClick={() => openPrintWindow(`Factura ${inv.invoiceNumber || inv.id}`, invoiceHTML({ inv, client: cl, trips, trucks, brokers }))} title="Ver factura (PDF)" style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${colors.border}`, background: "transparent", color: colors.text, cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                         <Eye size={11}/> Ver factura
                       </button>
