@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import HelperSlots from "../components/HelperSlots.jsx";
+import { syncTripPayExpenses } from "../utils/tripExpenses.js";
 import { normalizeAyudante, crewSlots, buildHelperLines, helperExpensePlan, applyHelperPlan, isDirectLine, clientHelpersMode, clientSkipsHelpers, tripHelpersPaid, linesUseList } from "../utils/ayudantes.js";
 import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2, Calendar, FileCheck, FileText, Handshake, Hash, Zap, RotateCw } from "lucide-react";
 import { colors } from "../constants/theme.js";
@@ -43,7 +44,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     return m;
   }, [invoices]);
 
-  const emptyForm = { date: today(), province: "", municipality: "", truckId: "", driverId: "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: null, helperPayEach: "", helperNames: [], discounts: [], tarifaOverride: null, joint: false, jointWith: null, jointDriverId: "", jointTruckId: "" };
+  const PURPLE_T = "#9b7fe8";
+  const emptyForm = { date: today(), province: "", municipality: "", truckId: "", driverId: "", clientId: "", brokerId: "", cargo: "", weight: "", revenue: "", status: "pending", invoiceRef: "", docStatus: "pending", podDelivered: false, numHelpers: null, helperPayEach: "", driverPayOverride: "", helperNames: [], discounts: [], tarifaOverride: null, joint: false, jointWith: null, jointDriverId: "", jointTruckId: "" };
 
   // Viajes ya cobrados (en algún cobro registrado): no se pueden borrar ni cambiar de monto
   const collectedTripIds = useMemo(() => new Set((cobros || []).flatMap(c => (c.collectedTripIds || []).map(Number))), [cobros]);
@@ -74,7 +76,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     const driver = drivers.find(d => d.id === Number(form.driverId));
     if (!driver) return null;
     const truck = trucks.find(tk => tk.id === Number(form.truckId));
-    const trip = { ...form, revenue: Number(form.revenue) || 0, numHelpers: form.numHelpers === null || form.numHelpers === "" ? null : Number(form.numHelpers), helperPayEach: form.helperPayEach === "" ? null : Number(form.helperPayEach) };
+    const trip = { ...form, revenue: Number(form.revenue) || 0, numHelpers: form.numHelpers === null || form.numHelpers === "" ? null : Number(form.numHelpers), helperPayEach: form.helperPayEach === "" ? null : Number(form.helperPayEach), driverPayOverride: form.driverPayOverride === "" || form.driverPayOverride == null ? null : Number(form.driverPayOverride) };
     return calcDriverPay({ driver, trip, truck, clientId: Number(form.clientId) || null });
   }, [form, drivers, trucks]);
 
@@ -98,7 +100,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const openEdit = (tr) => {
     // Casillas de ayudantes desde las líneas guardadas; un viaje sin ayudantes de la lista queda exactamente como estaba
     const usesList = linesUseList(tr.helpers);
-    setForm({ ...tr, helperPayEach: tr.helperPayEach == null ? "" : tr.helperPayEach, helperIds: usesList ? (tr.helpers || []).map(h => (h?.ayudanteId != null ? Number(h.ayudanteId) : null)) : [],
+    setForm({ ...tr, helperPayEach: tr.helperPayEach == null ? "" : tr.helperPayEach, driverPayOverride: tr.driverPayOverride == null ? "" : tr.driverPayOverride, helperIds: usesList ? (tr.helpers || []).map(h => (h?.ayudanteId != null ? Number(h.ayudanteId) : null)) : [],
       ...(usesList && !tr.helperNames ? { helperNames: (tr.helpers || []).map(h => (h?.ayudanteId != null ? h.name : "")) } : {}) });
     setEditId(tr.id); setShowForm(true); setRateMsg(""); setFormError("");
     if (needsRate(tr)) {
@@ -187,11 +189,9 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const syncTripExpenses = (tripId, data, prev) => {
     const driver = drivers.find(d => d.id === data.driverId);
     const truck = trucks.find(tk => tk.id === data.truckId);
-    const calc = driver ? calcDriverPay({ driver, trip: data, truck, clientId: data.clientId }) : null;
     const cancelled = data.status === "cancelled";
-    const driverAmt = !calc || cancelled || normalizeDriver(driver).payType === "fixed" ? 0 : calc.driverNet;
     setExpenses(prevExp => {
-      let next = [...prevExp];
+      let next = syncTripPayExpenses(prevExp, { trip: { ...data, id: tripId }, driver, truck });
       const upsert = (category, amount, description, extra) => {
         const existing = next.find(e => e.tripId === tripId && e.category === category);
         if (existing) {
@@ -201,11 +201,6 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           next = [...next, { id: nxId(next), tripId, date: data.date, category, amount, description, paymentMethod: "transfer", status: "pending", supplierId: null, ...extra }];
         }
       };
-      upsert("driverPay", driverAmt, calc ? describeDriverPay(calc, driver) : "", { driverId: data.driverId });
-      // Ayudantes: lo que va por el chofer (gasto sin ayudanteId, como siempre) + un gasto por cada ayudante directo
-      const viaNames = (data.helperNames || []).filter((_, i) => !isDirectLine(data.helpers?.[i])).filter(Boolean).join(", ");
-      const plan = helperExpensePlan({ trip: { ...data, driverId: data.driverId }, calc, driverDescription: (n) => calc ? `Ayudantes (${n} × ${fmt(calc.helperEach)}): ${viaNames || driver?.name || ""}` : "" });
-      next = applyHelperPlan(next, { tripId, date: data.date, plan });
       // Comisión de broker (solo clientes que NO son pass-through)
       const cl = clients.find(c => c.id === data.clientId);
       const broker = data.brokerId ? brokers.find(b => b.id === data.brokerId) : null;
@@ -258,7 +253,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
     const data = { ...formData, truckId: Number(form.truckId), driverId: Number(form.driverId), clientId: Number(form.clientId) || null, brokerId: Number(form.brokerId) || null,
       odoStart: Number(form.odoStart) || null, odoEnd: Number(form.odoEnd) || null,
       weight: Number(form.weight) || 0, revenue: Number(form.revenue) || 0, numHelpers, helperPayEach: helperOverride ? helperPayEach : null, helperNames, helpers: helpersArr,
-      discounts: (form.discounts || []).filter(d => Number(d.amount) > 0),
+      driverPayOverride: form.driverPayOverride === "" || form.driverPayOverride == null ? null : Number(form.driverPayOverride),
+      discounts: (form.discounts || []).filter(d => Number(d.amount) > 0).map(d => ({ ...d, who: d.who && d.who !== "driver" ? d.who : undefined })),
       jointDriverId: form.joint && form.jointDriverId ? Number(form.jointDriverId) : null, jointTruckId: form.joint && form.jointTruckId ? Number(form.jointTruckId) : null };
     // Viaje conjunto registrado aquí: se crea el viaje del compañero y sus gastos
     const makeCompanion = (saved, list) => {
@@ -556,6 +552,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                 <Sel label={`Ayudantes (por defecto ${DEFAULT_HELPERS[sz]} en ${sz})`} value={n} onChange={e => setForm({ ...form, numHelpers: Number(e.target.value) })}>
                   {[0,1,2,3,4,5].map(k => <option key={k} value={k}>{k === 0 ? "0 — sin ayudantes" : `${k} ayudante${k > 1 ? "s" : ""}`}</option>)}
                 </Sel>
+                <Inp label={`Pago chofer${payPreview && (form.driverPayOverride === "" || form.driverPayOverride == null) ? " (tarifario)" : " (fijado)"}`} type="number" placeholder={payPreview ? String(payPreview.base + payPreview.dieta) : "RD$"} value={form.driverPayOverride ?? ""} onChange={e => setForm({ ...form, driverPayOverride: e.target.value })} title="Déjalo vacío para usar el tarifario. Si escribes un monto, es chofer + su dieta." />
                 {n > 0 && <Inp label={`Pago por ayudante${payPreview && form.helperPayEach === "" ? " (tarifario)" : ""}`} type="number" placeholder={payPreview ? String(payPreview.helperEach) : "RD$"} value={form.helperPayEach} onChange={e => setForm({ ...form, helperPayEach: e.target.value })} />}
               </div>
               {n > 0 && <HelperSlots n={n} helperIds={form.helperIds} helperNames={form.helperNames} ayudantes={ayudantes} prevLines={editId ? trips.find(tr => tr.id === editId)?.helpers : []} onChange={({ helperIds, helperNames }) => setForm({ ...form, helperIds, helperNames })} />}
@@ -565,8 +562,8 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                 {payPreview.payType === "perTrip" && !payPreview.rateFound
                   ? <span style={{ color: colors.orange }}>⚠️ El chofer no tiene tarifa para este destino{payPreview.sheetName ? ` en el tarifario «${payPreview.sheetName}»` : ""}. Agrégala en Choferes.</span>
                   : <span>
-                      <b>Chofer</b> {fmt(payPreview.base)}{payPreview.dieta ? ` + dieta ${fmt(payPreview.dieta)}${payPreview.dietaEach ? ` (su parte de ${fmt(payPreview.dietaTotal)})` : ""}` : ""}{payPreview.sizeFallback ? ` (tarifa ${payPreview.size === "T2" ? "T1" : "T2"}: el destino no tiene ${payPreview.size})` : ""}{payPreview.discounts ? ` − desc. ${fmt(payPreview.discounts)}` : ""} = <b>{fmt(payPreview.driverNet)}</b>
-                      {payPreview.numHelpers > 0 && <> · <b>Ayudantes</b> {payPreview.numHelpers} × {fmt(payPreview.helperEach)}{payPreview.dietaEach && form.helperPayEach === "" ? ` (incl. dieta ${fmt(payPreview.dietaEach)})` : ""} = <b>{fmt(payPreview.helpersTotal)}</b>{(() => { const dn = (form.helperIds || []).slice(0, payPreview.numHelpers).some(Boolean) ? buildHelperLines({ count: payPreview.numHelpers, pay: payPreview.helperEach, helperIds: form.helperIds, helperNames: form.helperNames, ayudantes, prevLines: editId ? trips.find(tr => tr.id === editId)?.helpers : [] }).filter(isDirectLine).length : 0; return dn > 0 ? <span style={{ color: colors.cyan }}> ({dn} directo{dn > 1 ? "s" : ""}: {fmt(dn * payPreview.helperEach)} no van al chofer)</span> : null; })()}</>}
+                      <b>Chofer</b> {payPreview.driverFixed ? <span style={{ color: PURPLE_T }}>fijado {fmt(payPreview.driverGross)}</span> : fmt(payPreview.base)}{payPreview.dieta && !payPreview.driverFixed ? ` + dieta ${fmt(payPreview.dieta)}${payPreview.dietaEach ? ` (su parte de ${fmt(payPreview.dietaTotal)})` : ""}` : ""}{payPreview.sizeFallback ? ` (tarifa ${payPreview.size === "T2" ? "T1" : "T2"}: el destino no tiene ${payPreview.size})` : ""}{payPreview.discounts ? ` − desc. ${fmt(payPreview.discounts)}` : ""} = <b>{fmt(payPreview.driverNet)}</b>
+                      {payPreview.numHelpers > 0 && <> · <b>Ayudantes</b> {payPreview.numHelpers} × {fmt(payPreview.helperEach)}{payPreview.dietaEach && form.helperPayEach === "" ? ` (incl. dieta ${fmt(payPreview.dietaEach)})` : ""}{payPreview.helperDiscounts ? ` − desc. ${fmt(payPreview.helperDiscounts)}` : ""} = <b>{fmt(payPreview.helpersTotal)}</b>{(() => { const dn = (form.helperIds || []).slice(0, payPreview.numHelpers).some(Boolean) ? buildHelperLines({ count: payPreview.numHelpers, pay: payPreview.helperEach, helperIds: form.helperIds, helperNames: form.helperNames, ayudantes, prevLines: editId ? trips.find(tr => tr.id === editId)?.helpers : [] }).filter(isDirectLine).length : 0; return dn > 0 ? <span style={{ color: colors.cyan }}> ({dn} directo{dn > 1 ? "s" : ""}: {fmt(dn * payPreview.helperEach)} no van al chofer)</span> : null; })()}</>}
                       {" "}· Total nómina del viaje <b>{fmt(payPreview.total)}</b>
                       {payPreview.sheetName && <span style={{ color: colors.textMuted }}> · tarifario «{payPreview.sheetName}»</span>}
                     </span>}
@@ -582,6 +579,10 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
           {(form.discounts || []).map((d, i) => (
             <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4, alignItems: "center" }}>
               <Inp placeholder={t.discountDesc} value={d.desc} onChange={e => { const ds = [...form.discounts]; ds[i] = { ...d, desc: e.target.value }; setForm({ ...form, discounts: ds }); }} style={{ flex: 1, fontSize: 11 }} />
+              <select value={d.who || "driver"} onChange={e => { const ds = [...form.discounts]; ds[i] = { ...d, who: e.target.value }; setForm({ ...form, discounts: ds }); }} title="¿A quién se le descuenta?" style={{ background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 5, color: colors.text, padding: "4px 6px", fontSize: 11 }}>
+                <option value="driver">Chofer</option>
+                {Array.from({ length: Number(form.numHelpers ?? payPreview?.numHelpers ?? 0) || 0 }, (_, k) => <option key={k} value={`helper:${k}`}>{(form.helperNames || [])[k] ? `Ayud. ${(form.helperNames || [])[k]}` : `Ayudante ${k + 1}`}</option>)}
+              </select>
               <Inp type="number" placeholder="$" value={d.amount} onChange={e => { const ds = [...form.discounts]; ds[i] = { ...d, amount: Number(e.target.value) }; setForm({ ...form, discounts: ds }); }} style={{ width: 80, fontSize: 11 }} />
               <button onClick={() => setForm({ ...form, discounts: form.discounts.filter((_, j) => j !== i) })} style={{ background: "none", border: "none", color: colors.red, cursor: "pointer" }}><X size={12} /></button>
             </div>

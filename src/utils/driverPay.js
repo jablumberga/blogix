@@ -70,7 +70,9 @@ export function tripSize(trip, truck) {
 export function calcDriverPay({ driver, trip, truck, clientId }) {
   const d = normalizeDriver(driver);
   const size = tripSize(trip, truck);
-  const discounts = (trip?.discounts || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  // Descuentos: cada uno dice a quién va (who: "driver" | "helper:<i>"); sin who = al chofer (como siempre)
+  const discountsOf = (who) => (trip?.discounts || []).filter(x => (x?.who || "driver") === who).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const discounts = discountsOf("driver");
   const revenue = Number(trip?.revenue) || 0;
 
   let base = 0, dietaTotal = 0, helperBase = 0, rateFound = true, sheetName = null, sizeFallback = false;
@@ -99,21 +101,34 @@ export function calcDriverPay({ driver, trip, truck, clientId }) {
   const dietaEach = numHelpers > 0 ? Math.floor(dietaTotal / (numHelpers + 1)) : 0;
   const dieta = dietaTotal - dietaEach * numHelpers;
   let helperEach = helperBase + dietaEach;
-  if (trip?.helperPayEach != null && trip.helperPayEach !== "") helperEach = Number(trip.helperPayEach) || 0;
-  const helpersTotal = numHelpers * helperEach;
+  const helperOverride = trip?.helperPayEach != null && trip.helperPayEach !== "";
+  if (helperOverride) helperEach = Number(trip.helperPayEach) || 0;
+  // Pago fijado a mano por ayudante (helperPayOverrides[i]) y descuentos de cada ayudante
+  const overrides = Array.isArray(trip?.helperPayOverrides) ? trip.helperPayOverrides : [];
+  const helperLines = [];
+  for (let i = 0; i < numHelpers; i++) {
+    const ov = overrides[i]; const fixed = ov != null && ov !== "";
+    const pay = fixed ? Number(ov) || 0 : helperEach; const discount = discountsOf(`helper:${i}`);
+    helperLines.push({ pay, discount, net: Math.max(0, pay - discount), fixed: fixed || helperOverride });
+  }
+  const helperPays = helperLines.map(l => l.net);
+  const helpersTotal = helperPays.reduce((s, n) => s + n, 0);
+  const helperDiscounts = helperLines.reduce((s, l) => s + l.discount, 0);
 
-  const driverGross = base + dieta;
+  // Pago del chofer fijado a mano en el viaje (chofer + su dieta): la dieta se mantiene, la base es el resto
+  const dpo = trip?.driverPayOverride; const driverFixed = dpo != null && dpo !== "";
+  let driverGross = base + dieta;
+  if (driverFixed) { driverGross = Number(dpo) || 0; base = Math.max(0, driverGross - dieta); }
   const driverNet = Math.max(0, driverGross - discounts);
   // Tripulación SIEMPRE separada: chofer, ayudante 1, ayudante 2… cada uno con su base y su parte de la dieta
-  const helperOverride = trip?.helperPayEach != null && trip.helperPayEach !== "";
-  const crew = [{ role: "Chofer", base, dieta, total: driverGross }];
-  for (let i = 0; i < numHelpers; i++) crew.push({ role: `Ayudante ${i + 1}`, base: helperOverride ? helperEach : helperBase, dieta: helperOverride ? 0 : dietaEach, total: helperEach });
-  return { size, base, dieta, dietaTotal, dietaEach, driverGross, discounts, driverNet, numHelpers, helperBase, helperEach, helpersTotal, crew, total: driverNet + helpersTotal, rateFound, sheetName, sizeFallback, payType: d.payType };
+  const crew = [{ role: "Chofer", base, dieta, total: driverGross, discount: discounts, net: driverNet, fixed: driverFixed }];
+  helperLines.forEach((l, i) => crew.push({ role: `Ayudante ${i + 1}`, base: l.fixed ? l.pay : helperBase, dieta: l.fixed ? 0 : dietaEach, total: l.pay, discount: l.discount, net: l.net, fixed: l.fixed }));
+  return { size, base, dieta, dietaTotal, dietaEach, driverGross, driverFixed, discounts, driverNet, numHelpers, helperBase, helperEach, helperPays, helperDiscounts, helpersTotal, crew, total: driverNet + helpersTotal, rateFound, sheetName, sizeFallback, payType: d.payType };
 }
 
 const money = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
 /** «1,300 + dieta 333» (o solo «1,300» si no hay dieta). */
-export const crewPartText = (line) => line?.dieta ? `${money(line.base)} + dieta ${money(line.dieta)}` : money(line?.base);
+export const crewPartText = (line) => `${line?.dieta ? `${money(line.base)} + dieta ${money(line.dieta)}` : money(line?.base)}${line?.fixed ? " (fijado)" : ""}${line?.discount ? ` − desc. ${money(line.discount)}` : ""}`;
 /** Texto del gasto del chofer: «Chofer Rober: 1,700 + dieta 334 · Dajabón». */
 export function driverPayText(calc, driverName, where) {
   const c = calc?.crew?.[0];
@@ -126,8 +141,8 @@ export function helpersPayText(calc, count, where, fromIndex = 0) {
   return `${txt}${where ? ` · ${where}` : ""}`;
 }
 /** Texto de un ayudante directo: «Ayudante Jeffrey: 1,300 + dieta 333 · Dajabón». */
-export function helperDirectText(calc, name, where) {
-  const l = calc?.crew?.[1];
+export function helperDirectText(calc, name, where, idx = 0) {
+  const l = calc?.crew?.[1 + idx];
   return `Ayudante ${name || ""}: ${l ? crewPartText(l) : money(calc?.helperEach)}${where ? ` · ${where}` : ""}`;
 }
 
@@ -141,13 +156,17 @@ export function tripCrew(trip, calc, driver) {
   if (!calc) return [];
   const lines = Array.isArray(trip?.helpers) ? trip.helpers : [];
   const names = Array.isArray(trip?.helperNames) ? trip.helperNames : [];
-  const out = [{ role: "chofer", idx: 0, name: driver?.name || "Chofer", base: calc.base, dieta: calc.dieta, total: calc.base + calc.dieta, direct: false, ayudanteId: null }];
+  const c0 = calc.crew?.[0];
+  const out = [{ role: "chofer", idx: 0, name: driver?.name || "Chofer", base: calc.base, dieta: calc.dieta, total: calc.base + calc.dieta, discount: calc.discounts || 0, net: calc.driverNet, fixed: !!calc.driverFixed, direct: false, ayudanteId: null }];
   for (let i = 0; i < (calc.numHelpers || 0); i++) {
     const l = lines[i] || {};
     const direct = !!(l.direct && l.ayudanteId != null && l.ayudanteId !== "");
-    const dieta = calc.dietaEach || 0;
-    out.push({ role: "ayudante", idx: i + 1, name: String(l.name || names[i] || "").trim() || `Ayudante ${i + 1}`, base: Math.max(0, calc.helperEach - dieta), dieta, total: calc.helperEach, direct, ayudanteId: direct ? Number(l.ayudanteId) : null });
+    const cl = calc.crew?.[i + 1];
+    const dieta = cl ? cl.dieta : (calc.dietaEach || 0);
+    const total = cl ? cl.total : calc.helperEach;
+    out.push({ role: "ayudante", idx: i + 1, name: String(l.name || names[i] || "").trim() || `Ayudante ${i + 1}`, base: cl ? cl.base : Math.max(0, total - dieta), dieta, total, discount: cl?.discount || 0, net: cl ? cl.net : total, fixed: !!cl?.fixed, direct, ayudanteId: direct ? Number(l.ayudanteId) : null });
   }
+  void c0;
   return out;
 }
 

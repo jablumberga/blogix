@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calcDriverPay, normalizeDriver, getRateSheet } from "../src/utils/driverPay.js";
+import { calcDriverPay, normalizeDriver, getRateSheet, tripCrew } from "../src/utils/driverPay.js";
 import { parseRateRows } from "../src/utils/rateImport.js";
 
 const general = { id: 1, name: "General", clientId: null, rates: [
@@ -112,4 +112,21 @@ test("helperPayEach: null/'' = por tarifario; 0 explícito = ayudantes sin pago 
   }
   const z = calcDriverPay({ driver, trip: { ...base, helperPayEach: 0 }, truck: t2 });
   assert.equal(z.helperEach, 0); assert.equal(z.helpersTotal, 0, "un 0 guardado como override deja a los ayudantes sin cobrar");
+});
+
+test("override del chofer, override por ayudante y descuentos dirigidos (chofer / ayudante N)", () => {
+  const trip = { province: "Dajabón", municipality: "Dajabón", clientId: 9, numHelpers: 2, helperNames: ["Ana", "Luis"],
+    driverPayOverride: 3000, helperPayOverrides: [null, 1000],
+    discounts: [{ desc: "adelanto viejo", amount: 300 }, { desc: "daño", amount: 100, who: "helper:0" }, { desc: "x", amount: 50, who: "driver" }] };
+  const c = calcDriverPay({ driver, trip, truck: t2 });
+  // chofer: fijado 3,000 (su dieta 200 se mantiene, base = 2,800); descuentos al chofer 300 + 50
+  assert.equal(c.driverGross, 3000); assert.equal(c.base, 2800); assert.equal(c.dieta, 200); assert.equal(c.discounts, 350); assert.equal(c.driverNet, 2650); assert.equal(c.driverFixed, true);
+  // ayudante 1: tarifa 1,200 + 200 = 1,400 − 100 = 1,300 ; ayudante 2: fijado 1,000
+  assert.deepEqual(c.helperPays, [1300, 1000]); assert.equal(c.helpersTotal, 2300); assert.equal(c.helperDiscounts, 100);
+  assert.equal(c.crew[1].discount, 100); assert.equal(c.crew[1].net, 1300); assert.equal(c.crew[2].fixed, true); assert.equal(c.crew[2].total, 1000);
+  const crew = tripCrew(trip, c, driver);
+  assert.deepEqual(crew.map(x => [x.name, x.total, x.discount, x.net]), [["Rober", 3000, 350, 2650], ["Ana", 1400, 100, 1300], ["Luis", 1000, 0, 1000]]);
+  // sin overrides ni who: igual que siempre (descuento al chofer)
+  const c0 = calcDriverPay({ driver, trip: { province: "Dajabón", municipality: "Dajabón", clientId: 9, numHelpers: 2, discounts: [{ amount: 300 }] }, truck: t2 });
+  assert.equal(c0.driverNet, 2500 + 200 - 300); assert.deepEqual(c0.helperPays, [1400, 1400]);
 });

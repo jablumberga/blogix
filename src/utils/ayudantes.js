@@ -1,5 +1,4 @@
-/**
- * Ayudantes como personas.
+/** * Ayudantes como personas.
  *
  * Lista de ayudantes (`ayudantes`): [{ id, name, cedula, phone, bank, account, payMode, status, notes }]
  *   payMode "direct"  → se le paga directo a él (nómina de ayudantes, su propio reporte, adelantos)
@@ -11,6 +10,7 @@
  *
  * Archivo puro (sin React): lo usan las pantallas, la nómina y el servidor (viaje conjunto).
  */
+import { helpersPayText, helperDirectText } from "./driverPay.js";
 
 export const HELPER_PAY_MODES = {
   direct: "Directo (su propia nómina)",
@@ -77,11 +77,12 @@ export const linesUseList = (lines = []) => (lines || []).some(l => l && l.ayuda
  */
 export function splitTripHelpers(trip, calc) {
   const n = Number(calc?.numHelpers) || 0, each = Number(calc?.helperEach) || 0;
+  const payOf = (i) => (Array.isArray(calc?.helperPays) && calc.helperPays[i] != null ? Number(calc.helperPays[i]) || 0 : each); // pago neto de ESE ayudante (fijado / con descuento)
   const lines = Array.isArray(trip?.helpers) ? trip.helpers : [];
   const direct = [];
   for (let i = 0; i < n; i++) {
     const l = lines[i];
-    if (l && l.direct && l.ayudanteId != null && l.ayudanteId !== "") direct.push({ ayudanteId: Number(l.ayudanteId), name: l.name || "", amount: each });
+    if (l && l.direct && l.ayudanteId != null && l.ayudanteId !== "") direct.push({ ayudanteId: Number(l.ayudanteId), name: l.name || "", amount: payOf(i), idx: i });
   }
   const directTotal = direct.reduce((s, d) => s + d.amount, 0);
   const viaCount = n - direct.length;
@@ -157,9 +158,10 @@ export function helperExpensePlan({ trip, calc, driverDescription }) {
   const cancelled = trip?.status === "cancelled";
   const s = splitTripHelpers(trip, calc);
   const where = trip?.municipality || "";
+  // Descripción siempre separada por persona: «Ayudante 1: 1,300 + dieta 333 · Ayudante 2: …»
   const plan = [{ ayudanteId: null, driverId: trip?.driverId ?? null, amount: cancelled ? 0 : s.viaDriver.amount,
-    description: typeof driverDescription === "function" ? driverDescription(s.viaDriver.count, s) : `Ayudantes (${s.viaDriver.count}) · ${where}` }];
-  for (const d of s.direct) plan.push({ ayudanteId: d.ayudanteId, amount: cancelled ? 0 : d.amount, description: `Ayudante ${d.name} · ${where}` });
+    description: typeof driverDescription === "function" ? driverDescription(s.viaDriver.count, s) : helpersPayText(calc, s.viaDriver.count, where, s.direct.length) }];
+  for (const d of s.direct) plan.push({ ayudanteId: d.ayudanteId, amount: cancelled ? 0 : d.amount, description: helperDirectText(calc, d.name, where, d.idx) });
   return plan;
 }
 

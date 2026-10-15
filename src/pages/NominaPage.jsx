@@ -6,7 +6,8 @@ import { COMPANY } from "../constants/company.js";
 import { colors } from "../constants/theme.js";
 import { fmt, genPeriods, today, nxId } from "../utils/helpers.js";
 import { buildPayroll, payrollPayment, payrollKey, buildHelperPayroll, helperPayrollPayment } from "../utils/payroll.js";
-import { tripCrew } from "../utils/driverPay.js";
+import { tripCrew, calcDriverPay } from "../utils/driverPay.js";
+import { syncTripPayExpenses } from "../utils/tripExpenses.js";
 import { DEFAULT_PF_SETTINGS } from "../utils/profitFirst.js";
 import { bankOverview } from "../utils/bankAccounts.js";
 import { driverPeriodReportHTML, driverPayrollHTML, payrollReportHTML, payrollSheets, openPrintWindow, helperPeriodReportHTML } from "../utils/printReport.js";
@@ -15,6 +16,52 @@ import { Card, PageHeader, Badge, Btn, Th, Td } from "../components/ui/index.jsx
 const PURPLE = "#9b7fe8";
 const inp = { background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 5, color: colors.text, padding: "4px 8px", fontSize: 12 };
 const smallBtn = (bg, color, border) => ({ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, border: border || "none", background: bg, color, cursor: "pointer", fontSize: 11, fontWeight: 600 });
+
+/**
+ * Ajuste del pago de UN viaje desde Nómina: fija el pago del chofer, el de cada ayudante y agrega descuentos
+ * dirigidos (chofer o ayudante N). Escribe en el viaje (una sola fuente) y rehace sus gastos pendientes.
+ */
+function TripPayAdjust({ l, row, helpersPaid, onSave, onCancel }) {
+  const { trip, calc } = l;
+  const crew = tripCrew(trip, calc, row.driver);
+  const [driverFix, setDriverFix] = useState(trip.driverPayOverride == null ? "" : String(trip.driverPayOverride));
+  const [helperFix, setHelperFix] = useState(crew.slice(1).map((_, i) => (trip.helperPayOverrides?.[i] == null ? "" : String(trip.helperPayOverrides[i]))));
+  const [discounts, setDiscounts] = useState((trip.discounts || []).map(d => ({ desc: d.desc || "", amount: Number(d.amount) || 0, who: d.who || "driver" })));
+  const [note, setNote] = useState("");
+  const preview = calcDriverPay({ driver: row.driver, truck: l.truck, clientId: trip.clientId, trip: { ...trip,
+    driverPayOverride: driverFix === "" ? null : Number(driverFix), helperPayOverrides: helperFix.map(v => (v === "" ? null : Number(v))), discounts } });
+  const sel = { ...inp, padding: "4px 6px" };
+  return <div style={{ padding: "10px 12px", background: PURPLE + "14", borderRadius: 7, border: `1px solid ${PURPLE}40`, display: "flex", flexDirection: "column", gap: 8 }} data-trip-adjust>
+    <div style={{ fontSize: 11, color: PURPLE, fontWeight: 700 }}>✏️ Ajustar pago del viaje #{trip.id} · {trip.municipality}</div>
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+      <label style={{ fontSize: 11, display: "flex", flexDirection: "column", gap: 2 }}>Chofer (chofer + dieta) <span style={{ color: colors.textMuted }}>tarifario {fmt(calc.driverFixed ? (calc.base + calc.dieta) : calc.driverGross)}</span>
+        <input type="number" placeholder="según tarifario" value={driverFix} onChange={e => setDriverFix(e.target.value)} style={{ ...inp, width: 130 }} data-adjust-driver /></label>
+      {crew.slice(1).map((c, i) => <label key={i} style={{ fontSize: 11, display: "flex", flexDirection: "column", gap: 2 }}>{c.name}{c.direct ? " (directo)" : ""} <span style={{ color: colors.textMuted }}>tarifario {fmt(calc.helperEach)}</span>
+        <input type="number" placeholder="según tarifario" value={helperFix[i]} disabled={helpersPaid} onChange={e => { const h = [...helperFix]; h[i] = e.target.value; setHelperFix(h); }} style={{ ...inp, width: 120 }} data-adjust-helper /></label>)}
+    </div>
+    <div>
+      <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Descuentos <button onClick={() => setDiscounts([...discounts, { desc: "", amount: 0, who: "driver" }])} style={smallBtn("transparent", PURPLE, `1px solid ${PURPLE}60`)}>+ agregar</button></div>
+      {discounts.map((d, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+        <input placeholder="Motivo" value={d.desc} onChange={e => { const ds = [...discounts]; ds[i] = { ...d, desc: e.target.value }; setDiscounts(ds); }} style={{ ...inp, width: 200 }} />
+        <select value={d.who} onChange={e => { const ds = [...discounts]; ds[i] = { ...d, who: e.target.value }; setDiscounts(ds); }} style={sel} disabled={helpersPaid && d.who !== "driver"}>
+          <option value="driver">Chofer</option>
+          {crew.slice(1).map((c, k) => <option key={k} value={`helper:${k}`} disabled={helpersPaid}>{c.name}</option>)}
+        </select>
+        <input type="number" value={d.amount} onChange={e => { const ds = [...discounts]; ds[i] = { ...d, amount: Number(e.target.value) }; setDiscounts(ds); }} style={{ ...inp, width: 90 }} data-adjust-discount />
+        <button onClick={() => setDiscounts(discounts.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: colors.red, cursor: "pointer" }}><X size={12} /></button>
+      </div>)}
+    </div>
+    <div style={{ fontSize: 11, color: colors.textMuted }}>
+      Queda: chofer <b style={{ color: colors.text }}>{fmt(preview.driverNet)}</b>{preview.discounts ? ` (${fmt(preview.driverGross)} − ${fmt(preview.discounts)})` : ""} · ayudantes {preview.crew.slice(1).map((c, i) => <span key={i}>{i ? " / " : ""}<b style={{ color: colors.cyan }}>{fmt(c.net)}</b>{c.discount ? ` (${fmt(c.total)} − ${fmt(c.discount)})` : ""}</span>)}{preview.numHelpers ? ` = ${fmt(preview.helpersTotal)}` : ""}
+      {helpersPaid && <span style={{ color: colors.orange }}> · los ayudantes de este viaje ya se pagaron: solo se ajusta el chofer</span>}
+    </div>
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <input placeholder="Nota (acuerdo especial, bono, daño…)" value={note} onChange={e => setNote(e.target.value)} style={{ ...inp, width: 260 }} />
+      <button onClick={() => onSave({ driverPayOverride: driverFix === "" ? null : Number(driverFix), helperPayOverrides: helperFix.map(v => (v === "" ? null : Number(v))), discounts: discounts.filter(d => Number(d.amount) > 0).map(d => ({ desc: d.desc, amount: Number(d.amount), ...(d.who && d.who !== "driver" ? { who: d.who } : {}) })), note })} style={smallBtn(colors.green, "white")} data-adjust-save><Check size={11} /> Guardar</button>
+      <button onClick={onCancel} style={smallBtn("transparent", colors.textMuted, `1px solid ${colors.border}`)}><X size={11} /> Cancelar</button>
+    </div>
+  </div>;
+}
 
 function OverrideBox({ label, current, note, onSave, onCancel, color = PURPLE }) {
   const [amount, setAmount] = useState(current);
@@ -28,7 +75,7 @@ function OverrideBox({ label, current, note, onSave, onCancel, color = PURPLE })
   </div>;
 }
 
-function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride, onTotalOverride, onClearTotalOverride, onPrint, onPrintPayroll, isMobile }) {
+function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride, onTripAdjust, helpersPaidOf, onTotalOverride, onClearTotalOverride, onPrint, onPrintPayroll, isMobile }) {
   const [open, setOpen] = useState(false);
   const [editingLine, setEditingLine] = useState(null);
   const [editingTotal, setEditingTotal] = useState(false);
@@ -98,7 +145,7 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
                   <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
                     {l.overridden && <span style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(calc.driverNet)}</span>}
                     <b style={{ color: l.overridden ? PURPLE : colors.text }}>{fmt(l.amount)}</b>
-                    {!l.paid && row.payType !== "fixed" && <button onClick={() => setEditingLine(editing ? null : trip.id)} title="Override de este viaje" style={{ background: "none", border: "none", cursor: "pointer", color: l.overridden ? PURPLE : colors.textMuted, padding: 2, display: "flex" }}><Pencil size={11} /></button>}
+                    {!l.paid && row.payType !== "fixed" && <button onClick={() => setEditingLine(editing ? null : trip.id)} title="Ajustar pago de este viaje (chofer, ayudantes, descuentos)" style={{ background: "none", border: "none", cursor: "pointer", color: l.overridden ? PURPLE : colors.textMuted, padding: 2, display: "flex" }}><Pencil size={11} /></button>}
                   </div>
                   {l.overridden && l.exp?.overrideNote && <div style={{ fontSize: 10, color: PURPLE }}>✏️ {l.exp.overrideNote}</div>}
                 </Td>
@@ -106,10 +153,10 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
                 <Td align="right"><Badge label={l.paid ? "✓ Pagado" : "Pendiente"} color={l.paid ? colors.green : colors.orange} /></Td>
               </tr>
               {row.payType === "perTrip" && calc.rateFound && <tr style={{ background: colors.accent + "06" }}><Td></Td><Td colSpan={10} style={{ fontSize: 11, color: colors.textMuted, paddingLeft: 20 }} data-crew>
-                ↳ {tripCrew(trip, calc, row.driver).map((c, i) => <span key={i} style={{ marginRight: 14, whiteSpace: "nowrap" }}><b style={{ color: c.role === "chofer" ? colors.text : colors.cyan }}>{c.role === "chofer" ? "Chofer" : `Ayudante ${c.idx}`}{c.role === "ayudante" && c.name && !/^Ayudante \d+$/.test(c.name) ? ` (${c.name})` : ""}</b>: {fmt(c.base)}{c.dieta ? ` + dieta ${fmt(c.dieta)}` : ""} = <b>{fmt(c.total)}</b>{c.direct ? <span style={{ color: colors.purple }}> · directo</span> : ""}</span>)}
+                ↳ {tripCrew(trip, calc, row.driver).map((c, i) => <span key={i} style={{ marginRight: 14, whiteSpace: "nowrap" }}><b style={{ color: c.role === "chofer" ? colors.text : colors.cyan }}>{c.role === "chofer" ? "Chofer" : `Ayudante ${c.idx}`}{c.role === "ayudante" && c.name && !/^Ayudante \d+$/.test(c.name) ? ` (${c.name})` : ""}</b>: {fmt(c.base)}{c.dieta ? ` + dieta ${fmt(c.dieta)}` : ""}{c.fixed ? <span style={{ color: PURPLE }}> (fijado)</span> : ""}{c.discount ? <span style={{ color: colors.red }}> − desc. {fmt(c.discount)}</span> : ""} = <b>{fmt(c.net)}</b>{c.direct ? <span style={{ color: colors.purple }}> · directo</span> : ""}</span>)}
               </Td></tr>}
-              {editing && <tr><td colSpan={11} style={{ padding: "6px 10px" }}><OverrideBox label="Override de este viaje" current={l.amount} note={l.exp?.overrideNote} onSave={(a, n) => { onLineOverride(l, a, n); setEditingLine(null); }} onCancel={() => setEditingLine(null)} /></td></tr>}
-              {(trip.discounts || []).filter(x => x.amount > 0).map((x, i) => <tr key={`d${i}`} style={{ background: colors.red + "08" }}><Td></Td><Td colSpan={7} style={{ fontSize: 11, color: colors.red, paddingLeft: 20 }}>↳ Descuento: {x.desc || "—"}</Td><Td align="right" color={colors.red}>−{fmt(x.amount)}</Td><Td></Td><Td></Td></tr>)}
+              {editing && <tr><td colSpan={11} style={{ padding: "6px 10px" }}><TripPayAdjust l={l} row={row} helpersPaid={helpersPaidOf(trip.id)} onSave={(patch) => { onTripAdjust(l, patch); setEditingLine(null); }} onCancel={() => setEditingLine(null)} /></td></tr>}
+              {(trip.discounts || []).filter(x => x.amount > 0).map((x, i) => <tr key={`d${i}`} style={{ background: colors.red + "08" }}><Td></Td><Td colSpan={7} style={{ fontSize: 11, color: colors.red, paddingLeft: 20 }}>↳ Descuento{x.who && x.who !== "driver" ? ` a ${tripCrew(trip, calc, row.driver)[Number(String(x.who).split(":")[1]) + 1]?.name || "ayudante"}` : " al chofer"}: {x.desc || "—"}</Td><Td align="right" color={colors.red}>−{fmt(x.amount)}</Td><Td></Td><Td></Td></tr>)}
             </Fragment>;
           })}
           {row.pendingTrips.map(({ trip, client }) => <tr key={`p${trip.id}`} style={{ opacity: 0.55 }}>
@@ -185,7 +232,7 @@ function HelperCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onPrint }) {
  * Nómina (admin). Fuente única: buildPayroll → un viaje se paga en la quincena en que
  * la oficina recibió sus documentos. Profit First: la nómina sale de OpEx.
  */
-export default function NominaPage({ t, expenses, setExpenses, trips, drivers, trucks, clients = [], cobros = [], ayudantes = [], pfSettings = DEFAULT_PF_SETTINGS, bankAccount = null, bankTransfers = [], user, isMobile }) {
+export default function NominaPage({ t, expenses, setExpenses, trips, setTrips, drivers, trucks, clients = [], cobros = [], ayudantes = [], pfSettings = DEFAULT_PF_SETTINGS, bankAccount = null, bankTransfers = [], user, isMobile }) {
   const periods = useMemo(() => genPeriods([...trips.map(x => x.date), ...trips.map(x => x.docsReceivedAt).filter(Boolean), ...expenses.filter(e => e.category === "driverPay").map(e => e.date), today()]), [trips, expenses]);
   const [pIdx, setPIdx] = useState(0);
   const [method, setMethod] = useState("transfer");
@@ -284,6 +331,15 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
   };
   const printHelper = (row) => openPrintWindow(`Pago ${row.ayudante.name} ${period.label}`, helperPeriodReportHTML({ row, period, generatedBy: user?.name }));
 
+  // Ajuste de un viaje desde Nómina: escribe en el viaje y rehace sus gastos de nómina pendientes
+  const helpersPaidOf = (tripId) => expenses.some(e => e.category === "helper" && e.tripId === tripId && e.status === "paid");
+  const tripAdjust = (row, l, patch) => {
+    const { note, ...fields } = patch;
+    const next = { ...l.trip, ...fields, updatedAt: new Date().toISOString(), updatedBy: user?.name || null,
+      history: [...(l.trip.history || []), { at: new Date().toISOString(), by: user?.name || null, action: `ajuste de nómina${note ? ": " + note : ""}` }] };
+    if (setTrips) setTrips(prev => prev.map(tr => tr.id === next.id ? next : tr));
+    setExpenses(prev => syncTripPayExpenses(prev, { trip: next, driver: row.driver, truck: l.truck }));
+  };
   const lineOverride = (row, l, amount, note) => setExpenses(prev => upsert(prev, e => e.category === "driverPay" && e.tripId === l.trip.id,
     () => ({ category: "driverPay", tripId: l.trip.id, driverId: row.driver.id, supplierId: null, date: l.trip.date, status: "pending", paymentMethod: "transfer", description: `Pago chofer ${row.driver.name} · ${l.trip.municipality}` }),
     e => ({ amount: Number(amount) || 0, calcAmount: e.calcAmount ?? l.calc.driverNet, overrideNote: note || undefined, driverId: row.driver.id })));
@@ -358,7 +414,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, drivers, t
     {rows.length === 0 && helperRows.length === 0 && <Card><div style={{ textAlign: "center", padding: 40, color: colors.textMuted, fontSize: 13 }}>No hay viajes recibidos ni salarios fijos en este corte.</div></Card>}
     {rows.map(({ row, pay }) => <DriverCard key={row.driver.id} row={row} pay={pay} period={period} isMobile={isMobile}
       onMarkPaid={() => markPaid({ row, pay })} onMarkUnpaid={() => markUnpaid({ row, pay })}
-      onLineOverride={(l, a, n) => lineOverride(row, l, a, n)} onTotalOverride={(a, n) => totalOverride(row, pay, a, n)} onClearTotalOverride={() => clearTotalOverride(row)}
+      onLineOverride={(l, a, n) => lineOverride(row, l, a, n)} onTripAdjust={(l, patch) => tripAdjust(row, l, patch)} helpersPaidOf={helpersPaidOf} onTotalOverride={(a, n) => totalOverride(row, pay, a, n)} onClearTotalOverride={() => clearTotalOverride(row)}
       onPrint={() => printDriver(row)} onPrintPayroll={() => printDriverPayroll(row, pay)} />)}
     {helperRows.length > 0 && <>
       <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "18px 0 8px" }}><HardHat size={15} color={colors.orange} /><b style={{ fontSize: 14 }}>Ayudantes (pago directo)</b><span style={{ fontSize: 11, color: colors.textMuted }}>· se les paga a ellos, no al chofer · misma regla: viaje con documentos recibidos en el corte</span></div>
