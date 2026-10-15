@@ -127,5 +127,32 @@ export function buildInvoicePfReport({ inv, trips = [], trucks = [], partners = 
   };
   // Identidad: flete neto = apartado + real ; apartado = socios transferido + liberado + broker
   const check = { net: totals.net, parts: round2(totals.partnerSetAside + totals.brokerSetAside + totals.real), setAside: totals.partnerSetAside, setAsideParts: round2(toPartners + settlements.reduce((s, x) => s + x.rel.released, 0)) };
-  return { inv, client, invoiceAmount, settings: { reservePct: pct }, tripRows, totals, abonos, collected, pending, balance: bal, expRows, expTotals, settlements, brokerPayouts, moves, check };
+  // ── 6. Vista por modelo (informativa: asume la factura cobrada y liquidada) ───
+  // Cada bloque dice qué parte es de la empresa; sobre esa suma va el % de Reserva y el resto a OpEx.
+  // Los reembolsos reponen OpEx íntegros (método B) y lo de socios y brokers pasa de largo.
+  const ownRows = tripRows.filter(t => !t.partner);
+  const own = { trips: ownRows, total: round2(ownRows.reduce((s, t) => s + t.net, 0)) };
+  own.reserve = round2(own.total * pct / 100); own.opex = round2(own.total - own.reserve);
+  const partnerBlock = (x) => {
+    const s = x.s, ps = s.model === "profit_share";
+    const base = ps ? (s.companyShare || 0) : (s.commission || 0);
+    const transfer = round2(Math.max(0, x.rel.transfer - x.fixedTotal));
+    return { partner: x.partner, period: x.period, status: x.status, model: s.model, trips: tripRows.filter(r => x.trips.includes(r.trip)), s, netRevenue: s.netRevenue, grossRevenue: s.grossRevenue,
+      commission: s.commission || 0, commissionPct: s.commissionPct, reimbursement: s.reimbursement || 0, periodResult: s.periodResult, partnerShare: s.partnerShare || 0, companyShare: s.companyShare || 0, partnerSharePct: s.partnerSharePct,
+      fixed: x.fixed, fixedTotal: x.fixedTotal, companyIncome: round2(base + x.fixedTotal), transfer, truckLossOut: s.truckLossOut || 0 };
+  };
+  const blocks = settlements.map(partnerBlock);
+  const byModel = (model) => { const list = blocks.filter(b => b.model === model); return { list, netRevenue: round2(list.reduce((s, b) => s + b.netRevenue, 0)), companyIncome: round2(list.reduce((s, b) => s + b.companyIncome, 0)), transfer: round2(list.reduce((s, b) => s + b.transfer, 0)), reimbursement: round2(list.reduce((s, b) => s + b.reimbursement, 0)) }; };
+  const reimbByPartner = new Map();
+  for (const e of expRows) { if (!e.chargedToPartner) continue; const k = e.partner.id; if (!reimbByPartner.has(k)) reimbByPartner.set(k, { partner: e.partner, lines: new Map(), total: 0 }); const g = reimbByPartner.get(k); g.lines.set(e.exp.category, (g.lines.get(e.exp.category) || 0) + e.amount); g.total = round2(g.total + e.amount); }
+  const reimbursements = { groups: [...reimbByPartner.values()].map(g => ({ partner: g.partner, lines: [...g.lines.entries()].map(([category, amount]) => ({ category, amount: round2(amount) })), total: g.total })), total: round2([...reimbByPartner.values()].reduce((s, g) => s + g.total, 0)) };
+  const brokersTotal = round2(brokerPayouts.reduce((s, b) => s + b.amount, 0));
+  const companyIncome = round2(own.total + blocks.reduce((s, b) => s + b.companyIncome, 0));
+  const pf = { companyIncome, reserve: round2(companyIncome * pct / 100) };
+  pf.opexPct = round2(companyIncome - pf.reserve); pf.opex = round2(pf.opexPct + reimbursements.total);
+  pf.toPartners = round2(blocks.reduce((s, b) => s + b.transfer, 0)); pf.toBrokers = brokersTotal; pf.passThrough = round2(pf.toPartners + brokersTotal);
+  pf.total = round2(pf.reserve + pf.opex + pf.passThrough);
+  pf.margin = round2(companyIncome + reimbursements.total - expTotals.total);
+  const sections = { own, profit_share: byModel("profit_share"), commission_expenses: byModel("commission_expenses"), commission: byModel("commission"), reimbursements, pf, brokers: brokerPayouts };
+  return { inv, client, invoiceAmount, settings: { reservePct: pct }, tripRows, totals, abonos, collected, pending, balance: bal, expRows, expTotals, settlements, brokerPayouts, moves, check, sections };
 }
