@@ -3,7 +3,7 @@ import { Plus, X, Route, Banknote, CheckCircle2, Clock, FileText, ChevronDown, C
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today, genPeriods } from "../utils/helpers.js";
 import { needsRate } from "../utils/tripPending.js";
-import { calcDriverPay, DEFAULT_HELPERS, tripSize, tripCrew } from "../utils/driverPay.js";
+import { calcDriverPay, DEFAULT_HELPERS, tripSize, paySize, tripCrew } from "../utils/driverPay.js";
 import { buildPayroll, payrollPayment, payrollDate } from "../utils/payroll.js";
 import { crewSlots, buildHelperLines, helperExpensePlan, planToNewExpenses, clientHelpersMode, clientSkipsHelpers, isDirectLine } from "../utils/ayudantes.js";
 import HelperSlots from "../components/HelperSlots.jsx";
@@ -272,7 +272,7 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
         </div>
         {(() => {
           const tkS = trucks.find(t2 => t2.id === Number(form.truckId));
-          const nS = form.numHelpers === null || form.numHelpers === undefined || form.numHelpers === "" ? DEFAULT_HELPERS[tripSize(form, tkS)] : Number(form.numHelpers) || 0;
+          const nS = form.numHelpers === null || form.numHelpers === undefined || form.numHelpers === "" ? DEFAULT_HELPERS[paySize(form, tkS)] : Number(form.numHelpers) || 0;
           const clS = clients.find(c => c.id === Number(form.clientId));
           return <>
             {nS > 0 && <HelperSlots n={nS} helperIds={form.helperIds} helperNames={form.helperNames} ayudantes={ayudantes} onChange={({ helperIds, helperNames }) => setForm({ ...form, helperIds, helperNames })} />}
