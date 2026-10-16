@@ -76,6 +76,7 @@ export function buildPayroll({ period, drivers = [], trips = [], trucks = [], cl
 
   for (const raw of drivers) {
     const driver = normalizeDriver(raw);
+    if (driver.partnerDriver) continue; // socio-chofer: cobra por liquidación, no sale en nómina
     if (driver.status === "inactive" && !trips.some(tr => tr.driverId === driver.id && inPeriod(tr.date, period))) continue;
     const mine = trips.filter(tr => tr.driverId === driver.id && tr.status !== "cancelled");
     const enrich = trip => {

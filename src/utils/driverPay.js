@@ -77,6 +77,11 @@ export function paySize(trip, truck) {
 export function calcDriverPay({ driver, trip, truck, clientId }) {
   const d = normalizeDriver(driver);
   const size = paySize(trip, truck);
+  // Socio-chofer: el camión es suyo y cobra por la liquidación del socio (comisión), no por nómina. Nada para él ni ayudantes.
+  if (d.partnerDriver) {
+    return { size, base: 0, dieta: 0, dietaTotal: 0, dietaEach: 0, driverGross: 0, driverFixed: false, discounts: 0, driverNet: 0, numHelpers: 0, helperBase: 0, helperEach: 0, helperPays: [], helperDiscounts: 0, helpersTotal: 0,
+      crew: [{ role: "Chofer", base: 0, dieta: 0, total: 0, discount: 0, net: 0, fixed: false }], total: 0, rateFound: true, sheetName: null, sizeFallback: false, payType: d.payType, partnerDriver: true };
+  }
   // Descuentos: cada uno dice a quién va (who: "driver" | "helper:<i>"); sin who = al chofer (como siempre)
   const discountsOf = (who) => (trip?.discounts || []).filter(x => (x?.who || "driver") === who).reduce((s, x) => s + (Number(x.amount) || 0), 0);
   const discounts = discountsOf("driver");
