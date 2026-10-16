@@ -26,7 +26,7 @@ function TripPayAdjust({ l, row, helpersPaid, onSave, onCancel }) {
   const crew = tripCrew(trip, calc, row.driver);
   const [driverFix, setDriverFix] = useState(trip.driverPayOverride == null ? "" : String(trip.driverPayOverride));
   const [helperFix, setHelperFix] = useState(crew.slice(1).map((_, i) => (trip.helperPayOverrides?.[i] == null ? "" : String(trip.helperPayOverrides[i]))));
-  const [discounts, setDiscounts] = useState((trip.discounts || []).map(d => ({ desc: d.desc || "", amount: Number(d.amount) || 0, who: d.who || "driver" })));
+  const [discounts, setDiscounts] = useState((trip.discounts || []).map(d => ({ desc: d.desc || "", amount: Number(d.amount) || 0, who: d.who || "driver", type: d.type === "credit" ? "credit" : "debit" })));
   const [note, setNote] = useState("");
   const preview = calcDriverPay({ driver: row.driver, truck: l.truck, clientId: trip.clientId, trip: { ...trip,
     driverPayOverride: driverFix === "" ? null : Number(driverFix), helperPayOverrides: helperFix.map(v => (v === "" ? null : Number(v))), discounts } });
@@ -40,8 +40,11 @@ function TripPayAdjust({ l, row, helpersPaid, onSave, onCancel }) {
         <input type="number" placeholder="según tarifario" value={helperFix[i]} disabled={helpersPaid} onChange={e => { const h = [...helperFix]; h[i] = e.target.value; setHelperFix(h); }} style={{ ...inp, width: 120 }} data-adjust-helper /></label>)}
     </div>
     <div>
-      <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Descuentos <button onClick={() => setDiscounts([...discounts, { desc: "", amount: 0, who: "driver" }])} style={smallBtn("transparent", PURPLE, `1px solid ${PURPLE}60`)}>+ agregar</button></div>
+      <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Descuentos y reembolsos <button onClick={() => setDiscounts([...discounts, { desc: "", amount: 0, who: "driver", type: "debit" }])} style={smallBtn("transparent", PURPLE, `1px solid ${PURPLE}60`)}>+ agregar</button></div>
       {discounts.map((d, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+        <select value={d.type} onChange={e => { const ds = [...discounts]; ds[i] = { ...d, type: e.target.value }; setDiscounts(ds); }} style={sel} title="Descuento resta; reembolso/bono suma">
+          <option value="debit">− Descuento</option><option value="credit">+ Reembolso</option>
+        </select>
         <input placeholder="Motivo" value={d.desc} onChange={e => { const ds = [...discounts]; ds[i] = { ...d, desc: e.target.value }; setDiscounts(ds); }} style={{ ...inp, width: 200 }} />
         <select value={d.who} onChange={e => { const ds = [...discounts]; ds[i] = { ...d, who: e.target.value }; setDiscounts(ds); }} style={sel} disabled={helpersPaid && d.who !== "driver"}>
           <option value="driver">Chofer</option>
@@ -52,12 +55,12 @@ function TripPayAdjust({ l, row, helpersPaid, onSave, onCancel }) {
       </div>)}
     </div>
     <div style={{ fontSize: 11, color: colors.textMuted }}>
-      Queda: chofer <b style={{ color: colors.text }}>{fmt(preview.driverNet)}</b>{preview.discounts ? ` (${fmt(preview.driverGross)} − ${fmt(preview.discounts)})` : ""} · ayudantes {preview.crew.slice(1).map((c, i) => <span key={i}>{i ? " / " : ""}<b style={{ color: colors.cyan }}>{fmt(c.net)}</b>{c.discount ? ` (${fmt(c.total)} − ${fmt(c.discount)})` : ""}</span>)}{preview.numHelpers ? ` = ${fmt(preview.helpersTotal)}` : ""}
+      Queda: chofer <b style={{ color: colors.text }}>{fmt(preview.driverNet)}</b>{preview.discounts > 0 ? ` (${fmt(preview.driverGross)} − ${fmt(preview.discounts)})` : preview.discounts < 0 ? ` (${fmt(preview.driverGross)} + ${fmt(-preview.discounts)})` : ""} · ayudantes {preview.crew.slice(1).map((c, i) => <span key={i}>{i ? " / " : ""}<b style={{ color: colors.cyan }}>{fmt(c.net)}</b>{c.discount > 0 ? ` (${fmt(c.total)} − ${fmt(c.discount)})` : c.discount < 0 ? ` (${fmt(c.total)} + ${fmt(-c.discount)})` : ""}</span>)}{preview.numHelpers ? ` = ${fmt(preview.helpersTotal)}` : ""}
       {helpersPaid && <span style={{ color: colors.orange }}> · los ayudantes de este viaje ya se pagaron: solo se ajusta el chofer</span>}
     </div>
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
       <input placeholder="Nota (acuerdo especial, bono, daño…)" value={note} onChange={e => setNote(e.target.value)} style={{ ...inp, width: 260 }} />
-      <button onClick={() => onSave({ driverPayOverride: driverFix === "" ? null : Number(driverFix), helperPayOverrides: helperFix.map(v => (v === "" ? null : Number(v))), discounts: discounts.filter(d => Number(d.amount) > 0).map(d => ({ desc: d.desc, amount: Number(d.amount), ...(d.who && d.who !== "driver" ? { who: d.who } : {}) })), note })} style={smallBtn(colors.green, "white")} data-adjust-save><Check size={11} /> Guardar</button>
+      <button onClick={() => onSave({ driverPayOverride: driverFix === "" ? null : Number(driverFix), helperPayOverrides: helperFix.map(v => (v === "" ? null : Number(v))), discounts: discounts.filter(d => Number(d.amount) > 0).map(d => ({ desc: d.desc, amount: Number(d.amount), ...(d.who && d.who !== "driver" ? { who: d.who } : {}), ...(d.type === "credit" ? { type: "credit" } : {}) })), note })} style={smallBtn(colors.green, "white")} data-adjust-save><Check size={11} /> Guardar</button>
       <button onClick={onCancel} style={smallBtn("transparent", colors.textMuted, `1px solid ${colors.border}`)}><X size={11} /> Cancelar</button>
     </div>
   </div>;
@@ -140,7 +143,7 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
                 <Td align="center">{calc.size}{!calc.rateFound && row.payType === "perTrip" && <div style={{ fontSize: 10, color: colors.red }}>sin tarifa</div>}</Td>
                 <Td align="right">{fmt(calc.base)}</Td>
                 <Td align="right" color={calc.dieta ? colors.accent : colors.textMuted}>{calc.dieta ? fmt(calc.dieta) : "—"}</Td>
-                <Td align="right" color={calc.discounts ? colors.red : colors.textMuted}>{calc.discounts ? "−" + fmt(calc.discounts) : "—"}</Td>
+                <Td align="right" color={calc.discounts > 0 ? colors.red : calc.discounts < 0 ? colors.green : colors.textMuted}>{calc.discounts > 0 ? "−" + fmt(calc.discounts) : calc.discounts < 0 ? "+" + fmt(-calc.discounts) : "—"}</Td>
                 <Td align="right">
                   <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
                     {l.overridden && <span style={{ fontSize: 10, color: colors.textMuted, textDecoration: "line-through" }}>{fmt(calc.driverNet)}</span>}
@@ -153,10 +156,10 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
                 <Td align="right"><Badge label={l.paid ? "✓ Pagado" : "Pendiente"} color={l.paid ? colors.green : colors.orange} /></Td>
               </tr>
               {row.payType === "perTrip" && calc.rateFound && <tr style={{ background: colors.accent + "06" }}><Td></Td><Td colSpan={10} style={{ fontSize: 11, color: colors.textMuted, paddingLeft: 20 }} data-crew>
-                ↳ {tripCrew(trip, calc, row.driver).map((c, i) => <span key={i} style={{ marginRight: 14, whiteSpace: "nowrap" }}><b style={{ color: c.role === "chofer" ? colors.text : colors.cyan }}>{c.role === "chofer" ? "Chofer" : `Ayudante ${c.idx}`}{c.role === "ayudante" && c.name && !/^Ayudante \d+$/.test(c.name) ? ` (${c.name})` : ""}</b>: {fmt(c.base)}{c.dieta ? ` + dieta ${fmt(c.dieta)}` : ""}{c.fixed ? <span style={{ color: PURPLE }}> (fijado)</span> : ""}{c.discount ? <span style={{ color: colors.red }}> − desc. {fmt(c.discount)}</span> : ""} = <b>{fmt(c.net)}</b>{c.direct ? <span style={{ color: colors.purple }}> · directo</span> : ""}</span>)}
+                ↳ {tripCrew(trip, calc, row.driver).map((c, i) => <span key={i} style={{ marginRight: 14, whiteSpace: "nowrap" }}><b style={{ color: c.role === "chofer" ? colors.text : colors.cyan }}>{c.role === "chofer" ? "Chofer" : `Ayudante ${c.idx}`}{c.role === "ayudante" && c.name && !/^Ayudante \d+$/.test(c.name) ? ` (${c.name})` : ""}</b>: {fmt(c.base)}{c.dieta ? ` + dieta ${fmt(c.dieta)}` : ""}{c.fixed ? <span style={{ color: PURPLE }}> (fijado)</span> : ""}{c.discount > 0 ? <span style={{ color: colors.red }}> − desc. {fmt(c.discount)}</span> : c.discount < 0 ? <span style={{ color: colors.green }}> + reemb. {fmt(-c.discount)}</span> : ""} = <b>{fmt(c.net)}</b>{c.direct ? <span style={{ color: colors.purple }}> · directo</span> : ""}</span>)}
               </Td></tr>}
               {editing && <tr><td colSpan={11} style={{ padding: "6px 10px" }}><TripPayAdjust l={l} row={row} helpersPaid={helpersPaidOf(trip.id)} onSave={(patch) => { onTripAdjust(l, patch); setEditingLine(null); }} onCancel={() => setEditingLine(null)} /></td></tr>}
-              {(trip.discounts || []).filter(x => x.amount > 0).map((x, i) => <tr key={`d${i}`} style={{ background: colors.red + "08" }}><Td></Td><Td colSpan={7} style={{ fontSize: 11, color: colors.red, paddingLeft: 20 }}>↳ Descuento{x.who && x.who !== "driver" ? ` a ${tripCrew(trip, calc, row.driver)[Number(String(x.who).split(":")[1]) + 1]?.name || "ayudante"}` : " al chofer"}: {x.desc || "—"}</Td><Td align="right" color={colors.red}>−{fmt(x.amount)}</Td><Td></Td><Td></Td></tr>)}
+              {(trip.discounts || []).filter(x => x.amount > 0).map((x, i) => { const cr = x.type === "credit"; const col = cr ? colors.green : colors.red; return <tr key={`d${i}`} style={{ background: col + "08" }}><Td></Td><Td colSpan={7} style={{ fontSize: 11, color: col, paddingLeft: 20 }}>↳ {cr ? "Reembolso" : "Descuento"}{x.who && x.who !== "driver" ? ` a ${tripCrew(trip, calc, row.driver)[Number(String(x.who).split(":")[1]) + 1]?.name || "ayudante"}` : " al chofer"}: {x.desc || "—"}</Td><Td align="right" color={col}>{cr ? "+" : "−"}{fmt(x.amount)}</Td><Td></Td><Td></Td></tr>; })}
             </Fragment>;
           })}
           {row.pendingTrips.map(({ trip, client }) => <tr key={`p${trip.id}`} style={{ opacity: 0.55 }}>
@@ -165,7 +168,7 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
           </tr>)}
         </tbody>
         <tfoot><tr style={{ borderTop: `2px solid ${colors.border}` }}>
-          <Td colSpan={5} bold>Totales</Td><Td align="right">{fmt(row.base)}</Td><Td align="right">{fmt(row.dieta)}</Td><Td align="right" color={colors.red}>{row.discounts ? "−" + fmt(row.discounts) : "—"}</Td><Td align="right" bold>{fmt(pay.driverTotal)}</Td><Td align="right" bold color={colors.cyan}>{fmt(row.helpers)}</Td><Td></Td>
+          <Td colSpan={5} bold>Totales</Td><Td align="right">{fmt(row.base)}</Td><Td align="right">{fmt(row.dieta)}</Td><Td align="right" color={row.discounts >= 0 ? colors.red : colors.green}>{row.discounts > 0 ? "−" + fmt(row.discounts) : row.discounts < 0 ? "+" + fmt(-row.discounts) : "—"}</Td><Td align="right" bold>{fmt(pay.driverTotal)}</Td><Td align="right" bold color={colors.cyan}>{fmt(row.helpers)}</Td><Td></Td>
         </tr></tfoot>
       </table>
       {row.advances > 0 && <div style={{ fontSize: 11, color: colors.orange, marginTop: 6 }}>Adelantos al chofer: −{fmt(row.advances)} (ya entregados; se descuentan del neto){row.advExps.some(e => e.tripId) ? " · " + row.advExps.filter(e => e.tripId).map(e => `viaje #${e.tripId} ${fmt(e.amount)}`).join(", ") : ""}.</div>}

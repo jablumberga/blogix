@@ -148,3 +148,10 @@ test("socio-chofer (partnerDriver): sin nómina para él ni ayudantes, y no sale
   const p = buildPayroll({ period, drivers: [socio], trips: [{ id: 1, date: "2026-10-05", driverId: 77, truckId: 2, clientId: 9, province: "Dajabón", municipality: "Dajabón", status: "delivered", docs: {}, docsReceivedAt: "2026-10-05" }], trucks: [t1, t2], clients: [{ id: 9, companyName: "X", rules: {} }], expenses: [] });
   assert.equal(p.drivers.length, 0, "el socio-chofer no aparece en la nómina");
 });
+
+test("reembolso (descuento type credit): suma al chofer o al ayudante en vez de restar", () => {
+  const trip = { province: "Dajabón", municipality: "Dajabón", clientId: 9, numHelpers: 1, discounts: [{ desc: "peaje", amount: 400, type: "credit" }, { desc: "daño", amount: 100, who: "helper:0" }, { desc: "bono", amount: 50, who: "helper:0", type: "credit" }] };
+  const c = calcDriverPay({ driver, trip, truck: t1 });
+  assert.equal(c.discounts, -400); assert.equal(c.driverNet, 2250 + 400);
+  assert.equal(c.crew[1].discount, 50); assert.equal(c.helperPays[0], 1250 - 50);
+});

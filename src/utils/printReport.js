@@ -182,9 +182,9 @@ export function driverPayrollHTML({ row, pay = null, period, generatedBy }) {
       <td style="text-align:center">${esc(calc?.size || "")}${!calc?.rateFound && row.payType === "perTrip" ? `<br><span class="no small">sin tarifa</span>` : ""}</td>
       <td class="right">${fmt(chofer?.base || 0)}</td>
       <td class="right">${chofer?.dieta ? fmt(chofer.dieta) : "—"}</td>
-      <td class="right">${calc?.discounts ? "−" + fmt(calc.discounts) : "—"}</td>
+      <td class="right">${calc?.discounts > 0 ? "−" + fmt(calc.discounts) : calc?.discounts < 0 ? "+" + fmt(-calc.discounts) : "—"}</td>
       <td class="right"><b>${fmt(l ? l.amount : calc?.driverNet || 0)}</b>${l?.overridden ? `<br><span class="small muted">ajustado${l.exp?.overrideNote ? ": " + esc(l.exp.overrideNote) : ""}</span>` : ""}</td>
-      <td class="small">${ayud.length ? ayud.map(a => `${esc(a.name)}: ${fmt(a.base)}${a.dieta ? " + dieta " + fmt(a.dieta) : ""}${a.fixed ? " (fijado)" : ""}${a.discount ? ` − desc. ${fmt(a.discount)}` : ""} = <b>${fmt(a.net ?? a.total)}</b>${a.direct ? " (directo)" : ""}`).join("<br>") : "—"}</td>
+      <td class="small">${ayud.length ? ayud.map(a => `${esc(a.name)}: ${fmt(a.base)}${a.dieta ? " + dieta " + fmt(a.dieta) : ""}${a.fixed ? " (fijado)" : ""}${a.discount > 0 ? ` − desc. ${fmt(a.discount)}` : a.discount < 0 ? ` + reemb. ${fmt(-a.discount)}` : ""} = <b>${fmt(a.net ?? a.total)}</b>${a.direct ? " (directo)" : ""}`).join("<br>") : "—"}</td>
       <td class="right">${fmt(ayud.filter(a => !a.direct).reduce((s, a) => s + (a.net ?? a.total), 0))}</td>
       <td class="small">${l ? (l.paid ? `<span class="ok">pagado</span>` : "pendiente") : ""}</td>
     </tr>`; });
@@ -204,7 +204,7 @@ export function driverPayrollHTML({ row, pay = null, period, generatedBy }) {
     <table class="grid">
       <thead><tr><th>Fecha</th><th>Cliente</th><th>Destino</th><th>Tarifa</th><th class="right">Chofer</th><th class="right">Dieta</th><th class="right">Desc.</th><th class="right">Neto chofer</th><th>Ayudantes (base + dieta)</th><th class="right">Ayud. por el chofer</th><th>Estado</th></tr></thead>
       <tbody>${tripRows.join("") || `<tr><td colspan="11" class="muted">Sin viajes recibidos en el período</td></tr>`}</tbody>
-      <tfoot><tr><td colspan="4"><b>Totales (${row.tripCount} viaje${row.tripCount !== 1 ? "s" : ""})</b></td><td class="right">${fmt(row.base)}</td><td class="right">${fmt(row.dieta)}</td><td class="right">${row.discounts ? "−" + fmt(row.discounts) : "—"}</td><td class="right"><b>${fmt(driverTotal)}</b></td><td></td><td class="right"><b>${fmt(helpersViaDriver)}</b></td><td></td></tr></tfoot>
+      <tfoot><tr><td colspan="4"><b>Totales (${row.tripCount} viaje${row.tripCount !== 1 ? "s" : ""})</b></td><td class="right">${fmt(row.base)}</td><td class="right">${fmt(row.dieta)}</td><td class="right">${row.discounts > 0 ? "−" + fmt(row.discounts) : row.discounts < 0 ? "+" + fmt(-row.discounts) : "—"}</td><td class="right"><b>${fmt(driverTotal)}</b></td><td></td><td class="right"><b>${fmt(helpersViaDriver)}</b></td><td></td></tr></tfoot>
     </table>
     <div class="box">
       ${pay?.override ? `<div>Total ajustado: <b>${fmt(grossEff)}</b>${pay.override.overrideNote ? ` <span class="small muted">(${esc(pay.override.overrideNote)})</span>` : ""}</div>` : `<div>Bruto chofer (chofer + su parte de dieta − descuentos): <b>${fmt(grossEff)}</b></div>`}
@@ -224,14 +224,14 @@ export function payrollReportHTML({ payroll, helperPayroll = null, company = "B-
     <tr>
       <td>${esc(r.driver.name)}</td><td>${r.payType === "fixed" ? "Fijo" : r.payType === "percentage" ? `${esc(r.driver.percentageAmount)}%` : "Por viaje"}</td>
       <td class="right">${r.tripCount}</td>
-      <td class="right">${fmt(r.gross)}</td><td class="right">${r.discounts ? "−" + fmt(r.discounts) : "—"}</td><td class="right">${r.advances ? "−" + fmt(r.advances) : "—"}</td>
+      <td class="right">${fmt(r.gross)}</td><td class="right">${r.discounts > 0 ? "−" + fmt(r.discounts) : r.discounts < 0 ? "+" + fmt(-r.discounts) : "—"}</td><td class="right">${r.advances ? "−" + fmt(r.advances) : "—"}</td>
       <td class="right"><b>${fmt(r.net)}</b></td>
       <td class="right">${r.helperCount}</td><td class="right">${fmt(r.helpersNet ?? r.helpers)}${r.helperAdvances ? `<br><span class="small muted">${fmt(r.helpers)} − adel. ${fmt(r.helperAdvances)}</span>` : ""}</td>
       <td class="small">${r.pendingCount ? `<span class="no">${r.pendingCount} pendiente(s), no pagados</span>` : `<span class="ok">todo recibido</span>`}${r.missingRates ? ` <span class="no">${r.missingRates} sin tarifa</span>` : ""}</td>
     </tr>`).join("");
   const viaOf = (x) => x.split ? x.split.viaDriver : { count: x.calc.numHelpers, amount: x.calc.helpersTotal };
   const helperDetail = drivers.flatMap(r => r.trips.filter(x => viaOf(x).count > 0).map((x) => { const { trip, calc } = x; const v = viaOf(x); return `<tr><td>${esc(trip.date)}</td><td>#${esc(trip.id)} ${esc(trip.municipality)}</td><td>${esc(r.driver.name)}</td><td>${esc((trip.helpers || []).filter(h => !isDirectLine(h)).map(h => h.name).filter(Boolean).join(", ") || "—")}</td><td class="right">${v.count}</td><td class="right">${fmt(calc.helperEach)}</td><td class="right">${fmt(v.amount)}</td></tr>`; })).join("");
-  const crewRows = drivers.flatMap(r => r.trips.flatMap(({ trip, calc }) => tripCrew(trip, calc, r.driver).map(c => `<tr><td>${esc(trip.date)}</td><td>#${esc(trip.id)} ${esc(trip.municipality)}</td><td>${esc(c.name)}</td><td>${c.role === "chofer" ? "Chofer" : `Ayudante ${c.idx}`}</td><td class="right">${fmt(c.base)}</td><td class="right">${c.dieta ? fmt(c.dieta) : "—"}</td><td class="right"><b>${fmt(c.net ?? c.total)}</b>${c.discount ? `<br><span class="small muted">${fmt(c.total)} − desc. ${fmt(c.discount)}</span>` : ""}${c.fixed ? `<br><span class="small muted">fijado</span>` : ""}</td><td class="small">${c.role === "chofer" ? "al chofer" : c.direct ? "directo al ayudante" : "por el chofer"}</td></tr>`))).join("");
+  const crewRows = drivers.flatMap(r => r.trips.flatMap(({ trip, calc }) => tripCrew(trip, calc, r.driver).map(c => `<tr><td>${esc(trip.date)}</td><td>#${esc(trip.id)} ${esc(trip.municipality)}</td><td>${esc(c.name)}</td><td>${c.role === "chofer" ? "Chofer" : `Ayudante ${c.idx}`}</td><td class="right">${fmt(c.base)}</td><td class="right">${c.dieta ? fmt(c.dieta) : "—"}</td><td class="right"><b>${fmt(c.net ?? c.total)}</b>${c.discount > 0 ? `<br><span class="small muted">${fmt(c.total)} − desc. ${fmt(c.discount)}</span>` : c.discount < 0 ? `<br><span class="small muted">${fmt(c.total)} + reemb. ${fmt(-c.discount)}</span>` : ""}${c.fixed ? `<br><span class="small muted">fijado</span>` : ""}</td><td class="small">${c.role === "chofer" ? "al chofer" : c.direct ? "directo al ayudante" : "por el chofer"}</td></tr>`))).join("");
   const hp = helperPayroll && helperPayroll.rows.length ? helperPayroll : null;
   const directRows = hp ? hp.rows.map(h => `<tr><td>${esc(h.ayudante.name)}</td><td>${esc(h.ayudante.cedula || "")}</td><td class="right">${h.tripCount}</td><td class="right">${fmt(h.gross)}</td><td class="right">${h.advances ? "−" + fmt(h.advances) : "—"}</td><td class="right"><b>${fmt(h.net)}</b></td><td class="small">${esc([h.ayudante.bank, h.ayudante.account].filter(Boolean).join(" · "))}</td><td class="small">${h.pendingCount ? `<span class="no">${h.pendingCount} pendiente(s), no pagados</span>` : `<span class="ok">todo recibido</span>`}</td></tr>`).join("") : "";
   return `
