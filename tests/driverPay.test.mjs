@@ -138,3 +138,13 @@ test("la nómina paga por el camión del viaje: T2 cobra T2 aunque al cliente se
   const c1 = calcDriverPay({ driver, trip: { ...trip, tarifaOverride: "T2" }, truck: t1 });
   assert.equal(c1.size, "T1"); assert.equal(c1.base, 2000);
 });
+
+test("socio-chofer (partnerDriver): sin nómina para él ni ayudantes, y no sale en la nómina", async () => {
+  const socio = { ...driver, id: 77, name: "Felix", partnerDriver: true };
+  const c = calcDriverPay({ driver: socio, trip: { province: "Dajabón", municipality: "Dajabón", clientId: 9, numHelpers: 2 }, truck: t2 });
+  assert.equal(c.driverNet, 0); assert.equal(c.helpersTotal, 0); assert.equal(c.numHelpers, 0); assert.equal(c.partnerDriver, true); assert.equal(c.total, 0);
+  const { buildPayroll } = await import("../src/utils/payroll.js");
+  const period = { dateFrom: "2026-10-01", dateTo: "2026-10-15", half: 1, mStr: "2026-10", label: "" };
+  const p = buildPayroll({ period, drivers: [socio], trips: [{ id: 1, date: "2026-10-05", driverId: 77, truckId: 2, clientId: 9, province: "Dajabón", municipality: "Dajabón", status: "delivered", docs: {}, docsReceivedAt: "2026-10-05" }], trucks: [t1, t2], clients: [{ id: 9, companyName: "X", rules: {} }], expenses: [] });
+  assert.equal(p.drivers.length, 0, "el socio-chofer no aparece en la nómina");
+});

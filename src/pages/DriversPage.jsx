@@ -43,8 +43,8 @@ export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks,
       if (taken) { setError("Ese usuario ya está en uso (chofer, socio o admin)"); return; }
     }
     if (!editId && username && !form.newPassword) { setError("Pon una contraseña para el usuario nuevo"); return; }
-    if (form.payType === "percentage" && !(Number(form.percentageAmount) > 0)) { setError("Indica el porcentaje"); return; }
-    if (form.payType === "fixed" && !(Number(form.fixedAmount) > 0)) { setError("Indica el salario fijo"); return; }
+    if (!form.partnerDriver && form.payType === "percentage" && !(Number(form.percentageAmount) > 0)) { setError("Indica el porcentaje"); return; }
+    if (!form.partnerDriver && form.payType === "fixed" && !(Number(form.fixedAmount) > 0)) { setError("Indica el salario fijo"); return; }
 
     const newTruckId = Number(form.truckId) || null;
     const prev = editId ? drivers.find(x => x.id === editId) : null;
@@ -165,7 +165,11 @@ export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks,
         </Sel>
         {form.payType === "fixed" && <Inp label="Salario fijo por quincena (RD$)" type="number" value={form.fixedAmount} onChange={e => setForm({ ...form, fixedAmount: e.target.value })} />}
         {form.payType === "percentage" && <Inp label="% del ingreso del viaje" type="number" min="0" max="100" value={form.percentageAmount} onChange={e => setForm({ ...form, percentageAmount: e.target.value })} />}
-        {form.payType === "perTrip" && <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 6 }}>Se paga según el tarifario del destino. T1: chofer + 1 ayudante; T2: chofer + 2 ayudantes. La dieta del tarifario es la del equipo completo y se reparte en partes iguales entre chofer y ayudantes. En cada viaje se puede cambiar la cantidad de ayudantes.</div>}
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, alignSelf: "end", paddingBottom: 8, cursor: "pointer" }} title="El camión es del propio chofer (socio). No lleva nómina ni ayudantes por la empresa: cobra por la liquidación del socio.">
+          <input type="checkbox" checked={!!form.partnerDriver} onChange={e => setForm({ ...form, partnerDriver: e.target.checked })} data-partner-driver /> Socio-chofer (sin nómina)
+        </label>
+        {form.partnerDriver && <div style={{ fontSize: 11, color: colors.cyan, alignSelf: "end", paddingBottom: 6 }}>Sus viajes no generan pago de chofer ni de ayudantes; la empresa cobra su comisión en la liquidación del socio.</div>}
+        {!form.partnerDriver && form.payType === "perTrip" && <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 6 }}>Se paga según el tarifario del destino. T1: chofer + 1 ayudante; T2: chofer + 2 ayudantes. La dieta del tarifario es la del equipo completo y se reparte en partes iguales entre chofer y ayudantes. En cada viaje se puede cambiar la cantidad de ayudantes.</div>}
         <Inp label={t.username} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} autoComplete="off" />
         {!editId ? <Inp label={t.password} type="password" value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} autoComplete="new-password" /> : <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "end", paddingBottom: 8 }}>La contraseña se cambia con el botón 🔑 de la lista.</div>}
       </div>
@@ -256,7 +260,7 @@ export default function DriversPage({ t, drivers, setDrivers, trucks, setTrucks,
           return <tr key={d.id} style={{ borderBottom: `1px solid ${colors.border}11`, opacity: inactive ? 0.55 : 1 }}>
             <Td bold>{d.name}</Td><Td>{d.phone}</Td>
             <Td>{tk ? <span><Truck size={11} style={{ verticalAlign: "middle", marginRight: 3 }} />{tk.plate}</span> : "—"}</Td>
-            <Td><Badge label={d.payType === "fixed" ? `Fijo ${fmt(d.fixedAmount)}` : d.payType === "percentage" ? `${d.percentageAmount || 0}%` : "Por viaje"} color={d.payType === "fixed" ? colors.accent : d.payType === "percentage" ? colors.cyan : colors.green} /></Td>
+            <Td>{d.partnerDriver ? <Badge label="Socio-chofer · sin nómina" color={colors.purple || "#9b7fe8"} /> : <Badge label={d.payType === "fixed" ? `Fijo ${fmt(d.fixedAmount)}` : d.payType === "percentage" ? `${d.percentageAmount || 0}%` : "Por viaje"} color={d.payType === "fixed" ? colors.accent : d.payType === "percentage" ? colors.cyan : colors.green} />}</Td>
             <Td align="center">{d.payType !== "perTrip" ? "—" : nRates === 0
               ? <Badge label="Sin tarifario" color={colors.red} />
               : <span title={d.rateSheets.map(s => `${s.name}: ${(s.rates || []).length}`).join(", ")}>{nSheets} ({nRates} destinos)</span>}</Td>
