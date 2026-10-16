@@ -83,7 +83,8 @@ export function calcDriverPay({ driver, trip, truck, clientId }) {
       crew: [{ role: "Chofer", base: 0, dieta: 0, total: 0, discount: 0, net: 0, fixed: false }], total: 0, rateFound: true, sheetName: null, sizeFallback: false, payType: d.payType, partnerDriver: true };
   }
   // Descuentos: cada uno dice a quién va (who: "driver" | "helper:<i>"); sin who = al chofer (como siempre)
-  const discountsOf = (who) => (trip?.discounts || []).filter(x => (x?.who || "driver") === who).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  // Un descuento con type "credit" es un reembolso/bono: SUMA en vez de restar (peaje que pagó el chofer, bono, etc.)
+  const discountsOf = (who) => (trip?.discounts || []).filter(x => (x?.who || "driver") === who).reduce((s, x) => s + (x?.type === "credit" ? -1 : 1) * (Number(x.amount) || 0), 0);
   const discounts = discountsOf("driver");
   const revenue = Number(trip?.revenue) || 0;
 
@@ -140,7 +141,7 @@ export function calcDriverPay({ driver, trip, truck, clientId }) {
 
 const money = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
 /** «1,300 + dieta 333» (o solo «1,300» si no hay dieta). */
-export const crewPartText = (line) => `${line?.dieta ? `${money(line.base)} + dieta ${money(line.dieta)}` : money(line?.base)}${line?.fixed ? " (fijado)" : ""}${line?.discount ? ` − desc. ${money(line.discount)}` : ""}`;
+export const crewPartText = (line) => `${line?.dieta ? `${money(line.base)} + dieta ${money(line.dieta)}` : money(line?.base)}${line?.fixed ? " (fijado)" : ""}${line?.discount > 0 ? ` − desc. ${money(line.discount)}` : line?.discount < 0 ? ` + reemb. ${money(-line.discount)}` : ""}`;
 /** Texto del gasto del chofer: «Chofer Rober: 1,700 + dieta 334 · Dajabón». */
 export function driverPayText(calc, driverName, where) {
   const c = calc?.crew?.[0];

@@ -329,10 +329,10 @@ function DriverCorteCard({ pd, corte, driverObj, myTrips, expenses, trucks, clie
         <Td align="right" color={chofer.dieta > 0 ? colors.accent : colors.textMuted}>{chofer.dieta > 0 ? fmt(chofer.dieta) : "—"}</Td>
         <Td align="right" bold>{line && line.overridden ? <span title="ajustado por la oficina">{fmt(line.amount)}</span> : fmt(x.calc.driverNet)}</Td>
         <Td align="right" color={viaDriver.length ? colors.cyan : colors.textMuted} style={{ lineHeight: 1.4 }}>
-          {ayuds.length ? ayuds.map(a => <div key={a.idx} style={{ fontSize: 11 }}>{a.name}: {fmt(a.base)}{a.dieta ? ` + ${fmt(a.dieta)}` : ""}{a.discount ? <span style={{ color: colors.red }}> − {fmt(a.discount)}</span> : null} = <b>{fmt(a.net)}</b>{a.direct ? <span style={{ color: colors.textMuted }}> (directo)</span> : null}</div>) : "—"}
+          {ayuds.length ? ayuds.map(a => <div key={a.idx} style={{ fontSize: 11 }}>{a.name}: {fmt(a.base)}{a.dieta ? ` + ${fmt(a.dieta)}` : ""}{a.discount > 0 ? <span style={{ color: colors.red }}> − {fmt(a.discount)}</span> : a.discount < 0 ? <span style={{ color: colors.green }}> + {fmt(-a.discount)}</span> : null} = <b>{fmt(a.net)}</b>{a.direct ? <span style={{ color: colors.textMuted }}> (directo)</span> : null}</div>) : "—"}
         </Td>
         <Td align="right" style={{ lineHeight: 1.4, verticalAlign: "top" }}>
-          {tripDiscounts > 0 ? <div style={{ color: colors.red, fontWeight: 600 }}>− {fmt(tripDiscounts)}</div> : null}
+          {tripDiscounts > 0 ? <div style={{ color: colors.red, fontWeight: 600 }}>− {fmt(tripDiscounts)}</div> : tripDiscounts < 0 ? <div style={{ color: colors.green, fontWeight: 600 }}>+ {fmt(-tripDiscounts)}</div> : null}
           {advOfTrip(tr.id).map(e => <div key={e.id} style={{ fontSize: 10, color: colors.orange }}>↳ Adel. {e.category === "adelanto_ayudante" ? "ayud. " : ""}− {fmt(e.amount)}</div>)}
           {tripDiscounts === 0 && advOfTrip(tr.id).length === 0 ? <span style={{ color: colors.textMuted }}>—</span> : null}
         </Td>
@@ -343,12 +343,12 @@ function DriverCorteCard({ pd, corte, driverObj, myTrips, expenses, trucks, clie
           </button>
         </Td>
       </tr>
-      {(tr.discounts || []).filter(d => d.amount > 0).map((d, i) => (
-        <tr key={`disc-${tr.id}-${i}`} style={{ background: colors.red + "08" }}>
-          <Td></Td><Td colSpan={6} style={{ fontSize: 11, color: colors.red, paddingLeft: 20 }}>↳ Descuento: {d.desc || "—"}</Td>
-          <Td align="right" style={{ fontSize: 11, color: colors.red }}>− {fmt(d.amount)}</Td><Td></Td>
+      {(tr.discounts || []).filter(d => d.amount > 0).map((d, i) => { const cr = d.type === "credit"; const col = cr ? colors.green : colors.red; return (
+        <tr key={`disc-${tr.id}-${i}`} style={{ background: col + "08" }}>
+          <Td></Td><Td colSpan={6} style={{ fontSize: 11, color: col, paddingLeft: 20 }}>↳ {cr ? "Reembolso" : "Descuento"}{d.who && d.who !== "driver" ? ` (${crew[Number(String(d.who).split(":")[1]) + 1]?.name || "ayudante"})` : ""}: {d.desc || "—"}</Td>
+          <Td align="right" style={{ fontSize: 11, color: col }}>{cr ? "+" : "−"} {fmt(d.amount)}</Td><Td></Td>
         </tr>
-      ))}
+      ); })}
     </Fragment>;
   };
   const allAdv = [...row.advExps.map(e => ({ ...e, who: "chofer" })), ...row.helperAdvExps.map(e => ({ ...e, who: "ayudantes" }))].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
@@ -421,7 +421,7 @@ function DriverCorteCard({ pd, corte, driverObj, myTrips, expenses, trucks, clie
                 <span style={{ color: pay.override ? "#9b7fe8" : colors.green, fontWeight: 600 }}>{fmt(pay.grossEff)}</span>
               </div>
             </div>
-            {row.discounts > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Descuentos (ya restados)</span><span style={{ color: colors.red, fontWeight: 600 }}>− {fmt(row.discounts)}</span></div>}
+            {row.discounts !== 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>{row.discounts > 0 ? "Descuentos (ya restados)" : "Reembolsos (ya sumados)"}</span><span style={{ color: row.discounts > 0 ? colors.red : colors.green, fontWeight: 600 }}>{row.discounts > 0 ? "− " + fmt(row.discounts) : "+ " + fmt(-row.discounts)}</span></div>}
             {row.advances > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: colors.textMuted }}>Adelantos al chofer</span><span style={{ color: colors.red, fontWeight: 600 }}>− {fmt(row.advances)}</span></div>}
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, borderTop: `1px solid ${colors.border}44`, paddingTop: 8, marginTop: 2 }}>
               <span>Neto chofer</span><span style={{ color: colors.cyan }}>{fmt(netoAPagar)}</span>
