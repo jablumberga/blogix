@@ -9,7 +9,7 @@
  *   cash      → Caja: cobros en efectivo, para saber exactamente qué depositar
  *   other     → cualquier otra cuenta
  *
- * Movimientos de cada cuenta (desde su fecha de saldo inicial):
+ * Movimientos de cada cuenta (después de la fecha de su saldo: openingBalance es el saldo al CIERRE de openingDate):
  *   - cobros: a su cuenta escogida; si no, efectivo → Caja y lo demás → Income
  *   - gastos pagados: a su cuenta escogida; si no, retiro de reserva → Reserva, factura a crédito de suplidor →
  *     Suplidores, lo demás → OpEx. Efectivo y tarjeta de crédito no salen de ninguna cuenta (salvo que se escoja una).
@@ -81,12 +81,14 @@ export const expenseDate = (e) => e?.paidDate || e?.date || "";
 
 /**
  * Movimientos de todas las cuentas: { [accountId]: [{ key, accountId, type: "in"|"out", date, amount, description, source, refId, kind }] }
- * Solo desde la fecha de saldo inicial de cada cuenta; ordenados del más nuevo al más viejo.
+ * Solo los de después de la fecha del saldo de cada cuenta (ese día ya está dentro del saldo); ordenados del más nuevo al más viejo.
  */
 export function bankMovements({ accounts = [], expenses = [], cobros = [], transfers = [], invoices = [], clients = [], suppliers = [] }) {
   const out = Object.fromEntries(accounts.map(a => [a.id, []]));
   const acc = new Map(accounts.map(a => [a.id, a]));
-  const push = (m) => { const a = acc.get(m.accountId); if (!a) return; if (a.openingDate && m.date && m.date < a.openingDate) return; out[a.id].push(m); };
+  // openingBalance = saldo al CIERRE de openingDate (lo que dice el banco ese día, con todo lo de ese día incluido):
+  // solo cuentan los movimientos de días posteriores.
+  const push = (m) => { const a = acc.get(m.accountId); if (!a) return; if (a.openingDate && m.date && m.date <= a.openingDate) return; out[a.id].push(m); };
   const invMap = new Map(invoices.map(i => [i.id, i])), clMap = new Map(clients.map(c => [c.id, c])), supMap = new Map(suppliers.map(s => [s.id, s]));
   for (const c of cobros) {
     const id = cobroAccountId(c, accounts); if (!id) continue;
@@ -214,7 +216,7 @@ export function cashToDeposit({ accounts = [], cobros = [], transfers = [] }) {
   const cash = roleAccount(accounts, "cash");
   if (!cash) return null;
   const deposited = new Set(transfers.filter(t => t.kind === "deposit").flatMap(t => t.cobroIds || []));
-  const items = cobros.filter(c => cobroAccountId(c, accounts) === cash.id && !deposited.has(c.id) && cobroDate(c) >= (cash.openingDate || ""));
+  const items = cobros.filter(c => cobroAccountId(c, accounts) === cash.id && !deposited.has(c.id) && cobroDate(c) > (cash.openingDate || ""));
   return { account: cash, cobroIds: items.map(c => c.id), cobrosTotal: round2(items.reduce((s, c) => s + num(c.amount), 0)) };
 }
 
