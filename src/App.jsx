@@ -22,6 +22,7 @@ import NominaPage from "./pages/NominaPage.jsx";
 import SuppliersPage from "./pages/SuppliersPage.jsx";
 import SettlementsPage from "./pages/SettlementsPage.jsx";
 import CostPerKmPage from "./pages/CostPerKmPage.jsx";
+import ProyeccionesPage from "./pages/ProyeccionesPage.jsx";
 import CxCPage from "./pages/CxCPage.jsx";
 import InvoicesPage from "./pages/InvoicesPage.jsx";
 import BancoPage from "./pages/BancoPage.jsx";
@@ -209,6 +210,7 @@ export default function App() {
     { id: "nomina",      icon: Banknote,         label: "Nómina" },
     { id: "banco",       icon: Landmark,         label: "Banco" },
     { id: "costkm",      icon: Gauge,            label: "Costo por km" },
+    { id: "proyecciones", icon: TrendingUp,      label: "Proyecciones" },
     { id: "suppliers",   icon: Store,            label: t.suppliers },
     { id: "settlements", icon: Handshake,        label: t.settlements },
   ];
@@ -246,6 +248,7 @@ export default function App() {
     nomina:      "Nómina",
     banco:       "Banco",
     costkm:      "Costo por km",
+    proyecciones: "Proyecciones",
     suppliers:   t.suppliers,
     settlements: t.settlements,
   };
@@ -413,6 +416,7 @@ export default function App() {
         {page === "nomina"      && isAdmin    && <NominaPage       {...ctx} />}
         {page === "banco"       && isAdmin    && <BancoPage        {...ctx} />}
         {page === "costkm"      && isAdmin    && <CostPerKmPage    {...ctx} />}
+        {page === "proyecciones" && isAdmin   && <ProyeccionesPage {...ctx} />}
         {page === "suppliers"   && isAdmin    && <SuppliersPage    {...ctx} />}
         {page === "settlements" && (isAdmin || isPartner) && <SettlementsPage  {...ctx} />}
       </div>
