@@ -22,6 +22,7 @@
  *                         cierra en pérdida en el período, la pérdida la financia la empresa completa
  *                         (igual que en la liquidación: el socio nunca queda debiendo). Se calcula por camión.
  */
+import { fuelPriceAt } from "./fuel.js";
 import { expenseChargedToPartner, normalizePartner } from "./partnerModels.js";
 import { tripNetRevenue } from "./partnerModels.js";
 
@@ -89,7 +90,9 @@ const daysBetween = (a, b) => Math.max(1, Math.round((new Date(b + "T12:00:00") 
  * Cálculo principal.
  * @returns { byTruck:[], byRoute:[], byDriver:[], totals, quality }
  */
-export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks = [], drivers = [], clients = [], brokers = [], partners = [], fixedTemplates = [], distances = [], gpsKm = [], today = "", targetMarginPerKm = 0 }) {
+export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks = [], drivers = [], clients = [], brokers = [], partners = [], fixedTemplates = [], distances = [], gpsKm = [], today = "", targetMarginPerKm = 0, fuelSettings = null }) {
+  // Galones de una carga: los registrados; si no, monto ÷ precio por galón vigente en la fecha del gasto (si hay)
+  const gal = (e) => { if (Number(e.gallons) > 0) return Number(e.gallons); const p = fuelPriceAt(fuelSettings, e.date); return p > 0 && Number(e.amount) > 0 ? Number(e.amount) / p : 0; };
   // Km del GPS: todos los km del camión en el período. Para ver por destino y por chofer, esos km se reparten entre
   // los viajes del camión en el período según la distancia de cada viaje (odómetro o referencia; si no hay, por igual).
   const gpsByTruck = gpsPeriodKm({ trucks, gpsKm, dateFrom, dateTo, today });
@@ -169,7 +172,7 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
     if (!truckId) continue;
     const a = acc(truckId);
     a.partnerRecovered += amt - company;
-    if (e.category === "fuel") { a.fuel += company; a.gallons += Number(e.gallons) || 0; }
+    if (e.category === "fuel") { a.fuel += company; a.gallons += gal(e); }
     else if (e.category === "driverPay") a.driver += company;
     else if (e.category === "helper") a.helpers += company;
     else if (["repair", "maintenance", "tire"].includes(e.category)) a.maintenance += company;
@@ -177,11 +180,11 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
     if (linkedTrip) {
       const r = byRoute.get(`${linkedTrip.province}|${linkedTrip.municipality}`); if (r) r.cost += company;
       const d = byDriver.get(linkedTrip.driverId);
-      if (d) { if (e.category === "fuel") { d.fuel += amt; d.gallons += Number(e.gallons) || 0; } if (e.category === "driverPay" || e.category === "helper") d.pay += amt; }
+      if (d) { if (e.category === "fuel") { d.fuel += amt; d.gallons += gal(e); } if (e.category === "driverPay" || e.category === "helper") d.pay += amt; }
     } else if (e.category === "fuel") {
       // Combustible cargado solo al camión (sin viaje): se reparte más abajo entre sus viajes del período
       if (!fuelPool.has(truckId)) fuelPool.set(truckId, { amt: 0, company: 0, gallons: 0 });
-      const p = fuelPool.get(truckId); p.amt += amt; p.company += company; p.gallons += Number(e.gallons) || 0;
+      const p = fuelPool.get(truckId); p.amt += amt; p.company += company; p.gallons += gal(e);
     }
   }
 
@@ -232,22 +235,24 @@ export function costPerKm({ dateFrom, dateTo, trips = [], expenses = [], trucks 
       costPerKm: kmOk ? cost / a.km : null, revenuePerKm: kmOk ? companyRevenue / a.km : null,
       marginPerKm: kmOk ? (companyRevenue - cost) / a.km : null, margin: companyRevenue - cost,
       kmPerGallon: a.gallons > 0 && kmOk ? a.km / a.gallons : null,
+      costPerGallon: a.gallons > 0 ? a.fuel / a.gallons : null,
       status: !kmOk ? "nodata" : (companyRevenue - cost) / a.km >= targetMarginPerKm ? "ok" : "bad" };
   }).sort((x, y) => (y.km - x.km));
 
   const routes = [...byRoute.values()].map(r => ({ ...r, costPerKm: r.km > 0 ? r.cost / r.km : null, revenuePerKm: r.km > 0 ? r.revenue / r.km : null, marginPerKm: r.km > 0 ? (r.revenue - r.cost) / r.km : null })).sort((x, y) => y.trips - x.trips);
-  const driversOut = [...byDriver.values()].map(d => ({ ...d, name: drivers.find(x => x.id === d.driverId)?.name || `#${d.driverId}`, kmPerGallon: d.gallons > 0 && d.km > 0 ? d.km / d.gallons : null, costPerKm: d.km > 0 ? (d.fuel + d.pay) / d.km : null })).sort((x, y) => y.km - x.km);
+  const driversOut = [...byDriver.values()].map(d => ({ ...d, name: drivers.find(x => x.id === d.driverId)?.name || `#${d.driverId}`, kmPerGallon: d.gallons > 0 && d.km > 0 ? d.km / d.gallons : null, costPerGallon: d.gallons > 0 ? d.fuel / d.gallons : null, costPerKm: d.km > 0 ? (d.fuel + d.pay) / d.km : null })).sort((x, y) => y.km - x.km);
 
   const totals = byTruck.reduce((s, t) => ({ km: s.km + t.km, trips: s.trips + t.trips, revenue: s.revenue + t.companyRevenue, cost: s.cost + t.cost, fuel: s.fuel + t.fuel, gallons: s.gallons + t.gallons }), { km: 0, trips: 0, revenue: 0, cost: 0, fuel: 0, gallons: 0 });
   totals.costPerKm = totals.km > 0 ? totals.cost / totals.km : null;
   totals.revenuePerKm = totals.km > 0 ? totals.revenue / totals.km : null;
   totals.marginPerKm = totals.km > 0 ? (totals.revenue - totals.cost) / totals.km : null;
+  totals.costPerGallon = totals.gallons > 0 ? totals.fuel / totals.gallons : null; // precio promedio pagado por galón
   const quality = pTrips.reduce((q, tr) => { q[kmOf(tr).source]++; return q; }, { gps: 0, odometer: 0, estimated: 0, none: 0 });
   // Camiones con GPS a los que les faltan días del período por traer (sus km se quedan cortos)
   quality.gpsMissing = [...gpsByTruck].filter(([, g]) => g.synced && g.missing.length > 0).map(([truckId, g]) => ({ truckId, plate: truckMap.get(truckId)?.plate || `#${truckId}`, days: g.missing.length }));
   quality.gpsNotSynced = [...gpsByTruck].filter(([, g]) => !g.synced && g.daysExpected > 0).map(([truckId]) => truckMap.get(truckId)?.plate || `#${truckId}`);
   quality.fuelAllocated = fuelAllocated;     // combustible sin viaje repartido entre viajes del camión
   quality.fuelUnallocated = fuelUnallocated; // combustible sin viaje de camiones sin viajes en el período (solo en «Por camión»)
-  quality.fuelWithoutGallons = expenses.filter(e => e.category === "fuel" && !(Number(e.gallons) > 0) && ((e.tripId && pTripIds.has(e.tripId)) || (!e.tripId && inRange(e.date, dateFrom, dateTo)))).length;
+  quality.fuelWithoutGallons = expenses.filter(e => e.category === "fuel" && !(gal(e) > 0) && ((e.tripId && pTripIds.has(e.tripId)) || (!e.tripId && inRange(e.date, dateFrom, dateTo)))).length;
   return { byTruck, byRoute: routes, byDriver: driversOut, totals, quality, days };
 }

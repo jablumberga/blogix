@@ -5,6 +5,7 @@ import { fmt, pad, MONTHS_ES, today } from "../utils/helpers.js";
 import { Card, StatCard, PageHeader, Th, Td, Inp, Btn, Badge } from "../components/ui/index.jsx";
 import { costPerKm, gpsPeriodKm, KM_SOURCE_LABEL } from "../utils/costPerKm.js";
 import { syncGps } from "../api.js";
+import { fuelPriceList, fuelPriceAt, setFuelPrice, removeFuelPrice } from "../utils/fuel.js";
 
 const PURPLE = "#9b7fe8";
 const fmtKm = (n) => n == null ? "—" : `${Math.round(n).toLocaleString("en-US")} km`;
@@ -21,7 +22,7 @@ const dayComplete = (g, d) => !!g && !!g.syncedAt && g.syncedAt >= `${shiftDay(d
  * Costo por kilómetro (solo admin): por camión, por destino y por chofer.
  * Km: GPS (TrackSolid, todos los km del camión en el período) → odómetro del chofer → distancia de referencia por destino.
  */
-export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], drivers = [], clients = [], brokers = [], partners = [], fixedTemplates = [], distances = [], setDistances, gpsKm = [], setTrips, setGpsKm, isMobile }) {
+export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], drivers = [], clients = [], brokers = [], partners = [], fixedTemplates = [], distances = [], setDistances, gpsKm = [], setTrips, setGpsKm, pfSettings = {}, setPfSettings, isMobile }) {
   const now = new Date();
   const [mode, setMode] = useState("mes");
   const [y, setY] = useState(now.getFullYear());
@@ -44,8 +45,18 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
   const next = () => { if (mode === "ano") return setY(v => v + 1); if (mode === "quincena" && half === 1) return setHalf(2); if (mode === "quincena") setHalf(1); if (m === 12) { setM(1); setY(v => v + 1); } else setM(v => v + 1); };
 
   const todayStr = today();
-  const r = useMemo(() => costPerKm({ dateFrom, dateTo, trips, expenses, trucks, drivers, clients, brokers, partners, fixedTemplates, distances, gpsKm, today: todayStr, targetMarginPerKm: target }),
-    [dateFrom, dateTo, trips, expenses, trucks, drivers, clients, brokers, partners, fixedTemplates, distances, gpsKm, todayStr, target]);
+  // Precio por galón de referencia con historial (cambia cada semana): cada gasto de combustible usa el vigente en su fecha
+  const fuelPrices = useMemo(() => fuelPriceList(pfSettings), [pfSettings]);
+  const fuelPriceToday = fuelPriceAt(pfSettings, todayStr);
+  const [newPrice, setNewPrice] = useState({ from: todayStr, price: "" });
+  const addFuelPrice = () => {
+    if (!newPrice.from || !(Number(newPrice.price) > 0) || !setPfSettings) return;
+    setPfSettings({ ...pfSettings, fuelPrices: setFuelPrice(pfSettings, { from: newPrice.from, price: Number(newPrice.price) }) });
+    setNewPrice({ from: todayStr, price: "" });
+  };
+  const delFuelPrice = (from) => { if (setPfSettings) setPfSettings({ ...pfSettings, fuelPrices: removeFuelPrice(pfSettings, from) }); };
+  const r = useMemo(() => costPerKm({ dateFrom, dateTo, trips, expenses, trucks, drivers, clients, brokers, partners, fixedTemplates, distances, gpsKm, today: todayStr, targetMarginPerKm: target, fuelSettings: pfSettings }),
+    [dateFrom, dateTo, trips, expenses, trucks, drivers, clients, brokers, partners, fixedTemplates, distances, gpsKm, todayStr, target, pfSettings]);
   const gpsTrucks = trucks.filter(t => t.gpsImei).length;
   const gpsByTruck = useMemo(() => gpsPeriodKm({ trucks, gpsKm, dateFrom, dateTo, today: todayStr }), [trucks, gpsKm, dateFrom, dateTo, todayStr]);
   const gpsTotalKm = [...gpsByTruck.values()].reduce((s, g) => s + g.km, 0);
@@ -110,6 +121,7 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
       <StatCard icon={Gauge} label="Ingreso por km" value={fmtPerKm(r.totals.revenuePerKm)} color={colors.green} sub={`ingreso empresa ${fmt(r.totals.revenue)}`} />
       <StatCard icon={Gauge} label="Margen por km" value={fmtPerKm(r.totals.marginPerKm)} color={r.totals.marginPerKm == null ? colors.textMuted : r.totals.marginPerKm >= target ? colors.green : colors.red} sub={`objetivo RD$${target}`} />
       <StatCard icon={Fuel} label="Km por galón" value={r.totals.gallons > 0 && r.totals.km > 0 ? (r.totals.km / r.totals.gallons).toFixed(1) : "—"} color={colors.cyan} sub={`${Math.round(r.totals.gallons)} gal · ${fmt(r.totals.fuel)}`} />
+      <StatCard icon={Fuel} label="Costo por galón" value={r.totals.costPerGallon != null ? `RD$${r.totals.costPerGallon.toFixed(2)}` : "—"} color={colors.yellow} sub={r.totals.costPerGallon != null ? "promedio pagado en el período" : "cargas sin galones"} data-cost-per-gallon />
     </div>
 
     {(r.quality.none > 0 || r.quality.fuelWithoutGallons > 0) && <div style={{ marginBottom: 14, background: colors.orange + "15", border: `1px solid ${colors.orange}40`, borderRadius: 10, padding: "8px 12px", fontSize: 12, display: "flex", gap: 8, alignItems: "center" }}>
@@ -121,13 +133,13 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
     </div>}
 
     <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
-      {[["trucks", "Por camión"], ["routes", "Por destino"], ["drivers", "Por chofer"], ["distances", "Distancias de referencia"], ["gps", "GPS"]].map(([k, l]) => <button key={k} onClick={() => setTab(k)} style={btn(tab === k)}>{l}</button>)}
+      {[["trucks", "Por camión"], ["routes", "Por destino"], ["drivers", "Por chofer"], ["distances", "Distancias de referencia"], ["fuel", "Precio por galón"], ["gps", "GPS"]].map(([k, l]) => <button key={k} onClick={() => setTab(k)} style={btn(tab === k)}>{l}</button>)}
     </div>
 
     {tab === "trucks" && <Card>
       <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>Camión</Th><Th align="right">Km</Th><Th align="right">Viajes</Th><Th align="right">Ingreso empresa</Th><Th align="right">Combustible</Th><Th align="right">Chofer + ayud.</Th><Th align="right">Mant./otros</Th><Th align="right">Fijos</Th><Th align="right">Costo total</Th><Th align="right">Costo/km</Th><Th align="right">Ingreso/km</Th><Th align="right">Margen/km</Th><Th align="right">Km/gal</Th></tr></thead>
-        <tbody>{r.byTruck.length === 0 && <tr><Td colSpan={13}><span style={{ color: colors.textMuted }}>Sin viajes en el período.</span></Td></tr>}
+        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>Camión</Th><Th align="right">Km</Th><Th align="right">Viajes</Th><Th align="right">Ingreso empresa</Th><Th align="right">Combustible</Th><Th align="right">Chofer + ayud.</Th><Th align="right">Mant./otros</Th><Th align="right">Fijos</Th><Th align="right">Costo total</Th><Th align="right">Costo/km</Th><Th align="right">Ingreso/km</Th><Th align="right">Margen/km</Th><Th align="right">Km/gal</Th><Th align="right">RD$/gal</Th></tr></thead>
+        <tbody>{r.byTruck.length === 0 && <tr><Td colSpan={14}><span style={{ color: colors.textMuted }}>Sin viajes en el período.</span></Td></tr>}
           {r.byTruck.map(tk => <tr key={tk.truckId} style={{ borderBottom: `1px solid ${colors.border}11` }}>
             <Td bold><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: st(tk.status), marginRight: 6 }} />{tk.plate} <Badge label={tk.size} color={tk.size === "T2" ? colors.orange : colors.accent} />{tk.partnerName && <div style={{ fontSize: 10, color: colors.textMuted }}>socio {tk.partnerName}{tk.partnerRecovered > 0 ? ` · le descuentas ${fmt(tk.partnerRecovered)}` : ""}</div>}
               <div style={{ fontSize: 9, color: colors.textMuted }}>{tk.gpsKm != null ? <span data-truck-gps>GPS: todos los km del período{tk.gpsDaysMissing > 0 ? <b style={{ color: colors.orange }}> · faltan {tk.gpsDaysMissing} día(s)</b> : ""}{tk.trips === 0 ? " · sin viajes" : ""}</span> : Object.entries(tk.kmBySource).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${KM_SOURCE_LABEL[k].toLowerCase()}`).join(" · ")}</div></Td>
@@ -135,7 +147,7 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
             <Td align="right">{fmt(tk.fuel)}</Td><Td align="right">{fmt(tk.driver + tk.helpers)}</Td><Td align="right">{fmt(tk.maintenance + tk.other)}</Td><Td align="right">{fmt(tk.fixed)}</Td>
             <Td align="right" bold color={colors.orange}>{fmt(tk.cost)}</Td>
             <Td align="right" bold>{fmtPerKm(tk.costPerKm)}</Td><Td align="right">{fmtPerKm(tk.revenuePerKm)}</Td>
-            <Td align="right" bold color={st(tk.status)}>{fmtPerKm(tk.marginPerKm)}</Td><Td align="right">{tk.kmPerGallon ? tk.kmPerGallon.toFixed(1) : "—"}</Td>
+            <Td align="right" bold color={st(tk.status)}>{fmtPerKm(tk.marginPerKm)}</Td><Td align="right">{tk.kmPerGallon ? tk.kmPerGallon.toFixed(1) : "—"}</Td><Td align="right">{tk.costPerGallon != null ? tk.costPerGallon.toFixed(2) : "—"}</Td>
           </tr>)}</tbody>
       </table></div>
       <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 8 }}>Ingreso empresa: en camión propio el flete neto; en camión de socio solo lo que retiene la empresa (comisión o su parte). Costo: lo que paga la empresa y NO recupera del socio (en reparto de utilidad la empresa carga su parte de cada gasto descontado, y el 100 % si el camión cierra en pérdida — igual que la liquidación). Fijos: plantillas de gastos fijos con camión, prorrateadas por días. Km de camiones con GPS: todos los del período (viajes, regresos y movimientos sin viaje).</div>
@@ -154,9 +166,9 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
 
     {tab === "drivers" && <Card>
       <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>Chofer</Th><Th align="right">Viajes</Th><Th align="right">Km</Th><Th align="right">Combustible</Th><Th align="right">Galones</Th><Th align="right">Km/gal</Th><Th align="right">Pago + ayud.</Th><Th align="right">Costo/km (comb.+pago)</Th></tr></thead>
+        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>Chofer</Th><Th align="right">Viajes</Th><Th align="right">Km</Th><Th align="right">Combustible</Th><Th align="right">Galones</Th><Th align="right">RD$/gal</Th><Th align="right">Km/gal</Th><Th align="right">Pago + ayud.</Th><Th align="right">Costo/km (comb.+pago)</Th></tr></thead>
         <tbody>{r.byDriver.map(d => <tr key={d.driverId} style={{ borderBottom: `1px solid ${colors.border}11` }}>
-          <Td bold><Users size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{d.name}</Td><Td align="right">{d.trips}</Td><Td align="right">{fmtKm(d.km)}</Td><Td align="right">{fmt(d.fuel)}</Td><Td align="right">{d.gallons ? d.gallons.toFixed(1) : "—"}</Td>
+          <Td bold><Users size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{d.name}</Td><Td align="right">{d.trips}</Td><Td align="right">{fmtKm(d.km)}</Td><Td align="right">{fmt(d.fuel)}</Td><Td align="right">{d.gallons ? d.gallons.toFixed(1) : "—"}</Td><Td align="right">{d.costPerGallon != null ? d.costPerGallon.toFixed(2) : "—"}</Td>
           <Td align="right" bold color={d.kmPerGallon == null ? colors.textMuted : colors.cyan}>{d.kmPerGallon ? d.kmPerGallon.toFixed(1) : "—"}</Td><Td align="right">{fmt(d.pay)}</Td><Td align="right">{fmtPerKm(d.costPerKm)}</Td>
         </tr>)}</tbody>
       </table></div>
@@ -178,6 +190,22 @@ export default function CostPerKmPage({ trips = [], expenses = [], trucks = [], 
           <Td>{d.province}</Td><Td bold>{d.municipality}</Td><Td align="right">{fmtKm(d.km)}</Td>
           <Td align="right"><button onClick={() => setDistances(distances.filter(x => x !== d))} style={{ background: "none", border: "none", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button></Td>
         </tr>)}{(distances || []).length === 0 && <tr><Td colSpan={4}><span style={{ color: colors.textMuted }}>Todavía no hay distancias. Agrega las de tus destinos frecuentes.</span></Td></tr>}</tbody>
+      </table>
+    </Card>}
+
+    {tab === "fuel" && <Card>
+      <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>Precio del combustible por galón, con la fecha desde la que aplica (cambia cada semana). Cuando se registra un gasto de combustible sin galones, la app los calcula sola: monto ÷ precio vigente en la fecha del gasto. Los galones quedan guardados en el gasto; un cambio de precio después no mueve lo ya registrado.{fuelPriceToday ? <> Precio vigente hoy: <b style={{ color: colors.text }} data-fuel-price-today>RD${fuelPriceToday.toLocaleString("en-US")}</b>/gal.</> : <> <span style={{ color: colors.orange }}>Todavía no hay precio: los galones hay que escribirlos a mano.</span></>}</div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr auto", gap: 10, alignItems: "end", marginBottom: 12 }}>
+        <Inp label="Desde (fecha)" type="date" value={newPrice.from} onChange={e => setNewPrice({ ...newPrice, from: e.target.value })} data-fuel-from />
+        <Inp label="Precio por galón (RD$)" type="number" inputMode="decimal" value={newPrice.price} onChange={e => setNewPrice({ ...newPrice, price: e.target.value })} onKeyDown={e => { if (e.key === "Enter") addFuelPrice(); }} data-fuel-price />
+        <Btn onClick={addFuelPrice} data-fuel-add><Plus size={13} /> Agregar</Btn>
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }} data-fuel-table>
+        <thead><tr style={{ borderBottom: `1px solid ${colors.border}` }}><Th>Desde</Th><Th>Hasta</Th><Th align="right">RD$/gal</Th><Th align="right"></Th></tr></thead>
+        <tbody>{fuelPrices.slice().reverse().map((p, i, arr) => { const next = arr[i - 1]; return <tr key={p.from} style={{ borderBottom: `1px solid ${colors.border}11` }}>
+          <Td bold>{p.from}</Td><Td>{next ? `hasta ${shiftDay(next.from, -1)}` : "vigente"}</Td><Td align="right">{p.price.toLocaleString("en-US", { minimumFractionDigits: 2 })}</Td>
+          <Td align="right"><button onClick={() => delFuelPrice(p.from)} title="Quitar" style={{ background: "none", border: "none", color: colors.red, cursor: "pointer" }}><Trash2 size={12} /></button></Td>
+        </tr>; })}{fuelPrices.length === 0 && <tr><Td colSpan={4}><span style={{ color: colors.textMuted }}>Todavía no hay precios. Agrega el de esta semana.</span></Td></tr>}</tbody>
       </table>
     </Card>}
 

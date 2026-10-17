@@ -94,6 +94,9 @@ export async function verifyToken(token, secret) {
 }
 
 // ── Row Level Security filter ─────────────────────────────────────────────────
+/** Choferes y oficina solo necesitan el historial de precio por galón (para galones automáticos), nada más del Profit First. */
+const fuelOnly = (pf) => ({ fuelPrices: Array.isArray(pf?.fuelPrices) ? pf.fuelPrices : [] });
+
 function applyRLS(data, user) {
   if (user.role === "admin") return data;
 
@@ -151,6 +154,7 @@ function applyRLS(data, user) {
       expenses:         (data.expenses || []).filter(e => e.category === "adelanto_conductor" || e.category === "adelanto_ayudante" || e.category === "driverPay" || e.category === "nominaTotalOverride"),
       ayudantes:        (data.ayudantes || []).filter(a => a && a.status !== "deleted").map(a => ({ id: a.id, name: a.name, cedula: a.cedula, phone: a.phone, bank: a.bank, account: a.account, payMode: a.payMode, status: a.status })),
       brokers: [], suppliers: [], fixedTemplates: [], cobros: [], invoices: [], settlementStatus: {},
+      pfSettings: fuelOnly(data.pfSettings),
     };
   }
 
@@ -184,6 +188,7 @@ function applyRLS(data, user) {
       ayudantes:        (data.ayudantes || []).filter(a => a && a.status !== "inactive" && a.status !== "deleted").map(a => ({ id: a.id, name: a.name, payMode: a.payMode === "driver" ? "driver" : "direct", status: "active" })),
       partners:         [], brokers: [], suppliers: [],
       settlementStatus: {}, fixedTemplates: [], cobros: [], invoices: [],
+      pfSettings:       fuelOnly(data.pfSettings),
     };
   }
 

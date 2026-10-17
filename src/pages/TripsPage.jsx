@@ -16,9 +16,10 @@ import { sortRecords, DEFAULT_SORT } from "../utils/sortList.js";
 import { tripPassThrough } from "../utils/profitFirst.js";
 import { checkRef } from "../api.js";
 import { generateConduce } from "../utils/generateConduce.js";
+import { fuelGallons, fuelPriceAt, fuelLabel } from "../utils/fuel.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, Th, Td, StatusBadge, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, invoices, cobros = [], partners = [], settlementStatus = {}, ayudantes = [], isMobile }) {
+export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, clients, expenses, setExpenses, brokers, invoices, cobros = [], partners = [], settlementStatus = {}, ayudantes = [], isMobile, pfSettings = null }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({});
@@ -331,7 +332,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const addExpense = () => {
     if (!expForm.amount || !expModal) return;
     const instant = ["cash", "credit_card"].includes(expForm.paymentMethod);
-    setExpenses(prev => [...prev, { id: nxId(prev), tripId: expModal, date: expForm.date, category: expForm.category, amount: Number(expForm.amount), gallons: expForm.category === "fuel" ? (Number(expForm.gallons) || null) : null, paymentMethod: expForm.paymentMethod, description: expForm.description, supplierId: null, status: instant ? "paid" : "pending", ...(instant ? { paidDate: expForm.date } : {}) }]);
+    setExpenses(prev => [...prev, { id: nxId(prev), tripId: expModal, date: expForm.date, category: expForm.category, amount: Number(expForm.amount), gallons: expForm.category === "fuel" ? fuelGallons({ amount: expForm.amount, gallons: expForm.gallons, pricePerGallon: fuelPriceAt(pfSettings, expForm.date) }).gallons : null, paymentMethod: expForm.paymentMethod, description: expForm.description, supplierId: null, status: instant ? "paid" : "pending", ...(instant ? { paidDate: expForm.date } : {}) }]);
     setExpForm({ date: today(), category: "fuel", amount: "", gallons: "", paymentMethod: "cash", description: "" });
   };
 
@@ -616,7 +617,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 10 }}>
           <Inp label={t.expenseAmount} type="number" value={expForm.amount} onChange={e => setExpForm({ ...expForm, amount: e.target.value })} />
-          {expForm.category === "fuel" && <Inp label="Galones (para km/gal)" type="number" value={expForm.gallons ?? ""} onChange={e => setExpForm({ ...expForm, gallons: e.target.value })} />}
+          {expForm.category === "fuel" && <Inp label={fuelLabel({ amount: expForm.amount, gallons: expForm.gallons, date: expForm.date, settings: pfSettings })} type="number" value={expForm.gallons ?? ""} onChange={e => setExpForm({ ...expForm, gallons: e.target.value })} placeholder={fuelPriceAt(pfSettings, expForm.date) ? "automático" : ""} data-fuel-gallons />}
           <Sel label={t.paymentMethod} value={expForm.paymentMethod} onChange={e => setExpForm({ ...expForm, paymentMethod: e.target.value })}>
             {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t[m] || m}</option>)}
           </Sel>
