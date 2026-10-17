@@ -211,7 +211,7 @@ export default function BancoPage({ expenses = [], setExpenses, cobros = [], cli
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 6 }} data-bank-selected={sel.id}><st.icon size={16} color={st.color} /> {sel.name}{sel.active === false && <Badge label="Desactivada" color={colors.textMuted} />}</div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{ACCOUNT_ROLES[sel.role]?.hint}{sel.bank ? ` · ${sel.bank}` : ""}{sel.last4 ? ` ••${sel.last4}` : ""} · saldo inicial {fmt(s.opening)} al {sel.openingDate}</div>
+          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{ACCOUNT_ROLES[sel.role]?.hint}{sel.bank ? ` · ${sel.bank}` : ""}{sel.last4 ? ` ••${sel.last4}` : ""} · saldo {fmt(s.opening)} al cierre del {sel.openingDate}</div>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {(sel.role === "reserve" || sel.role === "opex" || sel.role === "other") && sel.active !== false && <Btn variant="ghost" onClick={() => { setErr(""); setWd({ date: todayStr, amount: "", kind: sel.role === "reserve" ? "reserve" : "cash", accountId: sel.id, description: "" }); }} style={{ fontSize: 12 }} data-bank-withdraw><ArrowDownToLine size={13} /> Retiro</Btn>}
@@ -259,10 +259,11 @@ export default function BancoPage({ expenses = [], setExpenses, cobros = [], cli
         <Sel label="Tipo" value={acctForm.role} onChange={e => setAcctForm({ ...acctForm, role: e.target.value })}>{Object.entries(ACCOUNT_ROLES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Sel>
         <Inp label="Banco" value={acctForm.bank || ""} onChange={e => setAcctForm({ ...acctForm, bank: e.target.value })} placeholder="opcional" />
         <Inp label="Últimos 4 dígitos" value={acctForm.last4 || ""} onChange={e => setAcctForm({ ...acctForm, last4: e.target.value.replace(/\D/g, "").slice(0, 4) })} placeholder="opcional" />
-        <Inp label="Saldo inicial (DOP)" type="number" value={acctForm.openingBalance} onChange={e => setAcctForm({ ...acctForm, openingBalance: e.target.value })} />
-        <Inp label="Saldo al día" type="date" value={acctForm.openingDate} onChange={e => setAcctForm({ ...acctForm, openingDate: e.target.value })} />
+        <Inp label="Saldo (DOP)" type="number" value={acctForm.openingBalance} onChange={e => setAcctForm({ ...acctForm, openingBalance: e.target.value })} />
+        <Inp label="Al cierre del día" type="date" value={acctForm.openingDate} onChange={e => setAcctForm({ ...acctForm, openingDate: e.target.value })} />
+        <div style={{ gridColumn: "1 / -1", fontSize: 11, color: colors.textMuted, marginTop: -4 }}>Pon lo que dice el banco al final de ese día (con todo lo de ese día ya incluido). A partir del día siguiente, los cobros, gastos y transferencias registrados lo suben o lo bajan.</div>
       </div>
-      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 8 }}>{ACCOUNT_ROLES[acctForm.role]?.hint}. Los movimientos de antes de la fecha del saldo inicial no se cuentan en esta cuenta.</div>
+      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 8 }}>{ACCOUNT_ROLES[acctForm.role]?.hint}. Los movimientos de ese día y de antes ya están dentro del saldo que pones; no se vuelven a contar.</div>
       {err && <div style={{ color: colors.red, fontSize: 12, marginTop: 8 }} data-bank-error>{err}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end" }}><Btn variant="ghost" onClick={() => setAcctForm(null)}>Cancelar</Btn><Btn onClick={saveAccount} data-bank-save-account>Guardar</Btn></div>
     </Modal>}
