@@ -14,6 +14,7 @@ import { receiptToExpenseForm, receiptDuplicates } from "../utils/receipts.js";
 import { listReceipts, rejectReceipt, approveReceipt, notifyReceiptsChanged } from "../utils/receiptsApi.js";
 import ReceiptPhoto from "../components/ReceiptPhoto.jsx";
 import ReceiptCapture from "../components/ReceiptCapture.jsx";
+import { fuelGallons, fuelPriceAt, fuelLabel } from "../utils/fuel.js";
 import WhatsAppButton from "../components/WhatsAppButton.jsx";
 
 const RC_CAT = { fuel: "Combustible", toll: "Peaje", tire: "Gomas", repair: "Reparación", maintenance: "Mantenimiento", other: "Otro" };
@@ -27,7 +28,7 @@ const settlementKey = (partnerId, date) => `${partnerId}-${(date || "").slice(0,
 // Categories where a direct truck link makes sense
 const TRUCK_CATEGORIES = ["fuel", "repair", "maintenance", "insurance", "tire", "loan", "other", "toll", "salary"];
 
-export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers, partners = [], settlementStatus = {}, fixedTemplates, setFixedTemplates, ayudantes = [], isMobile, bankAccount = null }) {
+export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, clients, suppliers, drivers, partners = [], settlementStatus = {}, fixedTemplates, setFixedTemplates, ayudantes = [], isMobile, bankAccount = null, pfSettings = null }) {
   const bankAccounts = useMemo(() => getAccounts(bankAccount, today()), [bankAccount]);
 
   const [filterCat, setFilterCat] = useState("all");
@@ -153,7 +154,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
     const supplierId = form.supplierId ? Number(form.supplierId) : null;
     const sup = supplierId ? (suppliers || []).find(s => s.id === supplierId) : null;
     const dueDate = getSupplierDueDate(form.date, sup);
-    const data = { ...form, amount: Number(form.amount), gallons: form.category === "fuel" ? (Number(form.gallons) || null) : null, tripId: form.tripId ? Number(form.tripId) : null, truckId: form.truckId ? Number(form.truckId) : null, driverId: form.driverId || null, supplierId, dueDate, status,
+    const data = { ...form, amount: Number(form.amount), gallons: form.category === "fuel" ? fuelGallons({ amount: form.amount, gallons: form.gallons, pricePerGallon: fuelPriceAt(pfSettings, form.date) }).gallons : null, tripId: form.tripId ? Number(form.tripId) : null, truckId: form.truckId ? Number(form.truckId) : null, driverId: form.driverId || null, supplierId, dueDate, status,
       ...(status === "paid" && !form.paidDate ? { paidDate: form.date } : {}) };
     // La casilla solo tiene sentido en camiones de socios; en los demás se limpia
     if (formPartner) data.chargeToPartner = formCharge; else delete data.chargeToPartner;
@@ -195,7 +196,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
 
   return <div>
     <PageHeader title={t.expenses} action={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Btn variant="ghost" onClick={() => setShowCapture(true)}><Camera size={14} /> Subir foto</Btn><Btn onClick={openNew}><Plus size={14} /> {t.addExpense}</Btn></div>} />
-    {showCapture && <ReceiptCapture trucks={(trucks || []).filter(tk => tk.status !== "inactive")} trips={trips || []} onClose={() => setShowCapture(false)} onSubmitted={() => loadReceipts()} />}
+    {showCapture && <ReceiptCapture trucks={(trucks || []).filter(tk => tk.status !== "inactive")} trips={trips || []} fuelSettings={pfSettings} onClose={() => setShowCapture(false)} onSubmitted={() => loadReceipts()} />}
     {photoId && <div onClick={() => setPhotoId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center" }}><div onClick={e => e.stopPropagation()}><ReceiptPhoto id={photoId} height={Math.min(600, Math.round(window.innerHeight * 0.8))} /></div></div>}
 
     {/* Recibos por foto por revisar */}
@@ -283,7 +284,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
           {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{t[c] || c}</option>)}
         </Sel>
         <Inp label={t.expenseAmount} type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
-        {form.category === "fuel" && <Inp label="Galones (para km/gal)" type="number" value={form.gallons ?? ""} onChange={e => setForm({ ...form, gallons: e.target.value })} />}
+        {form.category === "fuel" && <Inp label={fuelLabel({ amount: form.amount, gallons: form.gallons, date: form.date, settings: pfSettings })} type="number" value={form.gallons ?? ""} onChange={e => setForm({ ...form, gallons: e.target.value })} placeholder={fuelPriceAt(pfSettings, form.date) ? "automático" : ""} data-fuel-gallons />}
         <Sel label={t.paymentMethod} value={form.paymentMethod} onChange={e => setForm({ ...form, paymentMethod: e.target.value, ...(form.receiptId && !INSTANT_METHODS.includes(e.target.value) ? { status: "pending" } : {}) })}>
           {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t[m] || m}</option>)}
         </Sel>

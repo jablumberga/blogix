@@ -5,6 +5,7 @@ import { today as todayStr } from "../utils/helpers.js";
 import { preparePhoto } from "../utils/photoQuality.js";
 import { RECEIPT_CATEGORIES } from "../utils/receipts.js";
 import { scanReceipt, submitReceipt, notifyReceiptsChanged } from "../utils/receiptsApi.js";
+import { fuelPriceAt, fuelLabel } from "../utils/fuel.js";
 import { Inp, Sel, Btn } from "./ui/index.jsx";
 
 const CAT_LABEL = { fuel: "Combustible", toll: "Peaje", tire: "Gomas", repair: "Reparación / piezas", maintenance: "Mantenimiento (aceite, lavado…)", other: "Otro (comida, etc.)" };
@@ -15,7 +16,7 @@ const TIPS = ["Pon el recibo sobre una superficie oscura y plana.", "Que se vea 
  * Subir la foto de un gasto: foto → revisión de calidad → lectura → el chofer revisa → se envía a la oficina.
  * trucks: camiones que puede elegir · trips: sus viajes · defaultTruckId: su camión.
  */
-export default function ReceiptCapture({ trucks = [], trips = [], defaultTruckId = null, onClose, onSubmitted }) {
+export default function ReceiptCapture({ trucks = [], trips = [], defaultTruckId = null, fuelSettings = null, onClose, onSubmitted }) {
   const camRef = useRef(null), galRef = useRef(null);
   const [step, setStep] = useState("pick"); // pick | checking | reading | bad | form | sending | done
   const [problems, setProblems] = useState([]);
@@ -140,7 +141,7 @@ export default function ReceiptCapture({ trucks = [], trips = [], defaultTruckId
           <Inp label={<>Monto total {CUR_LABEL[form.currency] || form.currency} *{tag("amount")}</>} type="number" inputMode="decimal" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} data-field="amount" />
           <Inp label={<>Fecha *{tag("date")}</>} type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} data-field="date" />
           <div style={{ gridColumn: "1 / -1" }}><Inp label={<>Negocio / estación *{tag("vendor")}</>} value={form.vendor} onChange={e => setForm({ ...form, vendor: e.target.value })} data-field="vendor" /></div>
-          {form.category === "fuel" && <Inp label={<>Galones *{tag("gallons")}</>} type="number" inputMode="decimal" value={form.gallons} onChange={e => setForm({ ...form, gallons: e.target.value })} data-field="gallons" />}
+          {form.category === "fuel" && <Inp label={<>{fuelPriceAt(fuelSettings, form.date) ? fuelLabel({ amount: form.amount, gallons: form.gallons, date: form.date, settings: fuelSettings }) : "Galones *"}{tag("gallons")}</>} type="number" inputMode="decimal" value={form.gallons} onChange={e => setForm({ ...form, gallons: e.target.value })} placeholder={fuelPriceAt(fuelSettings, form.date) ? "automático" : ""} data-field="gallons" />}
           <Sel label={form.category === "fuel" ? "Camión *" : "Camión"} value={form.truckId || ""} onChange={e => setForm({ ...form, truckId: e.target.value })} data-field="truckId">
             <option value="">— Elegir —</option>
             {trucks.map(tk => <option key={tk.id} value={tk.id}>{tk.plate}{tk.size ? ` (${tk.size})` : ""}</option>)}

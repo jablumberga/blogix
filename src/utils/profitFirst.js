@@ -17,7 +17,8 @@ import { today } from "./helpers.js";
  * Ajustes: % a Reserva, fecha de arranque (todo lo anterior queda fuera de las cuentas)
  * y balance inicial del banco ese día, repartido en Reserva y OpEx.
  */
-export const DEFAULT_PF_SETTINGS = { reservePct: 20, startDate: null, openingReserve: 0, openingOpex: 0 };
+// fuelPrices: precio por galón de referencia con historial [{ from: "AAAA-MM-DD", price }] (Costo por km)
+export const DEFAULT_PF_SETTINGS = { reservePct: 20, startDate: null, openingReserve: 0, openingOpex: 0, fuelPrices: [] };
 
 /** Categorías de gasto que son pass-through (no consumen OpEx). */
 export const PASS_THROUGH_CATEGORIES = ["partner_settlement", "broker_commission"];

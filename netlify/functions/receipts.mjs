@@ -227,11 +227,13 @@ export default async (request) => {
       const rec = await getRow(body.id);
       if (!rec || !mine(rec) || (isAdmin && rec.role === "driver" && rec.status === "draft")) return json({ error: "No existe" }, 404);
       if (rec.status !== "draft") return json({ error: rec.status === "deleted" ? "Este recibo se borró" : "Este recibo ya se envió" }, 409);
-      const [tk, tr] = await Promise.all([rest("bl_trucks?select=rec"), isDriver ? rest(`bl_trips?rec->>driverId=eq.${driverId}&select=rec`) : rest("bl_trips?select=rec")]);
+      const [tk, tr, st] = await Promise.all([rest("bl_trucks?select=rec"), isDriver ? rest(`bl_trips?rec->>driverId=eq.${driverId}&select=rec`) : rest("bl_trips?select=rec"), rest("bl_settlement_status?id=eq.1&select=data").catch(() => null)]);
       if (!tk.ok || !tr.ok) return json({ error: "No se pudieron leer camiones o viajes; intenta de nuevo" }, 503);
       const trucks = (await tk.json()).map(x => x.rec).filter(t => t.status !== "inactive");
       const trips = (await tr.json()).map(x => x.rec).filter(t => t.status !== "cancelled");
-      const { fields, errors } = validateSubmit(body.fields, { trucks, trips, today: drToday() });
+      // Precio por galón de referencia con historial (Costo por km): combustible sin galones → monto ÷ precio vigente en la fecha
+      const fuelSettings = st && st.ok ? ((await st.json().catch(() => []))[0]?.data?.__pfSettings || null) : null;
+      const { fields, errors } = validateSubmit(body.fields, { trucks, trips, today: drToday(), fuelSettings });
       if (errors.length) return json({ error: errors[0], errors }, 422);
       const next = { ...rec, status: "pending", fields, changes: changedFromRead(rec.read, fields), submittedAt: new Date().toISOString() };
       await putRow(next);

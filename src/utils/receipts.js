@@ -1,3 +1,4 @@
+import { fuelPriceAt } from "./fuel.js";
 /**
  * Recibos por foto (gastos del camino que sube el chofer).
  *
@@ -103,7 +104,7 @@ const daysBetween = (a, b) => Math.round((new Date(`${a}T12:00:00Z`) - new Date(
  * trucks: camiones activos (un chofer a veces maneja otro camión, también de socio); trips: los viajes de ese chofer.
  * today: "AAAA-MM-DD".
  */
-export function validateSubmit(input, { trucks = [], trips = [], today }) {
+export function validateSubmit(input, { trucks = [], trips = [], today, fuelSettings = null }) {
   const f = input || {};
   const errors = [];
   const category = RECEIPT_CATEGORIES.includes(f.category) ? f.category : null;
@@ -127,6 +128,9 @@ export function validateSubmit(input, { trucks = [], trips = [], today }) {
   if (tripId && !trips.some(t => t.id === tripId)) errors.push("Ese viaje no es tuyo.");
   let gallons = num(f.gallons);
   if (category === "fuel") {
+    // Sin galones: se calculan con el precio por galón vigente en la fecha del recibo (Costo por km), si hay
+    const price = fuelPriceAt(fuelSettings, date);
+    if (!(gallons > 0) && amount > 0 && price > 0) gallons = amount / price;
     if (!(gallons > 0)) errors.push("Faltan los galones.");
     else if (gallons > RECEIPT_LIMITS.maxGallons) errors.push("Los galones son demasiados; revísalos.");
   } else gallons = null;

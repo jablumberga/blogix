@@ -13,7 +13,7 @@ import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
 import { checkRef } from "../api.js";
 import { Card, StatCard, PageHeader, Inp, Sel, Btn, Th, Td, DestinationSelect } from "../components/ui/index.jsx";
 
-export default function DriverDashboard({ t, user, trips = [], trucks = [], expenses = [], clients = [], drivers = [], driverObj, setTrips, setExpenses, brokers = [], ayudantes = [], isMobile }) {
+export default function DriverDashboard({ t, user, trips = [], trucks = [], expenses = [], clients = [], drivers = [], driverObj, setTrips, setExpenses, brokers = [], ayudantes = [], pfSettings = null, isMobile }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({});
   const [rateMsg, setRateMsg] = useState("");
@@ -182,7 +182,7 @@ export default function DriverDashboard({ t, user, trips = [], trucks = [], expe
 
   return <div>
     <PageHeader title={`${t.dashboard} — ${driverObj?.name || ""}`} action={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Btn variant="warning" onClick={() => setShowReceipt(true)} data-open-receipt><Camera size={14} /> Foto de gasto</Btn><Btn onClick={openNew}><Plus size={14} /> {t.newTrip}</Btn></div>} />
-    {showReceipt && <ReceiptCapture trucks={trucks} trips={trips.filter(tr => tr.driverId === driverObj?.id)} defaultTruckId={driverObj?.truckId || (trucks.find(tk => tk.mine)?.id ?? null)} onClose={() => setShowReceipt(false)} />}
+    {showReceipt && <ReceiptCapture trucks={trucks} trips={trips.filter(tr => tr.driverId === driverObj?.id)} fuelSettings={pfSettings} defaultTruckId={driverObj?.truckId || (trucks.find(tk => tk.mine)?.id ?? null)} onClose={() => setShowReceipt(false)} />}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, margin: "16px 0" }}>
       <StatCard icon={Route} label={t.totalTrips} value={allMyTrips.length} color={colors.accent} />
       <StatCard icon={CheckCircle2} label={t.delivered} value={completed} color={colors.green} />
