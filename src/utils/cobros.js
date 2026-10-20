@@ -42,7 +42,7 @@ export function buildAbono({ inv, amount, date, method = "transfer", reference =
   const capped = Math.min(amt, balance);           // nunca se cobra más que el saldo
   if (!(capped > 0)) return null;
   const pf = allocateCobro({ amount: capped, tripIds: inv.tripIds || [], trips, trucks, partners, clients, brokers, settings, invoiceAmount: invAmt });
-  return { id: nextId, invoiceId: inv.id, clientId: inv.clientId, date, collectedDate: date, amount: capped, method, reference, note,
+  return { id: nextId, invoiceId: inv.id, clientId: inv.clientId, date, collectedDate: date, collectedAt: new Date().toISOString(), amount: capped, method, reference, note,
     status: "collected", collectedTripIds: [...(inv.tripIds || [])], pf: { ...pf, at: date }, ...(accountId ? { accountId } : {}) };
 }
 

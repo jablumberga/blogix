@@ -9,7 +9,8 @@
  *   cash      → Caja: cobros en efectivo, para saber exactamente qué depositar
  *   other     → cualquier otra cuenta
  *
- * Movimientos de cada cuenta (después de la fecha de su saldo: openingBalance es el saldo al CIERRE de openingDate):
+ * Movimientos de cada cuenta (después de su saldo: openingBalance es el saldo en openingDate en el MOMENTO en que se puso
+ * (openingAt); lo registrado después cuenta aunque sea el mismo día; lo del mismo día sin hora se da por incluido):
  *   - cobros: a su cuenta escogida; si no, efectivo → Caja y lo demás → Income
  *   - gastos pagados: a su cuenta escogida; si no, retiro de reserva → Reserva, factura a crédito de suplidor →
  *     Suplidores, lo demás → OpEx. Efectivo y tarjeta de crédito no salen de ninguna cuenta (salvo que se escoja una).
@@ -83,6 +84,16 @@ export function cobroAccountId(c, accounts) {
 
 export const cobroDate = (c) => c?.collectedDate || c?.pf?.at || c?.date || "";
 export const expenseDate = (e) => e?.paidDate || e?.date || "";
+/** Hora en que se registró el movimiento (para ordenar dentro del día del saldo). */
+export const cobroAt = (c) => c?.collectedAt || c?.createdAt || null;
+export const expenseAt = (e) => e?.paidAt || e?.createdAt || null;
+/** ¿Un movimiento (fecha, hora) es posterior al saldo de la cuenta? Mismo día: solo si tiene hora y es después de openingAt. */
+export function afterOpening(account, date, at = null) {
+  const od = account?.openingDate; if (!od || !date) return true;
+  if (date < od) return false;
+  if (date > od) return true;
+  return !!(account.openingAt && at && at > account.openingAt);
+}
 
 /**
  * Movimientos de todas las cuentas: { [accountId]: [{ key, accountId, type: "in"|"out", date, amount, description, source, refId, kind }] }
@@ -91,14 +102,14 @@ export const expenseDate = (e) => e?.paidDate || e?.date || "";
 export function bankMovements({ accounts = [], expenses = [], cobros = [], transfers = [], invoices = [], clients = [], suppliers = [] }) {
   const out = Object.fromEntries(accounts.map(a => [a.id, []]));
   const acc = new Map(accounts.map(a => [a.id, a]));
-  // openingBalance = saldo al CIERRE de openingDate (lo que dice el banco ese día, con todo lo de ese día incluido):
-  // solo cuentan los movimientos de días posteriores.
-  const push = (m) => { const a = acc.get(m.accountId); if (!a) return; if (a.openingDate && m.date && m.date <= a.openingDate) return; out[a.id].push(m); };
+  // openingBalance = saldo en openingDate en el momento en que se puso (openingAt). Cuentan los movimientos de días
+  // posteriores y, del mismo día, los registrados después de esa hora (m.at > openingAt); sin hora se dan por incluidos.
+  const push = (m) => { const a = acc.get(m.accountId); if (!a) return; if (!afterOpening(a, m.date, m.at)) return; out[a.id].push(m); };
   const invMap = new Map(invoices.map(i => [i.id, i])), clMap = new Map(clients.map(c => [c.id, c])), supMap = new Map(suppliers.map(s => [s.id, s]));
   for (const c of cobros) {
     const id = cobroAccountId(c, accounts); if (!id) continue;
     const inv = invMap.get(c.invoiceId), cl = clMap.get(c.clientId);
-    push({ key: `cobro-${c.id}`, accountId: id, type: "in", date: cobroDate(c), amount: round2(num(c.amount)), source: "cobro", refId: c.id, kind: c.method === "cash" ? "cash" : "cobro",
+    push({ key: `cobro-${c.id}`, accountId: id, type: "in", date: cobroDate(c), at: cobroAt(c), amount: round2(num(c.amount)), source: "cobro", refId: c.id, kind: c.method === "cash" ? "cash" : "cobro",
       description: `Cobro${inv?.invoiceNumber ? ` ${inv.invoiceNumber}` : ""}${cl ? ` — ${cl.companyName}` : ""}${c.method === "cash" ? " (efectivo)" : ""}` });
   }
   for (const e of expenses) {
@@ -108,15 +119,15 @@ export function bankMovements({ accounts = [], expenses = [], cobros = [], trans
     // Nómina con adelanto ya entregado: del banco sale solo lo que falta (el adelanto salió cuando se dio)
     const outAmt = Math.max(0, num(e.amount) - num(e.advanceApplied));
     if (!(outAmt > 0)) continue;
-    push({ key: `expense-${e.id}`, accountId: id, type: "out", date: expenseDate(e), amount: round2(outAmt), source: "expense", refId: e.id, kind: e.category,
+    push({ key: `expense-${e.id}`, accountId: id, type: "out", date: expenseDate(e), at: expenseAt(e), amount: round2(outAmt), source: "expense", refId: e.id, kind: e.category,
       description: e.description || (sup ? `Pago a ${sup.name}` : `Gasto #${e.id}`) });
   }
   for (const t of transfers) {
     const amt = round2(num(t.amount)); if (!(amt > 0)) continue;
     const from = acc.get(t.fromId), to = acc.get(t.toId);
     const label = TRANSFER_KINDS[t.kind] || TRANSFER_KINDS.transfer;
-    if (from) push({ key: `transfer-${t.id}-out`, accountId: from.id, type: "out", date: t.date, amount: amt, source: "transfer", refId: t.id, kind: t.kind || "transfer", description: `${label} → ${to?.name || "?"}${t.note ? ` · ${t.note}` : ""}` });
-    if (to) push({ key: `transfer-${t.id}-in`, accountId: to.id, type: "in", date: t.date, amount: amt, source: "transfer", refId: t.id, kind: t.kind || "transfer", description: `${label} ← ${from?.name || "?"}${t.note ? ` · ${t.note}` : ""}` });
+    if (from) push({ key: `transfer-${t.id}-out`, accountId: from.id, type: "out", date: t.date, at: t.createdAt || null, amount: amt, source: "transfer", refId: t.id, kind: t.kind || "transfer", description: `${label} → ${to?.name || "?"}${t.note ? ` · ${t.note}` : ""}` });
+    if (to) push({ key: `transfer-${t.id}-in`, accountId: to.id, type: "in", date: t.date, at: t.createdAt || null, amount: amt, source: "transfer", refId: t.id, kind: t.kind || "transfer", description: `${label} ← ${from?.name || "?"}${t.note ? ` · ${t.note}` : ""}` });
   }
   for (const k of Object.keys(out)) out[k].sort((a, b) => (b.date || "").localeCompare(a.date || "") || (a.key < b.key ? 1 : -1));
   return out;
@@ -221,7 +232,7 @@ export function cashToDeposit({ accounts = [], cobros = [], transfers = [] }) {
   const cash = roleAccount(accounts, "cash");
   if (!cash) return null;
   const deposited = new Set(transfers.filter(t => t.kind === "deposit").flatMap(t => t.cobroIds || []));
-  const items = cobros.filter(c => cobroAccountId(c, accounts) === cash.id && !deposited.has(c.id) && cobroDate(c) > (cash.openingDate || ""));
+  const items = cobros.filter(c => cobroAccountId(c, accounts) === cash.id && !deposited.has(c.id) && afterOpening(cash, cobroDate(c), cobroAt(c)));
   return { account: cash, cobroIds: items.map(c => c.id), cobrosTotal: round2(items.reduce((s, c) => s + num(c.amount), 0)) };
 }
 

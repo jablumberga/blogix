@@ -36,11 +36,11 @@ export default function CxPPage({ t, expenses, setExpenses, drivers, brokers, su
 
   const markGroupPaid = (keys) => {
     const ids = new Set(keys);
-    setExpenses(prev => prev.map(e => ids.has(e.id) ? { ...e, status: "paid", paidDate: todayStr } : e));
+    setExpenses(prev => prev.map(e => ids.has(e.id) ? { ...e, status: "paid", paidDate: todayStr, paidAt: new Date().toISOString() } : e));
   };
 
   const markOnePaid = (id) => {
-    setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: "paid", paidDate: todayStr } : e));
+    setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: "paid", paidDate: todayStr, paidAt: new Date().toISOString() } : e));
   };
 
   // ── Group definitions ─────────────────────────────────────────────────────

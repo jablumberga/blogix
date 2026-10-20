@@ -265,14 +265,14 @@ export default function NominaPage({ t, expenses, setExpenses, trips, setTrips, 
   };
 
   const markPaid = ({ row, pay }) => {
-    const date = today();
+    const date = today(), nowIso = new Date().toISOString();
     setExpenses(prev => {
       let next = prev;
       const d = row.driver;
       if (row.payType === "fixed") {
         next = upsert(next, e => e.category === "driverPay" && !e.tripId && e.driverId === d.id && e.payrollKey === key,
           () => ({ category: "driverPay", driverId: d.id, tripId: null, supplierId: null, date: period.dateTo, description: `Nómina fija ${d.name} · ${period.label}` }),
-          () => ({ amount: pay.grossEff, status: "paid", paidDate: date, paymentMethod: method, payrollKey: key }));
+          () => ({ amount: pay.grossEff, status: "paid", paidDate: date, paidAt: nowIso, paymentMethod: method, payrollKey: key }));
       } else {
         // Con override total: se reparte proporcionalmente entre los viajes para que los gastos sumen lo pagado
         const factor = pay.override && pay.driverTotal > 0 ? pay.grossEff / pay.driverTotal : 1;
@@ -284,21 +284,21 @@ export default function NominaPage({ t, expenses, setExpenses, trips, setTrips, 
           if (amount <= 0 && !l.exp) return;
           next = upsert(next, e => e.category === "driverPay" && e.tripId === l.trip.id,
             () => ({ category: "driverPay", tripId: l.trip.id, driverId: d.id, supplierId: null, date: l.trip.date, description: `Pago chofer ${d.name} · ${l.trip.municipality}` }),
-            e => ({ amount, calcAmount: e.calcAmount ?? l.calc.driverNet, status: "paid", paidDate: date, paymentMethod: method, payrollKey: key, driverId: d.id }));
+            e => ({ amount, calcAmount: e.calcAmount ?? l.calc.driverNet, status: "paid", paidDate: date, paidAt: nowIso, paymentMethod: method, payrollKey: key, driverId: d.id }));
         });
         if (pay.override && pay.lines.length === 0 && pay.grossEff > 0) {
           next = upsert(next, e => e.category === "driverPay" && !e.tripId && e.driverId === d.id && e.payrollKey === key,
             () => ({ category: "driverPay", driverId: d.id, tripId: null, supplierId: null, date: period.dateTo, description: `Nómina ${d.name} · ${period.label}` }),
-            () => ({ amount: pay.grossEff, status: "paid", paidDate: date, paymentMethod: method, payrollKey: key }));
+            () => ({ amount: pay.grossEff, status: "paid", paidDate: date, paidAt: nowIso, paymentMethod: method, payrollKey: key }));
         }
-        if (pay.override) next = next.map(e => e === pay.override || e.id === pay.override.id ? { ...e, status: "paid", paidDate: date } : e);
+        if (pay.override) next = next.map(e => e === pay.override || e.id === pay.override.id ? { ...e, status: "paid", paidDate: date, paidAt: nowIso } : e);
       }
       // Ayudantes que van por el chofer (los directos se pagan en su propia sección)
       row.trips.forEach(x => {
         if (x.split.viaDriver.amount <= 0) return;
         next = upsert(next, e => e.category === "helper" && e.tripId === x.trip.id && (e.ayudanteId == null || e.ayudanteId === ""),
           () => ({ category: "helper", tripId: x.trip.id, driverId: d.id, supplierId: null, date: x.trip.date, description: `Ayudantes (${x.split.viaDriver.count}) · ${x.trip.municipality}` }),
-          e => (e.status === "paid" ? {} : { amount: x.split.viaDriver.amount, status: "paid", paidDate: date, paymentMethod: method, payrollKey: key }));
+          e => (e.status === "paid" ? {} : { amount: x.split.viaDriver.amount, status: "paid", paidDate: date, paidAt: nowIso, paymentMethod: method, payrollKey: key }));
       });
       // Adelantos descontados en esta nómina: quedan amarrados a ella y el gasto de nómina sabe cuánto ya salió
       // antes (advanceApplied), para que Banco no cuente ese dinero dos veces
@@ -319,7 +319,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, setTrips, 
 
   // ── Ayudantes directos: un gasto «helper» con su ayudanteId por viaje ────────
   const markHelperPaid = ({ row }) => {
-    const date = today();
+    const date = today(), nowIso = new Date().toISOString();
     const a = row.ayudante;
     setExpenses(prev => {
       let next = prev;
@@ -327,7 +327,7 @@ export default function NominaPage({ t, expenses, setExpenses, trips, setTrips, 
         if (!(x.amount > 0)) return;
         next = upsert(next, e => e.category === "helper" && e.tripId === x.trip.id && Number(e.ayudanteId) === a.id,
           () => ({ category: "helper", tripId: x.trip.id, ayudanteId: a.id, supplierId: null, date: x.trip.date, description: `Ayudante ${a.name} · ${x.trip.municipality}` }),
-          e => (e.status === "paid" ? {} : { amount: x.amount, status: "paid", paidDate: date, paymentMethod: method, payrollKey: key }));
+          e => (e.status === "paid" ? {} : { amount: x.amount, status: "paid", paidDate: date, paidAt: nowIso, paymentMethod: method, payrollKey: key }));
       });
       return next;
     });

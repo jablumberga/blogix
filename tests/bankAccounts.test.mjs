@@ -142,14 +142,19 @@ test("nómina con adelanto aplicado: de OpEx sale solo lo que falta; el adelanto
   assert.deepEqual(mv.opex.map(m => [m.key, m.amount]).sort(), [["expense-20", 500], ["expense-21", 2000]]);
 });
 
-test("saldo de cuenta = saldo al CIERRE de su fecha: lo de ese día ya está incluido, solo cuenta lo posterior", () => {
-  const accs = defaultAccounts({ name: "Cuenta", bank: "", openingBalance: 0, openingDate: "2026-05-25" }, "2026-05-25").map(a => a.id === "income" ? { ...a, openingBalance: 88.96, openingDate: "2026-10-17" } : a);
+test("saldo de cuenta = saldo en el momento en que se puso: lo del mismo día cuenta solo si se registró después", () => {
+  const accs = defaultAccounts({ name: "Cuenta", bank: "", openingBalance: 0, openingDate: "2026-05-25" }, "2026-05-25").map(a => a.id === "income" ? { ...a, openingBalance: 88.96, openingDate: "2026-10-17", openingAt: "2026-10-17T15:00:00.000Z" } : a);
   const transfers = [
-    { id: 1, date: "2026-10-17", kind: "distribution", fromId: "income", toId: "opex", amount: 29000 }, // mismo día: ya está dentro de los 88.96
+    { id: 1, date: "2026-10-17", kind: "distribution", fromId: "income", toId: "opex", amount: 29000, createdAt: "2026-10-17T13:53:00.000Z" }, // mismo día, ANTES de poner el saldo: ya está dentro
     { id: 2, date: "2026-10-18", kind: "transfer", fromId: "income", toId: "opex", amount: 50 },          // día siguiente: sí resta
+    { id: 3, date: "2026-10-17", kind: "transfer", fromId: "income", toId: "opex", amount: 10, createdAt: "2026-10-17T17:23:00.000Z" }, // mismo día, DESPUÉS: sí resta
+    { id: 4, date: "2026-10-17", kind: "transfer", fromId: "income", toId: "opex", amount: 5 },           // mismo día sin hora: se da por incluido
   ];
   const mv = bankMovements({ accounts: accs, expenses: [], cobros: [], transfers });
-  assert.equal(accountSummary(accs.find(a => a.id === "income"), mv.income).balance, 38.96);
+  assert.equal(accountSummary(accs.find(a => a.id === "income"), mv.income).balance, 28.96);
+  const e = [{ id: 9, category: "tire", amount: 100, status: "paid", paymentMethod: "transfer", paidDate: "2026-10-17", paidAt: "2026-10-17T18:00:00.000Z" }];
+  const opex = accs.map(a => a.id === "opex" ? { ...a, openingBalance: 1000, openingDate: "2026-10-17", openingAt: "2026-10-17T15:00:00.000Z" } : a);
+  assert.equal(accountSummary(opex.find(a => a.id === "opex"), bankMovements({ accounts: opex, expenses: e, cobros: [], transfers: [] }).opex).balance, 900, "gasto pagado el mismo día después del saldo sí sale");
   // Caja: cobro en efectivo del mismo día del saldo no vuelve a quedar «por depositar»
   const cobros = [{ id: 1, amount: 5000, method: "cash", status: "collected", collectedDate: "2026-10-17" }, { id: 2, amount: 700, method: "cash", status: "collected", collectedDate: "2026-10-18" }];
   const cashAccs = accs.map(a => a.id === "cash" ? { ...a, openingBalance: 0, openingDate: "2026-10-17" } : a);

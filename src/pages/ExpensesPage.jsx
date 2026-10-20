@@ -158,16 +158,17 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
       ...(status === "paid" && !form.paidDate ? { paidDate: form.date } : {}) };
     // La casilla solo tiene sentido en camiones de socios; en los demás se limpia
     if (formPartner) data.chargeToPartner = formCharge; else delete data.chargeToPartner;
+    const nowIso = new Date().toISOString();
     if (editId !== null) {
-      setExpenses(prev => prev.map(e => e.id === editId ? { ...e, ...data } : e));
+      setExpenses(prev => prev.map(e => e.id === editId ? { ...e, ...data, ...(data.status === "paid" && e.status !== "paid" ? { paidAt: nowIso } : {}) } : e));
     } else {
-      setExpenses(prev => [...prev, { id: nxId(prev), ...data }]);
+      setExpenses(prev => [...prev, { id: nxId(prev), ...data, createdAt: nowIso, ...(data.status === "paid" ? { paidAt: nowIso } : {}) }]);
       if (data.receiptId) approveReceipt(data.receiptId, nxId(expenses)).catch(() => {}).finally(notifyReceiptsChanged);
     }
     setShowForm(false); setEditId(null);
   };
 
-  const togglePaid = (id) => setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: e.status === "paid" ? "pending" : "paid", paidDate: e.status === "paid" ? null : today() } : e));
+  const togglePaid = (id) => setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: e.status === "paid" ? "pending" : "paid", paidDate: e.status === "paid" ? null : today(), paidAt: e.status === "paid" ? undefined : new Date().toISOString() } : e));
 
   const saveTpl = () => {
     if (!tplForm.name || !tplForm.amount) return;

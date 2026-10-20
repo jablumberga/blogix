@@ -36,7 +36,7 @@ const setOpening = async (role, amount) => {
   await page.locator(`[data-bank-account=${role}]`).click(); await sleep(300);
   await page.locator("[data-bank-edit]").click(); await sleep(300);
   await (await inputByLabel(page, "Saldo (DOP)")).fill(String(amount));
-  await (await inputByLabel(page, "Al cierre del día")).fill("2026-10-01");
+  await (await inputByLabel(page, "Saldo al día")).fill("2026-10-01");
   await page.locator("[data-bank-save-account]").click(); await sleep(2500);
 };
 await setOpening("income", 0); await setOpening("opex", 400000); await setOpening("reserve", 100000);
