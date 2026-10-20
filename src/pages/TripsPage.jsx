@@ -13,6 +13,7 @@ import { needsRate, takeTripsFilter } from "../utils/tripPending.js";
 import { buildCompanionTrip, applyReceived, setReceivedDate, jointIds } from "../utils/jointTrip.js";
 import SortBar from "../components/SortBar.jsx";
 import { sortRecords, DEFAULT_SORT } from "../utils/sortList.js";
+import { tripCompanyMargin } from "../utils/partnerModels.js";
 import { tripPassThrough } from "../utils/profitFirst.js";
 import { checkRef } from "../api.js";
 import { generateConduce } from "../utils/generateConduce.js";
@@ -357,18 +358,18 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   if (filterExtra === "uninvoiced") filtered = filtered.filter(tr => tr.status !== "cancelled" && (tr.revenue || 0) > 0 && !invoicedTripMap.has(tr.id));
   if (filterExtra === "pending") filtered = filtered.filter(needsRate);
   const pendingCount = trips.filter(needsRate).length;
-  // Margen por viaje: tarifa − chofer − ayudantes − gastos del viaje; en camión de socio, lo que le toca al socio
+  // Margen por viaje: lo que gana la empresa según el modelo del socio (propio: tarifa − operación;
+  // comisión: el %; com.+gastos: el % y los gastos se reembolsan; reparto: la parte de la empresa de la utilidad)
   const partnerMap = new Map(partners.map(p => [p.id, p]));
   const brokerMap = new Map((brokers || []).map(b => [b.id, b]));
+  const tripExpList = expenses.reduce((m, e) => { if (e.tripId && !e.voided && !["adelanto_conductor", "adelanto_ayudante", "nominaTotalOverride", "partner_settlement", "broker_commission"].includes(e.category)) { if (!m.has(e.tripId)) m.set(e.tripId, []); m.get(e.tripId).push(e); } return m; }, new Map());
   const marginOf = (tr) => {
     if (tr.status === "cancelled") return null;
-    const tk = truckMap.get(tr.truckId); const revenue = Number(tr.revenue) || 0;
-    const costs = tripExpMap.get(tr.id) || 0;
+    const tk = truckMap.get(tr.truckId);
     const partner = tk?.partnerId ? partnerMap.get(tk.partnerId) : null;
     const pt = tripPassThrough({ trip: tr, truck: tk, partner, broker: tr.brokerId ? brokerMap.get(tr.brokerId) : null, brokerPassThrough: clientMap.get(tr.clientId)?.rules?.brokerPassThrough === true });
-    const mine = revenue - pt.total;                     // ingreso real de la empresa
-    const net = mine - costs;                             // lo que queda después de la operación pagada por la empresa
-    return { revenue, costs, partnerPart: pt.partner, brokerPart: pt.broker, mine, net, pct: revenue > 0 ? net / revenue * 100 : 0, partner };
+    const m = tripCompanyMargin({ trip: tr, truck: tk, partner, expenses: tripExpList.get(tr.id) || [], brokerPart: pt.broker });
+    return { ...m, mine: m.income, net: m.margin, brokerPart: pt.broker, pct: m.revenue > 0 ? m.margin / m.revenue * 100 : 0, partner };
   };
   const summary = filtered.reduce((a, tr) => {
     const m = marginOf(tr); const cl = clientMap.get(tr.clientId);
@@ -434,7 +435,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
         ["Cobrados", summary.collected, fmt(summary.collectedAmt), colors.cyan],
         ["Sin facturar", summary.uninvoiced, fmt(summary.uninvoicedAmt), colors.orange],
         ["Sin documentos", summary.nodocs, "no entran en nómina ni factura", colors.red],
-        ["Margen", fmt(summary.net), summary.partner > 0 ? `socios ${fmt(summary.partner)}` : "tarifa − operación", summary.net >= 0 ? colors.green : colors.red],
+        ["Margen empresa", fmt(summary.net), summary.partner > 0 ? `socios ${fmt(summary.partner)} · según su modelo` : "tarifa − operación", summary.net >= 0 ? colors.green : colors.red],
       ].map(([k, v, sub, c]) => <div key={k} style={{ background: colors.card, border: `1px solid ${colors.border}`, borderRadius: 10, padding: "8px 12px" }}>
         <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>{k.toUpperCase()}</div>
         <div style={{ fontSize: 18, fontWeight: 800, color: c }}>{v}</div>
@@ -740,9 +741,12 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
                     <Td align="right">
                       {(() => { const m = marginOf(tr); if (!m) return <span style={{ color: colors.textMuted }}>—</span>;
                         const c = m.net < 0 ? colors.red : m.pct < 15 ? colors.orange : colors.green;
-                        return <div title={`Tarifa ${fmt(m.revenue)} − operación ${fmt(m.costs)}${m.partnerPart ? ` − socio ${fmt(m.partnerPart)}` : ""}${m.brokerPart ? ` − broker ${fmt(m.brokerPart)}` : ""}`} style={{ cursor: "help" }}>
+                        const title = m.model === "own" ? `Tarifa ${fmt(m.revenue)} − operación ${fmt(m.costs)}${m.brokerPart ? ` − broker ${fmt(m.brokerPart)}` : ""}`
+                          : m.model === "profit_share" ? `Reparto de utilidad: flete ${fmt(m.netRevenue)} − gastos ${fmt(m.costs)} = ${fmt(m.netRevenue - m.costs)}; empresa ${fmt(m.income)}, socio ${fmt(m.partnerPart)}${m.netRevenue - m.costs < 0 ? " (pérdida: la financia la empresa y se arrastra)" : ""}`
+                          : `${m.label}: empresa ${fmt(m.income)}${m.reimbursed ? ` + gastos reembolsados ${fmt(m.reimbursed)}` : ""}${m.costs - m.reimbursed ? ` − gastos propios ${fmt(m.costs - m.reimbursed)}` : ""}; al socio ${fmt(m.partnerPart)}`;
+                        return <div title={title} style={{ cursor: "help" }} data-trip-margin={tr.id}>
                           <div style={{ fontWeight: 700, color: c }}>{fmt(m.net)}</div>
-                          <div style={{ fontSize: 9, color: colors.textMuted }}>{m.pct.toFixed(0)} %{m.partner ? ` · socio ${fmt(m.partnerPart)}` : ""}</div>
+                          <div style={{ fontSize: 9, color: colors.textMuted }}>{m.pct.toFixed(0)} %{m.partner ? ` · ${m.label} · socio ${fmt(m.partnerPart)}` : ""}</div>
                         </div>; })()}
                     </Td>
                     <Td align="right">
