@@ -6,7 +6,7 @@ import { normalizePartner, expenseChargedToPartner, PARTNER_MODELS } from "../ut
 import { fuelNeedsTruck } from "../utils/costPerKm.js";
 import { activeAyudantes } from "../utils/ayudantes.js";
 import { getAccounts, activeAccounts, expenseAccountId } from "../utils/bankAccounts.js";
-import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
+import { EXPENSE_CATEGORIES, PAYMENT_METHODS, PAID_ON_ENTRY_METHODS } from "../constants/categories.js";
 import SortBar from "../components/SortBar.jsx";
 import { sortRecords, DEFAULT_SORT } from "../utils/sortList.js";
 import { Card, PageHeader, Inp, Sel, Btn, Badge, StatCard, Th, Td, Chk } from "../components/ui/index.jsx";
@@ -21,7 +21,7 @@ const RC_CAT = { fuel: "Combustible", toll: "Peaje", tire: "Gomas", repair: "Rep
 const RC_FIELD = { category: "tipo", amount: "monto", currency: "moneda", date: "fecha", vendor: "negocio", gallons: "galones", ncf: "NCF" };
 
 // Métodos que se pagan en el momento: el gasto nace como pagado
-const INSTANT_METHODS = ["cash", "credit_card"];
+const INSTANT_METHODS = PAID_ON_ENTRY_METHODS;
 // Clave de quincena de liquidación de socio (misma que usa Liquidaciones)
 const settlementKey = (partnerId, date) => `${partnerId}-${(date || "").slice(0, 7)}-${parseInt((date || "").slice(8, 10) || "0", 10) <= 15 ? 1 : 2}`;
 
@@ -290,7 +290,7 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
         </Sel>
         {(() => { const auto = expenseAccountId({ ...form, accountId: null, status: "paid", amount: 1 }, bankAccounts);
           return <Sel label="Sale de la cuenta" value={form.accountId || ""} onChange={e => setForm({ ...form, accountId: e.target.value || null })} data-expense-account>
-            <option value="">Automático ({auto ? bankAccounts.find(a => a.id === auto)?.name : "ninguna: efectivo / tarjeta"})</option>
+            <option value="">Automático ({auto ? bankAccounts.find(a => a.id === auto)?.name : form.paymentMethod === "credit_card" ? "ninguna: crea una cuenta Tarjeta en Banco" : form.paymentMethod === "cash" ? "ninguna: no hay Caja activa" : "ninguna"})</option>
             {activeAccounts(bankAccounts).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </Sel>; })()}
         {form.category === "adelanto_ayudante"
@@ -303,6 +303,8 @@ export default function ExpensesPage({ t, expenses, setExpenses, trips, trucks, 
               <option value="">— Seleccionar chofer —</option>
               {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </Sel>
+          : INSTANT_METHODS.includes(form.paymentMethod)
+          ? <Sel label="Estado" value="paid" disabled title="Con efectivo, transferencia, cheque o tarjeta el dinero ya salió: queda pagado y sale de su cuenta en Banco"><option value="paid">Pagado (el dinero ya salió)</option></Sel>
           : <Sel label="Estado" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
               <option value="pending">Pendiente</option>
               <option value="paid">Pagado</option>

@@ -44,11 +44,12 @@ test("a qué cuenta va cada cobro y cada gasto", () => {
   assert.equal(cobroAccountId({ ...cobros[0], status: "pending" }, accounts), null);
   assert.equal(expenseAccountId(expenses[0], accounts), "opex");
   assert.equal(expenseAccountId(expenses[1], accounts), "suppliers", "factura a crédito de suplidor → Suplidores");
-  assert.equal(expenseAccountId(expenses[2], accounts), null, "efectivo no sale de ninguna cuenta");
+  assert.equal(expenseAccountId(expenses[2], accounts), "cash", "efectivo sale de la Caja");
+  assert.equal(expenseAccountId(expenses[2], accounts.map(a => a.role === "cash" ? { ...a, active: false } : a)), null, "sin Caja activa, el efectivo no toca el banco");
   assert.equal(expenseAccountId(expenses[3], accounts), "reserve", "retiro de reserva → Reserva");
   assert.equal(expenseAccountId(expenses[4], accounts), null, "override de nómina es memoria, no dinero");
   assert.equal(expenseAccountId(expenses[7], accounts), "cash");
-  assert.equal(expenseAccountId(expenses[8], accounts), null, "tarjeta de crédito no sale del banco");
+  assert.equal(expenseAccountId(expenses[8], accounts), null, "tarjeta de crédito sin cuenta Tarjeta: no sale del banco");
   assert.equal(expenseAccountId({ category: "partner_settlement", amount: 1, status: "paid", paymentMethod: "transfer" }, accounts), "opex", "socios se pagan de OpEx");
   // Sin cuenta de Suplidores activa: lo de suplidores sale de OpEx
   const noSup = accounts.map(a => a.role === "suppliers" ? { ...a, active: false } : a);
@@ -70,7 +71,7 @@ test("movimientos, saldos y conciliación por cuenta (con transferencias)", () =
   const opex = accountSummary(accounts[1], mv.opex, {});
   assert.equal(opex.balance, 5000 - 2500);
   assert.equal(accountSummary(accounts[3], mv.suppliers).balance, -8000, "pagó al suplidor sin haber apartado");
-  assert.equal(accountSummary(accounts[4], mv.cash).balance, 3000 - 700 - 3000);
+  assert.equal(accountSummary(accounts[4], mv.cash).balance, 3000 - 1500 - 700 - 3000, "la Caja paga el combustible en efectivo y el gasto escogido");
   const st = accountSummary({ ...accounts[0], stmtBalance: "55500" }, mv.income, { "cobro-1": "reconciled", "transfer-1-out": "reconciled" });
   assert.equal(st.stmtDiff, 500, "diferencia contra el estado de cuenta");
 });
@@ -153,4 +154,17 @@ test("saldo de cuenta = saldo al CIERRE de su fecha: lo de ese día ya está inc
   const cobros = [{ id: 1, amount: 5000, method: "cash", status: "collected", collectedDate: "2026-10-17" }, { id: 2, amount: 700, method: "cash", status: "collected", collectedDate: "2026-10-18" }];
   const cashAccs = accs.map(a => a.id === "cash" ? { ...a, openingBalance: 0, openingDate: "2026-10-17" } : a);
   assert.deepEqual(cashToDeposit({ accounts: cashAccs, cobros, transfers: [] }).cobroIds, [2]);
+});
+
+
+test("tarjeta de crédito: el gasto con tarjeta cae en la cuenta Tarjeta si existe; si no, no toca el banco", () => {
+  const base = defaultAccounts({ name: "Cuenta", bank: "", openingBalance: 0, openingDate: "2026-05-25" }, "2026-05-25");
+  const e = { id: 1, category: "fuel", amount: 3000, status: "paid", paymentMethod: "credit_card", paidDate: "2026-10-20" };
+  assert.equal(expenseAccountId(e, base), null);
+  const withCard = [...base, { id: "card1", name: "Tarjeta BHD", role: "card", active: true, openingBalance: 0, openingDate: "2026-05-25" }];
+  assert.equal(expenseAccountId(e, withCard), "card1");
+  assert.equal(expenseAccountId({ ...e, accountId: "opex" }, withCard), "opex", "si se escogió cuenta, manda la cuenta");
+  const mv = bankMovements({ accounts: withCard, expenses: [e], cobros: [], transfers: [{ id: 1, date: "2026-10-25", kind: "card_payment", fromId: "opex", toId: "card1", amount: 3000 }] });
+  assert.equal(accountSummary(withCard.find(a => a.id === "card1"), mv.card1).balance, 0, "gasto −3,000 y pago +3,000");
+  assert.equal(accountSummary(withCard.find(a => a.id === "opex"), mv.opex).balance, -3000, "OpEx paga el estado");
 });

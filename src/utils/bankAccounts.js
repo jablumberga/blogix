@@ -24,11 +24,12 @@ export const ACCOUNT_ROLES = {
   reserve:   { label: "Reserva",         hint: "Tax + Profit + Owner's Comp" },
   suppliers: { label: "Suplidores",      hint: "Lo que se debe a suplidores; de aquí se les paga" },
   cash:      { label: "Caja (efectivo)", hint: "Cobros en efectivo por depositar" },
+  card:      { label: "Tarjeta de crédito", hint: "Los gastos pagados con tarjeta caen aquí solos; saldo negativo = lo que se debe. «Pagar tarjeta» mueve de OpEx a la tarjeta" },
   other:     { label: "Otra",            hint: "" },
 };
 /** Siempre tiene que quedar una cuenta activa de estas. */
 export const CORE_ROLES = ["income", "opex"];
-export const TRANSFER_KINDS = { transfer: "Transferencia", distribution: "Reparto de Income", deposit: "Depósito de caja", set_aside: "Apartado para suplidores" };
+export const TRANSFER_KINDS = { transfer: "Transferencia", distribution: "Reparto de Income", deposit: "Depósito de caja", set_aside: "Apartado para suplidores", card_payment: "Pago de tarjeta" };
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
@@ -54,15 +55,19 @@ const exists = (accounts, id) => id != null && id !== "" && (accounts || []).som
 
 /** Gastos que no son dinero (memoria de nómina). */
 const NOT_MONEY = new Set(["nominaTotalOverride"]);
-/** Métodos que no salen de una cuenta de banco a menos que se escoja una. */
-const OFF_BANK_METHODS = new Set(["cash", "credit_card"]);
+/** Métodos que no salen de una cuenta de banco a menos que se escoja una (hoy ninguno: efectivo → Caja, tarjeta → Tarjeta). */
+const OFF_BANK_METHODS = new Set([]);
 
 /** Cuenta de la que sale (o saldrá) un gasto; null si no pasa por ninguna cuenta. */
 export function expenseAccountId(e, accounts) {
   if (!e || NOT_MONEY.has(e.category)) return null;
   if (exists(accounts, e.accountId)) return e.accountId;
-  if (OFF_BANK_METHODS.has(e.paymentMethod)) return null;
   const by = (r) => roleAccount(accounts, r)?.id || null;
+  // Tarjeta: si hay una cuenta «Tarjeta de crédito» activa, el gasto cae ahí solo (el dinero sale de OpEx al pagar el estado)
+  if (e.paymentMethod === "credit_card") return by("card");
+  // Efectivo: sale de la Caja (si hay); un gasto en efectivo sin Caja no toca el banco
+  if (e.paymentMethod === "cash") return by("cash");
+  if (OFF_BANK_METHODS.has(e.paymentMethod)) return null;
   if (e.category === "reserve_withdrawal") return by("reserve") || by("opex");
   if (e.paymentMethod === "credit") return by("suppliers") || by("opex");
   return by("opex");
