@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeSettlement, normalizePartner, fixedChargesForPeriod, settlementPayDate, expenseChargedToPartner } from "../src/utils/partnerModels.js";
+import { computeSettlement, normalizePartner, fixedChargesForPeriod, settlementPayDate, expenseChargedToPartner, tripCompanyMargin } from "../src/utils/partnerModels.js";
 
 const period = { dateFrom: "2026-10-01", dateTo: "2026-10-15", half: 1, label: "Octubre 1–15" };
 const trucks = [{ id: 1, partnerId: 7 }, { id: 2, partnerId: 9 }];
@@ -100,4 +100,28 @@ test("casilla cargar al socio: default por modelo", () => {
   assert.equal(expenseChargedToPartner({}, { model: "commission" }), false);
   assert.equal(expenseChargedToPartner({}, { model: "commission_expenses" }), true);
   assert.equal(expenseChargedToPartner({ chargeToPartner: true }, { model: "commission" }), true);
+});
+
+test("margen por viaje según el modelo del socio (pantalla Viajes)", () => {
+  const trip = { id: 1, revenue: 8000 };
+  const exps = [{ category: "driverPay", amount: 1200 }, { category: "helper", amount: 1800 }];
+  const own = tripCompanyMargin({ trip, truck: { id: 1 }, partner: null, expenses: exps });
+  assert.equal(own.margin, 5000); assert.equal(own.income, 8000);
+  // Reparto 60/40 (socio 60): utilidad 5,000 → socio 3,000, empresa 2,000
+  const ps = tripCompanyMargin({ trip, truck: { id: 7, partnerId: 3 }, partner: { id: 3, model: "profit_share", partnerSharePct: 60 }, expenses: exps });
+  assert.equal(ps.income, 2000); assert.equal(ps.partnerPart, 3000); assert.equal(ps.margin, 2000); assert.equal(ps.reimbursed, 3000);
+  // Reparto en pérdida: la empresa la carga (negativo) y el socio no recibe
+  const loss = tripCompanyMargin({ trip: { revenue: 2000 }, truck: { id: 7, partnerId: 3 }, partner: { id: 3, model: "profit_share", partnerSharePct: 60 }, expenses: exps });
+  assert.equal(loss.margin, -1000); assert.equal(loss.partnerPart, 0);
+  // Comisión + gastos 10 %: empresa 800; los 3,000 se reembolsan → al socio 4,200
+  const ce = tripCompanyMargin({ trip, truck: { id: 7, partnerId: 1 }, partner: { id: 1, model: "commission_expenses", companyPct: 10 }, expenses: exps });
+  assert.equal(ce.income, 800); assert.equal(ce.margin, 800); assert.equal(ce.reimbursed, 3000); assert.equal(ce.partnerPart, 4200);
+  // Un gasto marcado «no al socio» sí resta a la empresa
+  const ce2 = tripCompanyMargin({ trip, truck: { id: 7, partnerId: 1 }, partner: { id: 1, model: "commission_expenses", companyPct: 10 }, expenses: [...exps, { category: "repair", amount: 500, chargeToPartner: false }] });
+  assert.equal(ce2.margin, 300);
+  // Comisión sola 10 %: empresa 800; si la empresa registró gastos, son suyos
+  const c = tripCompanyMargin({ trip, truck: { id: 7, partnerId: 4 }, partner: { id: 4, model: "commission", companyPct: 10 }, expenses: [] });
+  assert.equal(c.margin, 800); assert.equal(c.partnerPart, 7200);
+  // Camión de socio pero el partner no coincide → propio
+  assert.equal(tripCompanyMargin({ trip, truck: { id: 7, partnerId: 9 }, partner: { id: 1, model: "commission", companyPct: 10 }, expenses: [] }).model, "own");
 });

@@ -214,3 +214,32 @@ export function computeSettlementChain({ partner, periods = [], trips, expenses,
   }
   return out;
 }
+
+/**
+ * Lo que gana la empresa en UN viaje según el modelo del socio (para la pantalla Viajes).
+ * El contrato es de la empresa: cobra toda la tarifa, se reembolsa los gastos que puso y liquida al socio.
+ *  - propio:               ingreso = flete neto; margen = flete − gastos
+ *  - comisión:             ingreso = % del flete; los gastos registrados son de la empresa (el socio paga lo suyo)
+ *  - comisión + gastos:    ingreso = % del flete; los gastos a cargo del socio se reembolsan (no restan)
+ *  - reparto de utilidad:  utilidad = flete − gastos; ingreso = parte de la empresa; si hay pérdida, la financia la empresa
+ * `expenses`: gastos del viaje (sin adelantos, ajustes ni liquidaciones). `brokerPart`: comisión de intermediario que no es nuestra.
+ */
+export function tripCompanyMargin({ trip, truck, partner, expenses = [], brokerPart = 0 }) {
+  const revenue = Number(trip?.revenue) || 0;
+  const netRevenue = Math.max(0, revenue - (Number(brokerPart) || 0));
+  const p = partner && truck && truck.partnerId === partner.id ? normalizePartner(partner) : null;
+  let reimbursed = 0, companyCost = 0;
+  for (const e of expenses) { const a = Number(e.amount) || 0; if (!(a > 0)) continue; if (p && p.model !== "commission" && expenseChargedToPartner(e, p)) reimbursed += a; else companyCost += a; }
+  const costs = reimbursed + companyCost;
+  if (!p) return { model: "own", revenue, netRevenue, costs, reimbursed: 0, income: netRevenue, partnerPart: 0, margin: netRevenue - costs, label: "propio" };
+  if (p.model === "profit_share") {
+    const profit = netRevenue - costs;
+    const partnerPct = Number(p.partnerSharePct) || 0;
+    const partnerPart = profit > 0 ? Math.round(profit * partnerPct / 100) : 0;
+    const income = profit > 0 ? profit - partnerPart : profit;                     // en pérdida, la empresa la carga (se arrastra)
+    return { model: p.model, revenue, netRevenue, costs, reimbursed, income, partnerPart, margin: income, label: `reparto ${100 - partnerPct}/${partnerPct}` };
+  }
+  const commission = Math.round(revenue * (Number(p.companyPct) || 0) / 100);
+  const partnerPart = Math.max(0, netRevenue - commission - reimbursed);
+  return { model: p.model, revenue, netRevenue, costs, reimbursed, income: commission, partnerPart, margin: commission - companyCost, label: `${p.model === "commission" ? "comisión" : "com.+gastos"} ${Number(p.companyPct) || 0}%` };
+}
