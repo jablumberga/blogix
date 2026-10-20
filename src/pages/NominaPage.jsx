@@ -111,6 +111,7 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
           {!pay.override && row.advances > 0 && <div style={{ fontSize: 10, color: colors.textMuted }}>Bruto {fmt(pay.driverTotal)} · adelantos −{fmt(row.advances)}</div>}
           <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>{pay.paid ? "PAGADO" : "A TRANSFERIR"}</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: pay.paid ? colors.green : pay.override ? PURPLE : colors.orange }}>{fmt(pay.net)}</div>
+          {pay.unappliedDiscount > 0 && <div style={{ fontSize: 10, color: colors.orange }} data-unapplied-discount>descuento sin aplicar {fmt(pay.unappliedDiscount)}: los viajes ya se pagaron; descuéntalo en el próximo corte</div>}
           {row.helpers > 0 && <div style={{ fontSize: 10, color: colors.cyan }}>+ ayudantes {fmt(row.helpersNet)} ({row.helperCount}){row.helperAdvances > 0 ? <span style={{ color: colors.textMuted }}> · {fmt(row.helpers)} − adelantos {fmt(row.helperAdvances)}</span> : null}</div>}
         </div>
         {!pay.paid && <>
@@ -151,6 +152,8 @@ function DriverCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onLineOverride
                     {!l.paid && row.payType !== "fixed" && <button onClick={() => setEditingLine(editing ? null : trip.id)} title="Ajustar pago de este viaje (chofer, ayudantes, descuentos)" style={{ background: "none", border: "none", cursor: "pointer", color: l.overridden ? PURPLE : colors.textMuted, padding: 2, display: "flex" }}><Pencil size={11} /></button>}
                   </div>
                   {l.overridden && l.exp?.overrideNote && <div style={{ fontSize: 10, color: PURPLE }}>✏️ {l.exp.overrideNote}</div>}
+                  {l.carriedDiscount > 0 && <div style={{ fontSize: 10, color: colors.orange }}>− {fmt(l.carriedDiscount)} de descuento que no cupo en otro viaje del corte</div>}
+                  {!l.exp && l.amount <= 0 && calc.discounts > 0 && <div style={{ fontSize: 10, color: colors.orange }}>descuento {fmt(calc.discounts)} cubre todo el pago{calc.discounts > calc.driverGross ? `; faltan ${fmt(calc.discounts - calc.driverGross)} que se descuentan de otro viaje` : ""}</div>}
                 </Td>
                 <Td align="right" color={l.split.viaDriver.amount ? colors.cyan : colors.textMuted}>{l.split.viaDriver.amount ? `${fmt(l.split.viaDriver.amount)} (${l.split.viaDriver.count})` : "—"}{l.split.direct.length > 0 && <div style={{ fontSize: 10, color: colors.textMuted }}>+ directo: {l.split.direct.map(d => d.name).join(", ")}</div>}</Td>
                 <Td align="right"><Badge label={l.paid ? "✓ Pagado" : "Pendiente"} color={l.paid ? colors.green : colors.orange} /></Td>
@@ -201,9 +204,10 @@ function HelperCard({ row, pay, period, onMarkPaid, onMarkUnpaid, onPrint }) {
         <div style={{ textAlign: "right", minWidth: 120 }}>
           {row.advances > 0 && <div style={{ fontSize: 10, color: colors.textMuted }}>Bruto {fmt(row.gross)} · adelantos −{fmt(row.advances)}</div>}
           <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 700 }}>{pay.paid ? "PAGADO" : "A TRANSFERIR"}</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: pay.paid ? colors.green : colors.orange }}>{fmt(row.net)}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: pay.paid ? colors.green : colors.orange }}>{fmt(pay.net)}</div>
+          {pay.unappliedDiscount > 0 && <div style={{ fontSize: 10, color: colors.orange }}>descuento sin aplicar {fmt(pay.unappliedDiscount)}</div>}
         </div>
-        {!pay.paid && row.tripCount > 0 && <button onClick={onMarkPaid} style={{ ...smallBtn(colors.green, "white"), padding: "7px 12px", fontSize: 12 }}><CheckCircle2 size={13} /> Marcar pagado {fmt(row.net)}</button>}
+        {!pay.paid && row.tripCount > 0 && <button onClick={onMarkPaid} style={{ ...smallBtn(colors.green, "white"), padding: "7px 12px", fontSize: 12 }}><CheckCircle2 size={13} /> Marcar pagado {fmt(pay.net)}</button>}
         {pay.paid && <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Badge label={`✓ Pagado ${fmt(row.net)}`} color={colors.green} />
           <button onClick={onMarkUnpaid} style={smallBtn("transparent", colors.textMuted, `1px solid ${colors.border}`)}>Desmarcar</button>

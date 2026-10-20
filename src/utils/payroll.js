@@ -148,11 +148,17 @@ export function payrollPayment({ row, period, expenses = [] }) {
   const helperExps = expenses.filter(e => e.category === "helper" && tripIds.has(e.tripId) && (e.ayudanteId == null || e.ayudanteId === ""));
   const override = expenses.find(e => e.category === "nominaTotalOverride" && e.driverId === row.driver.id && e.payrollKey === key) || null;
   const fixedExp = payExps.find(e => !e.tripId) || null;
+  // Descuento que no cupo en su viaje (el pago de ese viaje llegó a 0): se sigue descontando de los demás viajes del corte
+  let excess = row.trips.reduce((s, x) => s + Math.max(0, (Number(x.calc.discounts) || 0) - ((Number(x.calc.driverGross) || 0) - (Number(x.calc.driverNet) || 0))), 0);
   const lines = row.trips.map(x => {
     const exp = payExps.find(e => e.tripId === x.trip.id) || null;
     const overridden = !!exp && exp.calcAmount !== undefined && exp.calcAmount !== null && Number(exp.amount) !== Number(exp.calcAmount);
-    const amount = overridden ? Number(exp.amount) || 0 : x.calc.driverNet;
-    return { ...x, exp, amount, overridden, paid: exp?.status === "paid" };
+    let amount = overridden ? Number(exp.amount) || 0 : x.calc.driverNet;
+    let carried = 0;
+    // Solo en viajes todavía sin pagar (lo ya transferido no se cambia)
+    if (!overridden && exp?.status !== "paid" && excess > 0 && amount > 0) { carried = Math.min(amount, excess); amount -= carried; excess -= carried; }
+    // Sin nada que pagar y sin gasto: cuenta como pagado (no hay transferencia que hacer)
+    return { ...x, exp, amount, overridden, carriedDiscount: carried, paid: exp?.status === "paid" || (!exp && amount <= 0) };
   });
   const driverTotal = row.payType === "fixed" ? row.gross : lines.reduce((s, l) => s + l.amount, 0);
   const grossEff = override ? Number(override.amount) || 0 : driverTotal;
@@ -162,7 +168,7 @@ export function payrollPayment({ row, period, expenses = [] }) {
     ? fixedExp?.status === "paid"
     : lines.length > 0 && lines.every(l => l.paid) && (!override || override.status === "paid");
   const partial = !paid && (paidCount > 0 || fixedExp?.status === "paid");
-  return { key, lines, override, driverTotal, grossEff, net, paid, partial, paidCount, payExps, helperExps, fixedExp };
+  return { key, lines, override, driverTotal, grossEff, net, paid, partial, paidCount, payExps, helperExps, fixedExp, unappliedDiscount: excess };
 }
 
 /** Viajes del período en camiones de un socio (para la vista de la asistente). */
