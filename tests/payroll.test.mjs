@@ -141,3 +141,24 @@ test("adelantos: con viaje van a la quincena en que se paga ese viaje (sin drive
   const r3 = buildPayroll({ period: next, drivers, trips, trucks, clients, expenses: applied }).drivers.find(x => x.driver.id === 1);
   assert.deepEqual(r3.advExps.map(e => e.id), [], "una vez pagada la nómina de H1 con esos adelantos, no vuelven a salir");
 });
+
+test("descuento mayor que el pago de su viaje: el resto se descuenta de los otros viajes y el viaje en 0 cuenta como pagado", () => {
+  const driver = { id: 1, name: "Rodolfo", payType: "perTrip", rates: [{ province: "Duarte", municipality: "SFM", priceT1: 2000, dietaT1: 0, helperT1: 0 }, { province: "Valverde", municipality: "Mao", priceT1: 1800, dietaT1: 0, helperT1: 0 }] };
+  const trucks = [{ id: 1, size: "T1" }];
+  const trips = [
+    { id: 1, date: "2026-10-05", docsReceivedAt: "2026-10-05", docs: { pod: true, conduce: true, factura: true }, driverId: 1, truckId: 1, clientId: 1, province: "Duarte", municipality: "SFM", status: "delivered", numHelpers: 0, discounts: [{ desc: "fideos", amount: 2600 }] },
+    { id: 2, date: "2026-10-06", docsReceivedAt: "2026-10-06", docs: { pod: true, conduce: true, factura: true }, driverId: 1, truckId: 1, clientId: 1, province: "Valverde", municipality: "Mao", status: "delivered", numHelpers: 0 },
+  ];
+  const period = { mStr: "2026-10", half: 1, dateFrom: "2026-10-01", dateTo: "2026-10-15", label: "Oct 1–15" };
+  const p = buildPayroll({ period, drivers: [driver], trips, trucks, clients: [{ id: 1 }], expenses: [] });
+  const row = p.drivers[0];
+  assert.equal(row.gross, 3800); assert.equal(row.discounts, 2600); assert.equal(row.net, 1200);
+  const pay = payrollPayment({ row, period, expenses: [] });
+  assert.deepEqual(pay.lines.map(l => l.amount), [0, 1200], "SFM queda en 0 y los 600 que faltaban salen de Mao");
+  assert.equal(pay.lines[1].carriedDiscount, 600);
+  assert.equal(pay.net, 1200, "coincide con el neto de la fila");
+  assert.equal(pay.lines[0].paid, true, "nada que pagar en SFM → no bloquea el «pagado»");
+  assert.equal(pay.paid, false, "Mao todavía no se ha pagado");
+  const paid = payrollPayment({ row, period, expenses: [{ id: 9, category: "driverPay", tripId: 2, amount: 1200, calcAmount: 1800, status: "paid", payrollKey: "2026-10-H1" }] });
+  assert.equal(paid.paid, true);
+});
