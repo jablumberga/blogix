@@ -62,6 +62,7 @@ d = await data(); const t1 = d.trips.find(t => t.invoiceRef === "BOC-1001");
 C("2.1 Rober registró viaje con tarifa del cliente (T1 5,500)", !!t1 && t1.revenue === 5500 && t1.driverId === 1 && t1.truckId === 1, JSON.stringify(t1 || {}).slice(0, 100));
 let ex1 = d.expenses.filter(e => e.tripId === t1?.id);
 C("2.2 pago de chofer según su tarifario (900 + 1 ayudante 700) creado pendiente", ex1.some(e => e.category === "driverPay" && e.amount === 900 && e.status === "pending") && ex1.some(e => e.category === "helper" && e.amount === 700), ex1.map(e => `${e.category}:${e.amount}:${e.status}`).join(", "));
+C("2.2b el viaje guarda helperPayEach = null (tarifario decide; nunca un 0 congelado)", t1?.helperPayEach === null, String(t1?.helperPayEach));
 C("2.3 el chofer no ve claves ni datos ajenos", !JSON.stringify(await data("Rober")).includes("$2b$"));
 await logout();
 
@@ -113,7 +114,7 @@ await page.getByRole("button", { name: /Agregar|Nuevo/ }).first().click(); await
 await (await inputByLabel(page, "Fecha")).fill("2026-10-06");
 await selectByLabel(page, "Categoría", "Combustible");
 await (await inputByLabel(page, "Monto")).fill("3000");
-await selectByLabel(page, "Método de Pago", "Transferencia").catch(() => selectByLabel(page, "Método de Pago", "transfer"));
+await selectByLabel(page, "Método de Pago", "credit").catch(() => selectByLabel(page, "Método de Pago", "Crédito")); // a crédito: queda pendiente (transferencia/efectivo/tarjeta quedan pagados al registrarse)
 await selectByLabel(page, "Viaje (opcional)", String(tj.id)).catch(async () => { const sel = page.locator('xpath=//label[starts-with(normalize-space(.),"Viaje")]/following-sibling::select[1]'); const opts = await sel.locator("option").allInnerTexts(); const o = opts.find(x => x.includes("BOC-2002") && x.includes("Joan")) || opts.find(x => x.includes("BOC-2002")); await sel.selectOption({ label: o }); });
 await page.getByRole("button", { name: /^Guardar$/ }).click(); await sleep(3000);
 d = await data(); const fuel = d.expenses.find(e => e.category === "fuel" && e.amount === 3000);
@@ -249,7 +250,7 @@ txt = await page.locator("body").innerText(); await shot(page, "A09c-banco-despu
 const opexAcc = (d.bankAccount.accounts || []).find(a => a.role === "opex");
 const sums = bank.summaries || {};
 bank = bankOverview({ bankAccount: d.bankAccount, expenses: d.expenses, cobros: d.cobros, transfers: tfs, reconciliation: d.bankReconciliation || {}, settings: d.pfSettings, invoices: d.invoices, clients: d.clients, suppliers: d.suppliers, todayStr: todayISO });
-const opexOut = d.expenses.filter(e => e.status === "paid" && e.paymentMethod !== "cash" && (!e.accountId || e.accountId === "opex") && !["reserve_withdrawal"].includes(e.category)).reduce((s, e) => s + e.amount, 0);
+const opexOut = d.expenses.filter(e => e.status === "paid" && e.paymentMethod !== "cash" && e.paymentMethod !== "credit" /* crédito sale de Suplidores */ && (!e.accountId || e.accountId === "opex") && !["reserve_withdrawal"].includes(e.category)).reduce((s, e) => s + e.amount, 0);
 C("10.7 OpEx = 400,000 + lo repartido − todo lo pagado por transferencia (nómina, combustible, liquidaciones, retiro)", Math.abs(bank.opexBalance - (400000 + (sugO || 0) - opexOut)) < 0.05, `opex=${bank.opexBalance} esperado=${400000 + sugO - opexOut} out=${opexOut}`);
 C("10.7b pantalla muestra las cuentas con saldo y el retiro aparece como salida", /Retiro a caja/.test(txt) && (await page.locator("[data-bank-balance]").count()) >= 5);
 C("10.8 nómina, combustible y liquidaciones salieron de OpEx (pagados por transferencia)", d.expenses.filter(e => e.status === "paid" && e.paymentMethod === "transfer" && ["driverPay", "helper", "fuel", "partner_settlement"].includes(e.category)).every(e => !e.accountId || e.accountId === "opex"), "");
@@ -326,6 +327,13 @@ dialogs.length = 0; answers = [true];
 await page.locator("tr", { hasText: inv.invoiceNumber }).first().locator("button[title='Eliminar (factura por error)']").click(); await sleep(800);
 d = await data();
 C("14.4 eliminar esa factura también se bloquea", d.invoices.length === 1 && d.invoices[0].status === "paid" && /No se puede eliminar/.test(dialogs[0] || ""), dialogs[0]?.slice(0, 100));
+// ── 15. Editar y re-guardar un viaje no congela el pago de ayudante en 0 ─────────
+await nav(page, "Viajes"); await sleep(800);
+await page.locator("tr", { hasText: "BOC-1001" }).first().locator("button[title='Editar']").click(); await sleep(600);
+await (await inputByLabel(page, "Carga")).fill("arroz auditoría"); await sleep(300);
+await page.getByRole("button", { name: "Guardar" }).first().click(); await sleep(3500);
+d = await data(); const t1b = d.trips.find(t => t.invoiceRef === "BOC-1001");
+C("15.1 tras editar, helperPayEach sigue null y el ayudante sigue cobrando 700 (sin duplicar)", t1b?.cargo === "arroz auditoría" && t1b?.helperPayEach === null && d.expenses.filter(e => e.tripId === t1b?.id && e.category === "helper").length === 1 && d.expenses.find(e => e.tripId === t1b?.id && e.category === "helper")?.amount === 700, `hpe=${t1b?.helperPayEach} helpers=${d.expenses.filter(e => e.tripId === t1b?.id && e.category === "helper").map(e => e.amount + ":" + e.status)}`);
 await logout();
 
 console.log("pageerrors:", errs.length ? errs : "ninguno");

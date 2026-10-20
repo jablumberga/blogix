@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Landmark, ArrowLeftRight, Plus, PiggyBank, Wallet, Banknote, Store, Inbox, Split, CheckCircle2, Circle, Pencil, Trash2, X, ArrowDownToLine, EyeOff, RotateCcw, Settings } from "lucide-react";
+import { Landmark, ArrowLeftRight, Plus, PiggyBank, Wallet, Banknote, Store, Inbox, Split, CheckCircle2, Circle, Pencil, Trash2, X, ArrowDownToLine, EyeOff, RotateCcw, Settings, CreditCard } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, today } from "../utils/helpers.js";
 import { Card, PageHeader, Th, Td, Badge, Btn, Inp, Sel } from "../components/ui/index.jsx";
@@ -16,6 +16,7 @@ const ROLE_STYLE = {
   reserve:   { color: PURPLE,        icon: PiggyBank },
   suppliers: { color: colors.orange, icon: Store },
   cash:      { color: colors.yellow, icon: Banknote },
+  card:      { color: colors.red,    icon: CreditCard },
   other:     { color: colors.accent, icon: Landmark },
 };
 const FILTERS = { todos: "Todos", pendientes: "Pendientes", conciliados: "Conciliados", in: "Entradas", out: "Salidas" };
@@ -60,7 +61,9 @@ export default function BancoPage({ expenses = [], setExpenses, cobros = [], cli
   useEffect(() => { if (!Array.isArray(bankAccount?.accounts) && setBankAccount) saveAccounts(accounts); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cuentas ───────────────────────────────────────────────────────────────
-  const openNewAccount = () => { setErr(""); setAcctForm({ id: `acc-${Date.now()}`, name: "", role: "other", bank: "", last4: "", openingBalance: 0, openingDate: todayStr, active: true, _new: true }); };
+  // Cuenta nueva: saldo al cierre de AYER, para que lo que se registre hoy ya cuente
+  const yesterday = (() => { const d = new Date(`${todayStr}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); })();
+  const openNewAccount = () => { setErr(""); setAcctForm({ id: `acc-${Date.now()}`, name: "", role: "other", bank: "", last4: "", openingBalance: 0, openingDate: yesterday, active: true, _new: true }); };
   const saveAccount = () => {
     const { _new, ...a } = { ...acctForm, name: String(acctForm.name || "").trim(), openingBalance: Number(acctForm.openingBalance) || 0, last4: String(acctForm.last4 || "").trim() };
     const p = accountProblem(a, accounts); if (p) { setErr(p); return; }
@@ -174,6 +177,17 @@ export default function BancoPage({ expenses = [], setExpenses, cobros = [], cli
         <Banknote size={16} color={colors.yellow} /><span style={{ flex: 1, minWidth: 200 }}><b>{fmt(bank.cashBalance)}</b> en efectivo por depositar ({bank.cash.cobroIds.length} cobro{bank.cash.cobroIds.length !== 1 ? "s" : ""} en efectivo)</span>
         {incomeAcc && <Btn variant="ghost" onClick={() => openTransfer({ fromId: cashAcc.id, toId: incomeAcc.id, amount: bank.cashBalance, kind: "deposit" })} style={{ fontSize: 12 }} data-bank-deposit>Depositar</Btn>}
       </div>}
+      {(() => { const card = roleAccount(accounts, "card"); const debt = card ? -(bank.summaries[card.id]?.balance || 0) : 0;
+        if (card && debt > 0) return <div data-bank-alert="card" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${colors.red}50`, background: colors.red + "12", fontSize: 13, flexWrap: "wrap" }}>
+          <CreditCard size={16} color={colors.red} /><span style={{ flex: 1, minWidth: 200 }}><b>{fmt(debt)}</b> gastado con tarjeta ({card.name}) pendiente de pagar al banco</span>
+          {opexAcc && <Btn variant="ghost" onClick={() => openTransfer({ fromId: opexAcc.id, toId: card.id, amount: debt, kind: "card_payment", note: "Pago estado de tarjeta" })} style={{ fontSize: 12 }} data-bank-pay-card-top>Pagar tarjeta</Btn>}
+        </div>;
+        const cardExp = (expenses || []).filter(e => e.paymentMethod === "credit_card" && e.status === "paid" && !e.accountId && !e.voided).length;
+        if (!card && cardExp > 0) return <div data-bank-alert="card-missing" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${colors.orange}50`, background: colors.orange + "12", fontSize: 13, flexWrap: "wrap" }}>
+          <CreditCard size={16} color={colors.orange} /><span style={{ flex: 1, minWidth: 200 }}>Hay {cardExp} gasto{cardExp !== 1 ? "s" : ""} con tarjeta que no caen en ninguna cuenta. Crea una cuenta de tipo «Tarjeta de crédito» y entrarán solos.</span>
+          <Btn variant="ghost" onClick={() => { setErr(""); setAcctForm({ id: `acc-${Date.now()}`, name: "Tarjeta", role: "card", bank: "", last4: "", openingBalance: 0, openingDate: yesterday, active: true, _new: true }); }} style={{ fontSize: 12 }} data-bank-create-card>Crear cuenta Tarjeta</Btn>
+        </div>;
+        return null; })()}
     </div>
 
     {/* ── Cuentas ── */}
@@ -215,6 +229,7 @@ export default function BancoPage({ expenses = [], setExpenses, cobros = [], cli
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {(sel.role === "reserve" || sel.role === "opex" || sel.role === "other") && sel.active !== false && <Btn variant="ghost" onClick={() => { setErr(""); setWd({ date: todayStr, amount: "", kind: sel.role === "reserve" ? "reserve" : "cash", accountId: sel.id, description: "" }); }} style={{ fontSize: 12 }} data-bank-withdraw><ArrowDownToLine size={13} /> Retiro</Btn>}
+          {sel.role === "card" && sel.active !== false && opexAcc && <Btn variant="warning" onClick={() => openTransfer({ fromId: opexAcc.id, toId: sel.id, amount: s.balance < 0 ? -s.balance : "", kind: "card_payment", note: "Pago estado de tarjeta" })} style={{ fontSize: 12 }} data-bank-pay-card><CreditCard size={13} /> Pagar tarjeta{s.balance < 0 ? ` ${fmt(-s.balance)}` : ""}</Btn>}
           <Btn variant="ghost" onClick={() => { setErr(""); setAcctForm({ ...sel }); }} style={{ fontSize: 12 }} data-bank-edit><Pencil size={13} /> Editar</Btn>
           {sel.active !== false && removal?.canDelete && <Btn variant="ghost" onClick={deleteAccount} style={{ fontSize: 12, color: colors.red }} data-bank-delete><Trash2 size={13} /> Borrar</Btn>}
           {sel.active !== false && !removal?.canDelete && <Btn variant="ghost" onClick={() => setActive(sel, false)} style={{ fontSize: 12 }} data-bank-deactivate title={removal?.reason}><EyeOff size={13} /> Desactivar</Btn>}
@@ -268,7 +283,7 @@ export default function BancoPage({ expenses = [], setExpenses, cobros = [], cli
       <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end" }}><Btn variant="ghost" onClick={() => setAcctForm(null)}>Cancelar</Btn><Btn onClick={saveAccount} data-bank-save-account>Guardar</Btn></div>
     </Modal>}
 
-    {tf && <Modal title={tf.kind === "deposit" ? "Depositar efectivo de la caja" : tf.kind === "set_aside" ? "Apartar para suplidores" : "Transferir entre cuentas"} onClose={() => setTf(null)} testId="transfer">
+    {tf && <Modal title={tf.kind === "deposit" ? "Depositar efectivo de la caja" : tf.kind === "set_aside" ? "Apartar para suplidores" : tf.kind === "card_payment" ? "Pagar estado de la tarjeta" : "Transferir entre cuentas"} onClose={() => setTf(null)} testId="transfer">
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <Sel label="Sale de" value={tf.fromId} onChange={e => setTf({ ...tf, fromId: e.target.value })} data-tf-from>{active.map(a => <option key={a.id} value={a.id}>{a.name} ({fmt(summaries[a.id].balance)})</option>)}</Sel>
         <Sel label="Entra a" value={tf.toId} onChange={e => setTf({ ...tf, toId: e.target.value })} data-tf-to>{active.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</Sel>

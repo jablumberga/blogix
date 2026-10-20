@@ -5,7 +5,7 @@ import { normalizeAyudante, crewSlots, buildHelperLines, helperExpensePlan, appl
 import { Plus, X, Search, Route, Receipt, Printer, CheckCircle2, Pencil, Trash2, Calendar, FileCheck, FileText, Handshake, Hash, Zap, RotateCw } from "lucide-react";
 import { colors } from "../constants/theme.js";
 import { fmt, nxId, today } from "../utils/helpers.js";
-import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "../constants/categories.js";
+import { EXPENSE_CATEGORIES, PAYMENT_METHODS, PAID_ON_ENTRY_METHODS } from "../constants/categories.js";
 import { calcDriverPay, describeDriverPay, normalizeDriver, tripSize, paySize, DEFAULT_HELPERS } from "../utils/driverPay.js";
 import { TRIP_DOCS, docsComplete } from "../utils/payroll.js";
 import { checkTripRef, linkJoint, sameRefTrips } from "../utils/tripRef.js";
@@ -332,7 +332,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
 
   const addExpense = () => {
     if (!expForm.amount || !expModal) return;
-    const instant = ["cash", "credit_card"].includes(expForm.paymentMethod);
+    const instant = PAID_ON_ENTRY_METHODS.includes(expForm.paymentMethod);
     setExpenses(prev => [...prev, { id: nxId(prev), tripId: expModal, date: expForm.date, category: expForm.category, amount: Number(expForm.amount), gallons: expForm.category === "fuel" ? fuelGallons({ amount: expForm.amount, gallons: expForm.gallons, pricePerGallon: fuelPriceAt(pfSettings, expForm.date) }).gallons : null, paymentMethod: expForm.paymentMethod, description: expForm.description, supplierId: null, status: instant ? "paid" : "pending", ...(instant ? { paidDate: expForm.date } : {}) }]);
     setExpForm({ date: today(), category: "fuel", amount: "", gallons: "", paymentMethod: "cash", description: "" });
   };
