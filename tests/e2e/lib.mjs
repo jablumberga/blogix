@@ -6,7 +6,8 @@ export async function open() {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await ctx.newPage();
   // E2E_TODAY=AAAA-MM-DD: congela «hoy» en el navegador (los flujos asumen quincena 1–15 de octubre)
-  if (process.env.E2E_TODAY) await page.addInitScript(`(() => { const fixed = new Date("${process.env.E2E_TODAY}T15:00:00"); const _D = Date; class D extends _D { constructor(...a) { super(...(a.length ? a : [fixed.getTime()])); } static now() { return fixed.getTime(); } } window.Date = D; })()`);
+  // El reloj sigue corriendo desde esa fecha (no se congela): el orden dentro del día importa para los saldos de Banco
+  if (process.env.E2E_TODAY) await page.addInitScript(`(() => { const _D = Date; const offset = new _D("${process.env.E2E_TODAY}T15:00:00").getTime() - _D.now(); class D extends _D { constructor(...a) { super(...(a.length ? a : [_D.now() + offset])); } static now() { return _D.now() + offset; } } window.Date = D; })()`);
   const errors = [];
   page.on("pageerror", e => errors.push("PAGEERROR: " + e.message.slice(0, 300)));
   page.on("console", m => { if (m.type() === "error" && !/MIME type|favicon|manifest/.test(m.text())) errors.push("CONSOLE: " + m.text().slice(0, 200)); });

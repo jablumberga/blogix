@@ -333,7 +333,7 @@ export default function TripsPage({ t, user, trips, setTrips, trucks, drivers, c
   const addExpense = () => {
     if (!expForm.amount || !expModal) return;
     const instant = PAID_ON_ENTRY_METHODS.includes(expForm.paymentMethod);
-    setExpenses(prev => [...prev, { id: nxId(prev), tripId: expModal, date: expForm.date, category: expForm.category, amount: Number(expForm.amount), gallons: expForm.category === "fuel" ? fuelGallons({ amount: expForm.amount, gallons: expForm.gallons, pricePerGallon: fuelPriceAt(pfSettings, expForm.date) }).gallons : null, paymentMethod: expForm.paymentMethod, description: expForm.description, supplierId: null, status: instant ? "paid" : "pending", ...(instant ? { paidDate: expForm.date } : {}) }]);
+    setExpenses(prev => [...prev, { id: nxId(prev), tripId: expModal, date: expForm.date, category: expForm.category, amount: Number(expForm.amount), gallons: expForm.category === "fuel" ? fuelGallons({ amount: expForm.amount, gallons: expForm.gallons, pricePerGallon: fuelPriceAt(pfSettings, expForm.date) }).gallons : null, paymentMethod: expForm.paymentMethod, description: expForm.description, supplierId: null, status: instant ? "paid" : "pending", createdAt: new Date().toISOString(), ...(instant ? { paidDate: expForm.date, paidAt: new Date().toISOString() } : {}) }]);
     setExpForm({ date: today(), category: "fuel", amount: "", gallons: "", paymentMethod: "cash", description: "" });
   };
 

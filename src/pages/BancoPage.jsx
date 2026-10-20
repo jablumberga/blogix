@@ -63,9 +63,12 @@ export default function BancoPage({ expenses = [], setExpenses, cobros = [], cli
   // ── Cuentas ───────────────────────────────────────────────────────────────
   // Cuenta nueva: saldo al cierre de AYER, para que lo que se registre hoy ya cuente
   const yesterday = (() => { const d = new Date(`${todayStr}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); })();
-  const openNewAccount = () => { setErr(""); setAcctForm({ id: `acc-${Date.now()}`, name: "", role: "other", bank: "", last4: "", openingBalance: 0, openingDate: yesterday, active: true, _new: true }); };
+  const openNewAccount = () => { setErr(""); setAcctForm({ id: `acc-${Date.now()}`, name: "", role: "other", bank: "", last4: "", openingBalance: 0, openingDate: todayStr, active: true, _new: true }); };
   const saveAccount = () => {
     const { _new, ...a } = { ...acctForm, name: String(acctForm.name || "").trim(), openingBalance: Number(acctForm.openingBalance) || 0, last4: String(acctForm.last4 || "").trim() };
+    // El saldo vale desde este momento: lo que se registre después cuenta aunque sea el mismo día
+    const prevAcc = accounts.find(x => x.id === a.id);
+    if (!prevAcc || prevAcc.openingBalance !== a.openingBalance || prevAcc.openingDate !== a.openingDate) a.openingAt = new Date().toISOString();
     const p = accountProblem(a, accounts); if (p) { setErr(p); return; }
     const exists = accounts.some(x => x.id === a.id);
     // Cambiar el tipo de una cuenta básica: no puede quedar sin Income ni OpEx activa
@@ -185,7 +188,7 @@ export default function BancoPage({ expenses = [], setExpenses, cobros = [], cli
         const cardExp = (expenses || []).filter(e => e.paymentMethod === "credit_card" && e.status === "paid" && !e.accountId && !e.voided).length;
         if (!card && cardExp > 0) return <div data-bank-alert="card-missing" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${colors.orange}50`, background: colors.orange + "12", fontSize: 13, flexWrap: "wrap" }}>
           <CreditCard size={16} color={colors.orange} /><span style={{ flex: 1, minWidth: 200 }}>Hay {cardExp} gasto{cardExp !== 1 ? "s" : ""} con tarjeta que no caen en ninguna cuenta. Crea una cuenta de tipo «Tarjeta de crédito» y entrarán solos.</span>
-          <Btn variant="ghost" onClick={() => { setErr(""); setAcctForm({ id: `acc-${Date.now()}`, name: "Tarjeta", role: "card", bank: "", last4: "", openingBalance: 0, openingDate: yesterday, active: true, _new: true }); }} style={{ fontSize: 12 }} data-bank-create-card>Crear cuenta Tarjeta</Btn>
+          <Btn variant="ghost" onClick={() => { setErr(""); setAcctForm({ id: `acc-${Date.now()}`, name: "Tarjeta", role: "card", bank: "", last4: "", openingBalance: 0, openingDate: todayStr, active: true, _new: true }); }} style={{ fontSize: 12 }} data-bank-create-card>Crear cuenta Tarjeta</Btn>
         </div>;
         return null; })()}
     </div>
@@ -225,7 +228,7 @@ export default function BancoPage({ expenses = [], setExpenses, cobros = [], cli
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 6 }} data-bank-selected={sel.id}><st.icon size={16} color={st.color} /> {sel.name}{sel.active === false && <Badge label="Desactivada" color={colors.textMuted} />}</div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{ACCOUNT_ROLES[sel.role]?.hint}{sel.bank ? ` · ${sel.bank}` : ""}{sel.last4 ? ` ••${sel.last4}` : ""} · saldo {fmt(s.opening)} al cierre del {sel.openingDate}</div>
+          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{ACCOUNT_ROLES[sel.role]?.hint}{sel.bank ? ` · ${sel.bank}` : ""}{sel.last4 ? ` ••${sel.last4}` : ""} · saldo {fmt(s.opening)} al {sel.openingDate}</div>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {(sel.role === "reserve" || sel.role === "opex" || sel.role === "other") && sel.active !== false && <Btn variant="ghost" onClick={() => { setErr(""); setWd({ date: todayStr, amount: "", kind: sel.role === "reserve" ? "reserve" : "cash", accountId: sel.id, description: "" }); }} style={{ fontSize: 12 }} data-bank-withdraw><ArrowDownToLine size={13} /> Retiro</Btn>}
@@ -275,10 +278,10 @@ export default function BancoPage({ expenses = [], setExpenses, cobros = [], cli
         <Inp label="Banco" value={acctForm.bank || ""} onChange={e => setAcctForm({ ...acctForm, bank: e.target.value })} placeholder="opcional" />
         <Inp label="Últimos 4 dígitos" value={acctForm.last4 || ""} onChange={e => setAcctForm({ ...acctForm, last4: e.target.value.replace(/\D/g, "").slice(0, 4) })} placeholder="opcional" />
         <Inp label="Saldo (DOP)" type="number" value={acctForm.openingBalance} onChange={e => setAcctForm({ ...acctForm, openingBalance: e.target.value })} />
-        <Inp label="Al cierre del día" type="date" value={acctForm.openingDate} onChange={e => setAcctForm({ ...acctForm, openingDate: e.target.value })} />
-        <div style={{ gridColumn: "1 / -1", fontSize: 11, color: colors.textMuted, marginTop: -4 }}>Pon lo que dice el banco al final de ese día (con todo lo de ese día ya incluido). A partir del día siguiente, los cobros, gastos y transferencias registrados lo suben o lo bajan.</div>
+        <Inp label="Saldo al día" type="date" value={acctForm.openingDate} onChange={e => setAcctForm({ ...acctForm, openingDate: e.target.value })} />
+        <div style={{ gridColumn: "1 / -1", fontSize: 11, color: colors.textMuted, marginTop: -4 }}>Pon lo que dice el banco ahora mismo con la fecha de hoy. Todo lo que registres después (hoy mismo o días siguientes) lo sube o lo baja; lo registrado antes ya está dentro del saldo.</div>
       </div>
-      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 8 }}>{ACCOUNT_ROLES[acctForm.role]?.hint}. Los movimientos de ese día y de antes ya están dentro del saldo que pones; no se vuelven a contar.</div>
+      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 8 }}>{ACCOUNT_ROLES[acctForm.role]?.hint}. Lo registrado antes de poner el saldo ya está dentro; no se vuelve a contar.</div>
       {err && <div style={{ color: colors.red, fontSize: 12, marginTop: 8 }} data-bank-error>{err}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end" }}><Btn variant="ghost" onClick={() => setAcctForm(null)}>Cancelar</Btn><Btn onClick={saveAccount} data-bank-save-account>Guardar</Btn></div>
     </Modal>}
